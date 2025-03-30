@@ -4,7 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.navigation.compose.rememberNavController
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
 import com.example.travalms.ui.navigation.AppNavigation
 import com.example.travalms.ui.theme.TravalMSTheme
 
@@ -20,10 +23,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             // 应用自定义主题，TravalMSTheme包含应用的颜色、排版等
             TravalMSTheme {
-                // 创建导航控制器
-                val navController = rememberNavController()
-                // 使用应用导航组件管理屏幕
-                AppNavigation(navController = navController)
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    AppNavigation()
+                }
             }
         }
     }
