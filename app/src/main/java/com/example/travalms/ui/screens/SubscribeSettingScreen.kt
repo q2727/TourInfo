@@ -21,20 +21,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.travalms.ui.theme.PrimaryColor
 
-// 订阅节点类型枚举
-enum class SubscriptionNodeType {
-    CATEGORY, PROVINCE, CITY, ATTRACTION, COMPANY
-}
-
-// 树形结构的订阅节点数据类
-data class SubscriptionNodeItem(
-    val id: String,
-    val name: String,
-    val type: SubscriptionNodeType,
-    val children: List<SubscriptionNodeItem> = emptyList(),
-    val hasHighlight: Boolean = false
-)
-
 /**
  * 订阅设置页面，采用树形结构展示
  */

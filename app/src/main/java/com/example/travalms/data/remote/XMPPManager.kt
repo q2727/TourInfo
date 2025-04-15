@@ -12,7 +12,6 @@ import org.jivesoftware.smack.tcp.XMPPTCPConnection
 import org.jivesoftware.smack.tcp.XMPPTCPConnectionConfiguration
 import org.jivesoftware.smackx.iqregister.AccountManager
 import org.jivesoftware.smackx.pubsub.AccessModel
-import org.jivesoftware.smackx.pubsub.ConfigureForm
 import org.jivesoftware.smackx.pubsub.Item
 import org.jivesoftware.smackx.pubsub.LeafNode
 import org.jivesoftware.smackx.pubsub.PayloadItem
@@ -25,8 +24,11 @@ import org.jxmpp.jid.BareJid
 import org.jxmpp.jid.impl.JidCreate
 import org.jxmpp.jid.parts.Localpart
 import java.util.UUID
-import org.jivesoftware.smackx.pubsub.form.FillableConfigureForm
 import org.jivesoftware.smackx.disco.ServiceDiscoveryManager
+import com.google.gson.Gson
+import org.jivesoftware.smackx.pubsub.form.ConfigureForm as SmackConfigureForm
+import org.jivesoftware.smackx.pubsub.form.FillableConfigureForm
+import org.jivesoftware.smack.packet.ExtensionElement
 
 /**
  * XMPP连接和认证的管理类
@@ -223,16 +225,15 @@ class XMPPManager {
                 Log.d(TAG, "节点不存在，将创建新节点: $nodeId")
             }
             
-            // 创建配置表单
-            val configForm = FillableConfigureForm()
+            // 获取默认配置并创建可填充表单
+            val defaultConfigureForm = pubsub.defaultConfiguration
+            val configForm: FillableConfigureForm = defaultConfigureForm.fillableForm // Explicit type
             
             // 设置配置选项
             configForm.setAccessModel(AccessModel.open) // 允许任何人访问
             configForm.setDeliverPayloads(true) // 传递内容负载
-            configForm.setPersistItems(true) // 持久化存储项目
             configForm.setPublishModel(PublishModel.open) // 允许任何人发布
             configForm.setTitle(name) // 设置标题
-            configForm.setDescription(description) // 设置描述
             configForm.setMaxItems(50) // 最多保存50个项目
             
             // 创建节点
@@ -370,18 +371,24 @@ class XMPPManager {
             val node = pubsub.getNode(nodeId) as LeafNode
             
             // 获取项目
-            val items = node.getItems(maxItems)
+            val items: List<Item> = node.getItems(maxItems) // Explicit type for items
             
             // 转换为通知对象
             val notifications = items.mapNotNull { item ->
                 if (item is PayloadItem<*>) {
-                    PubSubNotification(
-                        nodeId = nodeId,
-                        itemId = item.id,
-                        payload = item.payload.toString()
-                    )
+                    val payload: ExtensionElement? = item.payload // Explicit type for payload
+                    val payloadXml = payload?.toXML()?.toString() // Get XML string
+                    if (payloadXml != null) {
+                        PubSubNotification(
+                            nodeId = nodeId,
+                            itemId = item.id ?: UUID.randomUUID().toString(), // Ensure itemId is not null
+                            payload = payloadXml
+                        )
+                    } else {
+                        null // Skip if payload is null or has no XML representation
+                    }
                 } else {
-                    null
+                    null // Skip non-PayloadItems
                 }
             }
             
@@ -508,6 +515,46 @@ class XMPPManager {
             Log.e(TAG, "断开连接时出错: ${e.message}", e)
         }
     }
+
+    private fun createNode(nodeName: String, parentNode: String? = null): Boolean {
+        try {
+            val pubSubManager = PubSubManager.getInstanceFor(currentConnection ?: return false)
+            val node = if (parentNode != null) {
+                pubSubManager.getNode(parentNode)
+            } else {
+                null
+            }
+
+            val defaultConfigureForm = pubSubManager.defaultConfiguration
+            val config: FillableConfigureForm = defaultConfigureForm.fillableForm // Explicit type
+
+            val newNode = pubSubManager.createNode(nodeName, config)
+            return newNode != null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return false
+        }
+    }
+
+    private fun publishItem(nodeName: String, item: Any): Boolean {
+        try {
+            val pubSubManager = PubSubManager.getInstanceFor(currentConnection ?: return false)
+            val node = pubSubManager.getNode(nodeName) as? LeafNode ?: return false // Explicit cast to LeafNode
+            
+            val jsonString = when (item) {
+                is String -> item
+                else -> Gson().toJson(item)
+            }
+            
+            val payload = SimplePayload("application/json", "payload", jsonString)
+            val payloadItem = PayloadItem<SimplePayload>(UUID.randomUUID().toString(), payload)
+            node.publish(payloadItem) // Now 'publish' should resolve on LeafNode
+            return true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return false
+        }
+    }
 }
 
 /**
@@ -517,11 +564,4 @@ data class PubSubNotification(
     val nodeId: String,
     val itemId: String,
     val payload: String
-)
-
-/**
- * 表单类型枚举
- */
-enum class FormType {
-    submit
-} 
+) 

@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace 'com.example.travalms'
-    compileSdk 36
+    compileSdk 34
 
     defaultConfig {
         applicationId "com.example.travalms"
         minSdk 26
-        targetSdk 36
+        targetSdk 34
         versionCode 1
         versionName "1.0"
         
@@ -52,16 +52,26 @@ android {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
     }
+    
+    // 添加依赖冲突解决方案
+    configurations.all {
+        resolutionStrategy {
+            // 强制使用特定版本，解决版本冲突
+            force 'org.jxmpp:jxmpp-core:1.0.3'
+            force 'org.jxmpp:jxmpp-util-cache:1.0.3'
+            force 'org.jxmpp:jxmpp-jid:1.0.3'
+        }
+    }
 }
 
 dependencies {
-    def composeBom = platform('androidx.compose:compose-bom:2023.10.01')
+    def composeBom = platform('androidx.compose:compose-bom:2023.08.00')
     implementation composeBom
     androidTestImplementation composeBom
 
     implementation 'androidx.core:core-ktx:1.12.0'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.6.2'
-    implementation 'androidx.activity:activity-compose:1.8.1'
+    implementation 'androidx.activity:activity-compose:1.8.0'
     implementation "androidx.compose.ui:ui"
     implementation "androidx.compose.ui:ui-graphics"
     implementation "androidx.compose.ui:ui-tooling-preview"
@@ -69,35 +79,41 @@ dependencies {
     implementation 'androidx.compose.material:material'
     implementation "androidx.navigation:navigation-compose:2.7.5"
     
-    // XMPP Smack 依赖
-    implementation('org.igniterealtime.smack:smack-android:4.4.0') {
+    // XMPP Smack 依赖 - 统一使用稳定版本 4.4.5
+    implementation ('org.igniterealtime.smack:smack-android:4.4.5') {
         exclude group: 'xpp3', module: 'xpp3'
     }
-    implementation('org.igniterealtime.smack:smack-tcp:4.4.0') {
+    implementation ('org.igniterealtime.smack:smack-tcp:4.4.5') {
         exclude group: 'xpp3', module: 'xpp3'
     }
-    implementation('org.igniterealtime.smack:smack-im:4.4.0') {
+    implementation ('org.igniterealtime.smack:smack-im:4.4.5') {
         exclude group: 'xpp3', module: 'xpp3'
     }
-    implementation('org.igniterealtime.smack:smack-extensions:4.4.0') {
+    implementation ('org.igniterealtime.smack:smack-extensions:4.4.5') {
         exclude group: 'xpp3', module: 'xpp3'
     }
-    implementation('org.igniterealtime.smack:smack-experimental:4.4.0') {
+    implementation ('org.igniterealtime.smack:smack-experimental:4.4.5') {
         exclude group: 'xpp3', module: 'xpp3'
     }
-    // 添加PubSub相关依赖
-    implementation('org.igniterealtime.smack:smack-pubsub:4.4.0') {
+    implementation 'org.igniterealtime.smack:smack-xmlparser:4.4.5'
+    implementation ('org.igniterealtime.smack:smack-resolver-minidns:4.4.5') {
         exclude group: 'xpp3', module: 'xpp3'
     }
-    // 添加服务发现依赖
-    implementation('org.igniterealtime.smack:smack-xmlparser:4.4.0') {
+    implementation ('org.igniterealtime.smack:smack-sasl-provided:4.4.5') {
         exclude group: 'xpp3', module: 'xpp3'
     }
-    implementation('org.igniterealtime.smack:smack-resolver-minidns:4.4.0') {
+    implementation ('org.igniterealtime.smack:smack-java8:4.4.5') {
         exclude group: 'xpp3', module: 'xpp3'
     }
-    // 添加JSON支持
-    implementation 'org.json:json:20231013'
+    
+    // 添加 jxmpp 依赖
+    implementation 'org.jxmpp:jxmpp-core:1.0.3'
+    implementation 'org.jxmpp:jxmpp-util-cache:1.0.3'
+    implementation 'org.jxmpp:jxmpp-jid:1.0.3'
+    
+    // JSON 处理
+    implementation 'org.json:json:20230618'
+    implementation 'com.google.code.gson:gson:2.10.1'
     
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
