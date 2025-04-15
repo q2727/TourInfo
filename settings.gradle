@@ -1,10 +1,19 @@
-rootProject.name = "TravalMS"
-include ':app'
-
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
         mavenCentral()
+        maven { url 'https://oss.sonatype.org/content/repositories/snapshots' }
+        maven { url 'https://igniterealtime.org/repo' }
     }
-} 
+}
+
+rootProject.name = "TravalMS"
+include ':app' 

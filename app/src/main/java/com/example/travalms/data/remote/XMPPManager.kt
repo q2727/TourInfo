@@ -2,13 +2,31 @@ package com.example.travalms.data.remote
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.withContext
 import org.jivesoftware.smack.ConnectionConfiguration
+import org.jivesoftware.smack.SmackConfiguration
+import org.jivesoftware.smack.StanzaListener
 import org.jivesoftware.smack.tcp.XMPPTCPConnection
 import org.jivesoftware.smack.tcp.XMPPTCPConnectionConfiguration
 import org.jivesoftware.smackx.iqregister.AccountManager
+import org.jivesoftware.smackx.pubsub.AccessModel
+import org.jivesoftware.smackx.pubsub.ConfigureForm
+import org.jivesoftware.smackx.pubsub.Item
+import org.jivesoftware.smackx.pubsub.LeafNode
+import org.jivesoftware.smackx.pubsub.PayloadItem
+import org.jivesoftware.smackx.pubsub.PubSubManager
+import org.jivesoftware.smackx.pubsub.PublishModel
+import org.jivesoftware.smackx.pubsub.SimplePayload
+import org.jivesoftware.smackx.pubsub.Subscription
+import org.jivesoftware.smackx.pubsub.listener.ItemEventListener
+import org.jxmpp.jid.BareJid
+import org.jxmpp.jid.impl.JidCreate
 import org.jxmpp.jid.parts.Localpart
-import org.jivesoftware.smack.SmackConfiguration
+import java.util.UUID
+import org.jivesoftware.smackx.pubsub.form.FillableConfigureForm
+import org.jivesoftware.smackx.disco.ServiceDiscoveryManager
 
 /**
  * XMPP连接和认证的管理类
@@ -22,8 +40,19 @@ class XMPPManager {
         private const val SERVER_HOST = "120.46.26.49"
         private const val SERVER_PORT = 5222
         private const val RESOURCE = "AndroidClient"
+        private const val PUBSUB_SERVICE = "pubsub.$SERVER_DOMAIN"
     }
 
+    // 当前连接
+    private var currentConnection: XMPPTCPConnection? = null
+    
+    // PubSub管理器
+    private var pubSubManager: PubSubManager? = null
+    
+    // 项目通知流
+    private val _pubsubItemsFlow = MutableSharedFlow<PubSubNotification>(replay = 100)
+    val pubsubItemsFlow: SharedFlow<PubSubNotification> = _pubsubItemsFlow
+    
     // 获取配置好的XMPP连接
     private fun getConnectionConfig(): XMPPTCPConnectionConfiguration {
         return XMPPTCPConnectionConfiguration.builder()
@@ -60,6 +89,12 @@ class XMPPManager {
             // 记录成功日志
             Log.d(TAG, "XMPP登录成功: 用户名=$username")
             Log.d(TAG, "服务器连接信息: 服务器=${connection.host}, 端口=${connection.port}, 用户=${connection.user}")
+            
+            // 保存当前连接
+            currentConnection = connection
+            
+            // 初始化PubSub管理器
+            initPubSubManager()
             
             // 返回成功结果
             Result.success(connection)
@@ -149,4 +184,344 @@ class XMPPManager {
             }
         }
     }
+
+    /**
+     * 初始化PubSub管理器
+     */
+    private fun initPubSubManager() {
+        currentConnection?.let { connection ->
+            // 创建PubSub服务JID
+            val pubsubService = JidCreate.domainBareFrom(PUBSUB_SERVICE)
+            
+            // 创建PubSub管理器
+            pubSubManager = PubSubManager.getInstance(connection, pubsubService)
+            
+            Log.d(TAG, "PubSub管理器初始化成功: service=$pubsubService")
+        } ?: run {
+            Log.e(TAG, "初始化PubSub管理器失败: 未登录或连接无效")
+        }
+    }
+
+    /**
+     * 创建发布-订阅节点
+     * @param nodeId 节点ID (应该是唯一的)
+     * @param name 节点名称
+     * @param description 节点描述
+     * @return 创建结果
+     */
+    suspend fun createNode(nodeId: String, name: String, description: String): Result<LeafNode> = withContext(Dispatchers.IO) {
+        try {
+            val pubsub = pubSubManager ?: throw Exception("PubSub管理器未初始化")
+            
+            // 检查节点是否已存在
+            try {
+                val existingNode = pubsub.getNode(nodeId)
+                Log.d(TAG, "节点已存在: $nodeId, 直接返回")
+                return@withContext Result.success(existingNode as LeafNode)
+            } catch (e: Exception) {
+                // 节点不存在，继续创建
+                Log.d(TAG, "节点不存在，将创建新节点: $nodeId")
+            }
+            
+            // 创建配置表单
+            val configForm = FillableConfigureForm()
+            
+            // 设置配置选项
+            configForm.setAccessModel(AccessModel.open) // 允许任何人访问
+            configForm.setDeliverPayloads(true) // 传递内容负载
+            configForm.setPersistItems(true) // 持久化存储项目
+            configForm.setPublishModel(PublishModel.open) // 允许任何人发布
+            configForm.setTitle(name) // 设置标题
+            configForm.setDescription(description) // 设置描述
+            configForm.setMaxItems(50) // 最多保存50个项目
+            
+            // 创建节点
+            val node = pubsub.createNode(nodeId, configForm) as LeafNode
+            
+            Log.d(TAG, "节点创建成功: $nodeId, name=$name")
+            Result.success(node)
+        } catch (e: Exception) {
+            Log.e(TAG, "创建节点失败: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 订阅节点
+     * @param nodeId 要订阅的节点ID
+     * @return 订阅结果
+     */
+    suspend fun subscribeToNode(nodeId: String): Result<Subscription> = withContext(Dispatchers.IO) {
+        try {
+            val pubsub = pubSubManager ?: throw Exception("PubSub管理器未初始化")
+            val connection = currentConnection ?: throw Exception("未连接到XMPP服务器")
+            
+            // 获取节点
+            val node = pubsub.getNode(nodeId) as LeafNode
+            
+            // 订阅节点
+            val subscription = node.subscribe(connection.user.asEntityBareJidString())
+            
+            // 添加项目事件监听器
+            node.addItemEventListener(object : ItemEventListener<PayloadItem<SimplePayload>> {
+                override fun handlePublishedItems(items: org.jivesoftware.smackx.pubsub.ItemPublishEvent<PayloadItem<SimplePayload>>) {
+                    Log.d(TAG, "收到节点 $nodeId 的新项目，数量: ${items.items.size}")
+                    
+                    // 处理项目
+                    items.items.forEach { item ->
+                        val payload = item.payload
+                        val itemId = item.id
+                        try {
+                            _pubsubItemsFlow.tryEmit(
+                                PubSubNotification(
+                                    nodeId = nodeId,
+                                    itemId = itemId,
+                                    payload = payload.toString()
+                                )
+                            )
+                        } catch (e: Exception) {
+                            Log.e(TAG, "处理项目消息时出错: ${e.message}", e)
+                        }
+                    }
+                }
+            })
+            
+            Log.d(TAG, "成功订阅节点: $nodeId, jid=${connection.user.asBareJid()}")
+            Result.success(subscription)
+        } catch (e: Exception) {
+            Log.e(TAG, "订阅节点失败: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 取消订阅节点
+     * @param nodeId 要取消订阅的节点ID
+     * @return 操作结果
+     */
+    suspend fun unsubscribeFromNode(nodeId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val pubsub = pubSubManager ?: throw Exception("PubSub管理器未初始化")
+            val connection = currentConnection ?: throw Exception("未连接到XMPP服务器")
+            
+            // 获取节点
+            val node = pubsub.getNode(nodeId) as LeafNode
+            
+            // 取消订阅
+            node.unsubscribe(connection.user.asEntityBareJidString())
+            
+            Log.d(TAG, "成功取消订阅节点: $nodeId")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "取消订阅节点失败: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 发布项目到节点
+     * @param nodeId 目标节点ID
+     * @param content 要发布的内容
+     * @param contentType 内容类型 (如 "application/json")
+     * @return 操作结果
+     */
+    suspend fun publishToNode(nodeId: String, content: String, contentType: String = "application/json"): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val pubsub = pubSubManager ?: throw Exception("PubSub管理器未初始化")
+            
+            // 获取节点
+            val node = pubsub.getNode(nodeId) as LeafNode
+            
+            // 创建唯一项目ID
+            val itemId = UUID.randomUUID().toString()
+            
+            // 创建简单负载
+            val payload = SimplePayload(
+                contentType,
+                "item",
+                content
+            )
+            
+            // 创建有负载的项目
+            val item = PayloadItem<SimplePayload>(itemId, payload)
+            
+            // 发布项目
+            node.publish(item)
+            
+            Log.d(TAG, "成功发布项目到节点: $nodeId, itemId=$itemId")
+            Result.success(itemId)
+        } catch (e: Exception) {
+            Log.e(TAG, "发布项目到节点失败: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 获取节点的历史项目
+     * @param nodeId 节点ID
+     * @param maxItems 最大项目数
+     * @return 项目列表结果
+     */
+    suspend fun getNodeItems(nodeId: String, maxItems: Int = 20): Result<List<PubSubNotification>> = withContext(Dispatchers.IO) {
+        try {
+            val pubsub = pubSubManager ?: throw Exception("PubSub管理器未初始化")
+            
+            // 获取节点
+            val node = pubsub.getNode(nodeId) as LeafNode
+            
+            // 获取项目
+            val items = node.getItems(maxItems)
+            
+            // 转换为通知对象
+            val notifications = items.mapNotNull { item ->
+                if (item is PayloadItem<*>) {
+                    PubSubNotification(
+                        nodeId = nodeId,
+                        itemId = item.id,
+                        payload = item.payload.toString()
+                    )
+                } else {
+                    null
+                }
+            }
+            
+            Log.d(TAG, "成功获取节点项目: $nodeId, 数量=${notifications.size}")
+            Result.success(notifications)
+        } catch (e: Exception) {
+            Log.e(TAG, "获取节点项目失败: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 获取用户已订阅的所有节点
+     * @return 订阅节点列表结果
+     */
+    suspend fun getUserSubscriptions(): Result<List<Subscription>> = withContext(Dispatchers.IO) {
+        try {
+            val pubsub = pubSubManager ?: throw Exception("PubSub管理器未初始化")
+            
+            // 获取所有订阅
+            val subscriptions = pubsub.getSubscriptions()
+            
+            Log.d(TAG, "成功获取用户订阅: 数量=${subscriptions.size}")
+            Result.success(subscriptions)
+        } catch (e: Exception) {
+            Log.e(TAG, "获取用户订阅失败: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 获取已发布到XMPP服务器的所有节点
+     * @return 节点ID列表结果
+     */
+    suspend fun getAllNodes(): Result<List<String>> = withContext(Dispatchers.IO) {
+        try {
+            val pubsub = pubSubManager ?: throw Exception("PubSub管理器未初始化")
+            
+            // 获取服务发现管理器
+            val discoveryManager = ServiceDiscoveryManager.getInstanceFor(currentConnection)
+            
+            // 获取pubsub服务上可用的节点
+            val discoveryResult = discoveryManager.discoverItems(JidCreate.domainBareFrom(PUBSUB_SERVICE))
+            
+            // 提取节点ID
+            val nodeIds = discoveryResult.items.map { it.entityID.toString() }
+            
+            Log.d(TAG, "成功获取所有节点: 数量=${nodeIds.size}")
+            Result.success(nodeIds)
+        } catch (e: Exception) {
+            Log.e(TAG, "获取所有节点失败: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 批量订阅多个节点
+     * @param nodeIds 要订阅的节点ID列表
+     * @return 成功订阅的节点ID列表
+     */
+    suspend fun batchSubscribe(nodeIds: List<String>): Result<List<String>> = withContext(Dispatchers.IO) {
+        try {
+            val successfulSubscriptions = mutableListOf<String>()
+            
+            for (nodeId in nodeIds) {
+                try {
+                    val result = subscribeToNode(nodeId)
+                    if (result.isSuccess) {
+                        successfulSubscriptions.add(nodeId)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "订阅节点 $nodeId 失败: ${e.message}")
+                    // 继续处理其他节点
+                }
+            }
+            
+            Log.d(TAG, "批量订阅完成: 成功=${successfulSubscriptions.size}/${nodeIds.size}")
+            Result.success(successfulSubscriptions)
+        } catch (e: Exception) {
+            Log.e(TAG, "批量订阅失败: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 批量取消订阅多个节点
+     * @param nodeIds 要取消订阅的节点ID列表
+     * @return 成功取消订阅的节点ID列表
+     */
+    suspend fun batchUnsubscribe(nodeIds: List<String>): Result<List<String>> = withContext(Dispatchers.IO) {
+        try {
+            val successfulUnsubscriptions = mutableListOf<String>()
+            
+            for (nodeId in nodeIds) {
+                try {
+                    val result = unsubscribeFromNode(nodeId)
+                    if (result.isSuccess) {
+                        successfulUnsubscriptions.add(nodeId)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "取消订阅节点 $nodeId 失败: ${e.message}")
+                    // 继续处理其他节点
+                }
+            }
+            
+            Log.d(TAG, "批量取消订阅完成: 成功=${successfulUnsubscriptions.size}/${nodeIds.size}")
+            Result.success(successfulUnsubscriptions)
+        } catch (e: Exception) {
+            Log.e(TAG, "批量取消订阅失败: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 断开XMPP连接
+     */
+    fun disconnect() {
+        try {
+            currentConnection?.disconnect()
+            currentConnection = null
+            pubSubManager = null
+            Log.d(TAG, "XMPP连接已断开")
+        } catch (e: Exception) {
+            Log.e(TAG, "断开连接时出错: ${e.message}", e)
+        }
+    }
+}
+
+/**
+ * PubSub通知数据类
+ */
+data class PubSubNotification(
+    val nodeId: String,
+    val itemId: String,
+    val payload: String
+)
+
+/**
+ * 表单类型枚举
+ */
+enum class FormType {
+    submit
 } 

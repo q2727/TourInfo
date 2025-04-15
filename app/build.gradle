@@ -70,21 +70,34 @@ dependencies {
     implementation "androidx.navigation:navigation-compose:2.7.5"
     
     // XMPP Smack 依赖
-    implementation('org.igniterealtime.smack:smack-android:4.4.6') {
+    implementation('org.igniterealtime.smack:smack-android:4.4.0') {
         exclude group: 'xpp3', module: 'xpp3'
     }
-    implementation('org.igniterealtime.smack:smack-tcp:4.4.6') {
+    implementation('org.igniterealtime.smack:smack-tcp:4.4.0') {
         exclude group: 'xpp3', module: 'xpp3'
     }
-    implementation('org.igniterealtime.smack:smack-im:4.4.6') {
+    implementation('org.igniterealtime.smack:smack-im:4.4.0') {
         exclude group: 'xpp3', module: 'xpp3'
     }
-    implementation('org.igniterealtime.smack:smack-extensions:4.4.6') {
+    implementation('org.igniterealtime.smack:smack-extensions:4.4.0') {
         exclude group: 'xpp3', module: 'xpp3'
     }
-    implementation('org.igniterealtime.smack:smack-experimental:4.4.6') {
+    implementation('org.igniterealtime.smack:smack-experimental:4.4.0') {
         exclude group: 'xpp3', module: 'xpp3'
     }
+    // 添加PubSub相关依赖
+    implementation('org.igniterealtime.smack:smack-pubsub:4.4.0') {
+        exclude group: 'xpp3', module: 'xpp3'
+    }
+    // 添加服务发现依赖
+    implementation('org.igniterealtime.smack:smack-xmlparser:4.4.0') {
+        exclude group: 'xpp3', module: 'xpp3'
+    }
+    implementation('org.igniterealtime.smack:smack-resolver-minidns:4.4.0') {
+        exclude group: 'xpp3', module: 'xpp3'
+    }
+    // 添加JSON支持
+    implementation 'org.json:json:20231013'
     
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'

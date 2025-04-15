@@ -20,167 +20,216 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.travalms.ui.navigation.AppRoutes
+import com.example.travalms.ui.screens.SubscriptionNodeItem
+import com.example.travalms.ui.screens.SubscriptionNodeType
 import com.example.travalms.ui.theme.PrimaryColor
-
-// 节点类型枚举
-enum class NodeType {
-    PROVINCE, CITY, ATTRACTION, COMPANY
-}
-
-// 树形结构的节点数据类
-data class NodeItem(
-    val id: String,
-    val name: String,
-    val type: NodeType,
-    val children: List<NodeItem> = emptyList(),
-    val parent: NodeItem? = null
-)
+import com.example.travalms.ui.viewmodels.PublishViewModel
 
 /**
- * 发布节点选择器独立页面，用于选择发布内容的节点，采用树形结构
+ * 选择发布节点的界面，采用树形结构展示
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PublishNodeSelectorScreen(
     navController: NavController,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit = {},
+    viewModel: PublishViewModel = viewModel()
 ) {
     // 模拟层级数据
     val rootNodes = remember {
         listOf(
-            NodeItem(
+            SubscriptionNodeItem(
                 id = "guangdong",
                 name = "广东",
-                type = NodeType.PROVINCE,
+                type = SubscriptionNodeType.PROVINCE,
                 children = listOf(
-                    NodeItem(
+                    SubscriptionNodeItem(
                         id = "guangzhou",
                         name = "广州",
-                        type = NodeType.CITY,
+                        type = SubscriptionNodeType.CITY,
                         children = listOf(
-                            NodeItem(id = "gzatt1", name = "长隆欢乐世界", type = NodeType.ATTRACTION),
-                            NodeItem(id = "gzatt2", name = "白云山", type = NodeType.ATTRACTION),
-                            NodeItem(id = "gzcom1", name = "广州旅游集团", type = NodeType.COMPANY),
-                            NodeItem(id = "gzcom2", name = "南湖国旅", type = NodeType.COMPANY)
+                            SubscriptionNodeItem(id = "gzatt1", name = "长隆欢乐世界", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "gzatt2", name = "白云山", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "gzcom1", name = "广州旅游集团", type = SubscriptionNodeType.COMPANY),
+                            SubscriptionNodeItem(id = "gzcom2", name = "南湖国旅", type = SubscriptionNodeType.COMPANY)
                         )
                     ),
-                    NodeItem(
+                    SubscriptionNodeItem(
                         id = "shenzhen",
                         name = "深圳",
-                        type = NodeType.CITY,
+                        type = SubscriptionNodeType.CITY,
                         children = listOf(
-                            NodeItem(id = "szatt1", name = "深圳欢乐谷", type = NodeType.ATTRACTION),
-                            NodeItem(id = "szatt2", name = "世界之窗", type = NodeType.ATTRACTION),
-                            NodeItem(id = "szcom1", name = "深圳康辉旅行社", type = NodeType.COMPANY)
+                            SubscriptionNodeItem(id = "szatt1", name = "深圳欢乐谷", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "szatt2", name = "世界之窗", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "szcom1", name = "深圳康辉旅行社", type = SubscriptionNodeType.COMPANY)
+                        )
+                    ),
+                    SubscriptionNodeItem(
+                        id = "zhuhai",
+                        name = "珠海",
+                        type = SubscriptionNodeType.CITY,
+                        children = listOf(
+                            SubscriptionNodeItem(id = "zhatt1", name = "珠海长隆海洋王国", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "zhatt2", name = "情侣路", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "zhcom1", name = "珠海旅游集团", type = SubscriptionNodeType.COMPANY)
                         )
                     )
                 )
             ),
-            NodeItem(
+            SubscriptionNodeItem(
                 id = "beijing",
                 name = "北京",
-                type = NodeType.PROVINCE,
+                type = SubscriptionNodeType.PROVINCE,
                 children = listOf(
-                    NodeItem(
+                    SubscriptionNodeItem(
                         id = "haidian",
                         name = "海淀区",
-                        type = NodeType.CITY,
+                        type = SubscriptionNodeType.CITY,
                         children = listOf(
-                            NodeItem(id = "hdatt1", name = "颐和园", type = NodeType.ATTRACTION),
-                            NodeItem(id = "hdatt2", name = "圆明园", type = NodeType.ATTRACTION),
-                            NodeItem(id = "hdcom1", name = "北京中青旅", type = NodeType.COMPANY)
+                            SubscriptionNodeItem(id = "hdatt1", name = "颐和园", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "hdatt2", name = "圆明园", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "hdcom1", name = "北京中青旅", type = SubscriptionNodeType.COMPANY)
                         )
                     ),
-                    NodeItem(
+                    SubscriptionNodeItem(
                         id = "dongcheng",
                         name = "东城区",
-                        type = NodeType.CITY,
+                        type = SubscriptionNodeType.CITY,
                         children = listOf(
-                            NodeItem(id = "dcatt1", name = "故宫", type = NodeType.ATTRACTION),
-                            NodeItem(id = "dcatt2", name = "天安门", type = NodeType.ATTRACTION),
-                            NodeItem(id = "dccom1", name = "东城区旅行社", type = NodeType.COMPANY)
+                            SubscriptionNodeItem(id = "dcatt1", name = "故宫", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "dcatt2", name = "天安门", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "dccom1", name = "东城区旅行社", type = SubscriptionNodeType.COMPANY)
+                        )
+                    ),
+                    SubscriptionNodeItem(
+                        id = "chaoyang",
+                        name = "朝阳区",
+                        type = SubscriptionNodeType.CITY,
+                        children = listOf(
+                            SubscriptionNodeItem(id = "cyatt1", name = "798艺术区", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "cyatt2", name = "奥林匹克公园", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "cycom1", name = "朝阳区旅游公司", type = SubscriptionNodeType.COMPANY)
                         )
                     )
                 )
             ),
-            NodeItem(
+            SubscriptionNodeItem(
                 id = "shanghai",
                 name = "上海",
-                type = NodeType.PROVINCE,
+                type = SubscriptionNodeType.PROVINCE,
                 children = listOf(
-                    NodeItem(
+                    SubscriptionNodeItem(
                         id = "pudong",
                         name = "浦东新区",
-                        type = NodeType.CITY,
+                        type = SubscriptionNodeType.CITY,
                         children = listOf(
-                            NodeItem(id = "pdatt1", name = "迪士尼乐园", type = NodeType.ATTRACTION),
-                            NodeItem(id = "pdatt2", name = "东方明珠", type = NodeType.ATTRACTION),
-                            NodeItem(id = "pdcom1", name = "携程旅游", type = NodeType.COMPANY)
+                            SubscriptionNodeItem(id = "pdatt1", name = "迪士尼乐园", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "pdatt2", name = "东方明珠", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "pdcom1", name = "携程旅游", type = SubscriptionNodeType.COMPANY)
                         )
                     ),
-                    NodeItem(
+                    SubscriptionNodeItem(
                         id = "huangpu",
                         name = "黄浦区",
-                        type = NodeType.CITY,
+                        type = SubscriptionNodeType.CITY,
                         children = listOf(
-                            NodeItem(id = "hpatt1", name = "外滩", type = NodeType.ATTRACTION),
-                            NodeItem(id = "hpatt2", name = "豫园", type = NodeType.ATTRACTION),
-                            NodeItem(id = "hpcom1", name = "上海国旅", type = NodeType.COMPANY)
-                        )
-                    )
-                )
-            ),
-            NodeItem(
-                id = "jiangsu",
-                name = "江苏",
-                type = NodeType.PROVINCE,
-                children = listOf(
-                    NodeItem(
-                        id = "nanjing",
-                        name = "南京",
-                        type = NodeType.CITY,
-                        children = listOf(
-                            NodeItem(id = "njatt1", name = "夫子庙", type = NodeType.ATTRACTION),
-                            NodeItem(id = "njatt2", name = "中山陵", type = NodeType.ATTRACTION),
-                            NodeItem(id = "njcom1", name = "南京旅游公司", type = NodeType.COMPANY)
+                            SubscriptionNodeItem(id = "hpatt1", name = "外滩", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "hpatt2", name = "豫园", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "hpcom1", name = "上海国旅", type = SubscriptionNodeType.COMPANY)
                         )
                     ),
-                    NodeItem(
-                        id = "suzhou",
-                        name = "苏州",
-                        type = NodeType.CITY,
+                    SubscriptionNodeItem(
+                        id = "jingan",
+                        name = "静安区",
+                        type = SubscriptionNodeType.CITY,
                         children = listOf(
-                            NodeItem(id = "szatt1", name = "拙政园", type = NodeType.ATTRACTION),
-                            NodeItem(id = "szatt2", name = "金鸡湖", type = NodeType.ATTRACTION),
-                            NodeItem(id = "szcom1", name = "苏州旅行社", type = NodeType.COMPANY)
+                            SubscriptionNodeItem(id = "jaatt1", name = "静安寺", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "jaatt2", name = "南京西路", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "jacom1", name = "静安区旅游公司", type = SubscriptionNodeType.COMPANY)
                         )
                     )
                 )
             ),
-            NodeItem(
+            SubscriptionNodeItem(
                 id = "zhejiang",
                 name = "浙江",
-                type = NodeType.PROVINCE,
+                type = SubscriptionNodeType.PROVINCE,
                 children = listOf(
-                    NodeItem(
+                    SubscriptionNodeItem(
                         id = "hangzhou",
                         name = "杭州",
-                        type = NodeType.CITY,
+                        type = SubscriptionNodeType.CITY,
                         children = listOf(
-                            NodeItem(id = "hzatt1", name = "西湖", type = NodeType.ATTRACTION),
-                            NodeItem(id = "hzatt2", name = "灵隐寺", type = NodeType.ATTRACTION),
-                            NodeItem(id = "hzcom1", name = "飞猪旅行", type = NodeType.COMPANY)
+                            SubscriptionNodeItem(id = "hzatt1", name = "西湖", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "hzatt2", name = "灵隐寺", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "hzcom1", name = "杭州旅游集团", type = SubscriptionNodeType.COMPANY)
                         )
                     ),
-                    NodeItem(
+                    SubscriptionNodeItem(
                         id = "ningbo",
                         name = "宁波",
-                        type = NodeType.CITY,
+                        type = SubscriptionNodeType.CITY,
                         children = listOf(
-                            NodeItem(id = "nbatt1", name = "天一阁", type = NodeType.ATTRACTION),
-                            NodeItem(id = "nbatt2", name = "溪口", type = NodeType.ATTRACTION),
-                            NodeItem(id = "nbcom1", name = "宁波旅游集团", type = NodeType.COMPANY)
+                            SubscriptionNodeItem(id = "nbatt1", name = "天一阁", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "nbatt2", name = "东钱湖", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "nbcom1", name = "宁波旅游公司", type = SubscriptionNodeType.COMPANY)
+                        )
+                    )
+                )
+            ),
+            SubscriptionNodeItem(
+                id = "jiangsu",
+                name = "江苏",
+                type = SubscriptionNodeType.PROVINCE,
+                children = listOf(
+                    SubscriptionNodeItem(
+                        id = "nanjing",
+                        name = "南京",
+                        type = SubscriptionNodeType.CITY,
+                        children = listOf(
+                            SubscriptionNodeItem(id = "njatt1", name = "中山陵", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "njatt2", name = "夫子庙", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "njcom1", name = "南京旅游集团", type = SubscriptionNodeType.COMPANY)
+                        )
+                    ),
+                    SubscriptionNodeItem(
+                        id = "suzhou",
+                        name = "苏州",
+                        type = SubscriptionNodeType.CITY,
+                        children = listOf(
+                            SubscriptionNodeItem(id = "szatt1", name = "拙政园", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "szatt2", name = "虎丘", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "szcom1", name = "苏州旅游公司", type = SubscriptionNodeType.COMPANY)
+                        )
+                    )
+                )
+            ),
+            SubscriptionNodeItem(
+                id = "sichuan",
+                name = "四川",
+                type = SubscriptionNodeType.PROVINCE,
+                children = listOf(
+                    SubscriptionNodeItem(
+                        id = "chengdu",
+                        name = "成都",
+                        type = SubscriptionNodeType.CITY,
+                        children = listOf(
+                            SubscriptionNodeItem(id = "cdatt1", name = "宽窄巷子", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "cdatt2", name = "锦里", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "cdcom1", name = "成都旅游集团", type = SubscriptionNodeType.COMPANY)
+                        )
+                    ),
+                    SubscriptionNodeItem(
+                        id = "leshan",
+                        name = "乐山",
+                        type = SubscriptionNodeType.CITY,
+                        children = listOf(
+                            SubscriptionNodeItem(id = "lsatt1", name = "乐山大佛", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "lsatt2", name = "峨眉山", type = SubscriptionNodeType.ATTRACTION),
+                            SubscriptionNodeItem(id = "lscom1", name = "乐山旅游公司", type = SubscriptionNodeType.COMPANY)
                         )
                     )
                 )
@@ -188,50 +237,82 @@ fun PublishNodeSelectorScreen(
         )
     }
 
-    // 搜索查询状态
+    // 状态变量
     var searchQuery by remember { mutableStateOf("") }
-    
-    // 保存已展开的节点ID列表
     val expandedNodes = remember { mutableStateMapOf<String, Boolean>() }
-    
-    // 保存已选择的节点ID列表
     val selectedNodes = remember { mutableStateListOf<String>() }
+    val selectedNodeNames = remember { mutableStateListOf<String>() }
+    
+    // 监听ViewModel状态
+    val publishState by viewModel.uiState.collectAsState()
+    val isLoggedIn by viewModel.isLoggedIn.collectAsState()
+    
+    // 创建所有可用节点
+    LaunchedEffect(Unit) {
+        // 首次启动时尝试自动登录
+        if (!isLoggedIn) {
+            viewModel.loginToXMPP("admin", "admin")  // 使用应用默认账号，在生产环境中应改为安全的方式
+        }
+        
+        // 确保在XMPP上创建节点
+        viewModel.createNodesForHierarchy(rootNodes)
+    }
 
     // 辅助函数：获取节点及其所有子节点的ID
-    fun getAllChildrenIds(node: NodeItem): List<String> {
+    fun getAllChildrenIds(node: SubscriptionNodeItem): List<String> {
         val result = mutableListOf(node.id)
         for (child in node.children) {
             result.addAll(getAllChildrenIds(child))
         }
         return result
     }
+    
+    // 辅助函数：获取节点及其所有子节点的名称
+    fun getAllChildrenNames(node: SubscriptionNodeItem): List<String> {
+        val result = mutableListOf(node.name)
+        for (child in node.children) {
+            result.addAll(getAllChildrenNames(child))
+        }
+        return result
+    }
 
     // 辅助函数：检查节点的所有子节点是否已选中
-    fun areAllChildrenSelected(node: NodeItem): Boolean {
+    fun areAllChildrenSelected(node: SubscriptionNodeItem): Boolean {
         return node.children.all { child ->
             selectedNodes.contains(child.id) && (child.children.isEmpty() || areAllChildrenSelected(child))
         }
     }
 
     // 辅助函数：处理节点的选择状态改变
-    fun toggleNodeSelection(node: NodeItem, selected: Boolean) {
+    fun toggleNodeSelection(node: SubscriptionNodeItem, selected: Boolean) {
         val childrenIds = getAllChildrenIds(node)
+        val childrenNames = getAllChildrenNames(node)
+        
         if (selected) {
-            childrenIds.forEach { id ->
+            childrenIds.forEachIndexed { index, id ->
                 if (!selectedNodes.contains(id)) {
                     selectedNodes.add(id)
+                    if (index < childrenNames.size && !selectedNodeNames.contains(childrenNames[index])) {
+                        selectedNodeNames.add(childrenNames[index])
+                    }
                 }
             }
         } else {
-            childrenIds.forEach { id ->
+            childrenIds.forEachIndexed { index, id ->
                 selectedNodes.remove(id)
+                if (index < childrenNames.size) {
+                    selectedNodeNames.remove(childrenNames[index])
+                }
             }
         }
+        
+        // 更新ViewModel中的选择
+        viewModel.setSelectedNodes(selectedNodes.toList(), selectedNodeNames.toList())
     }
 
     // 递归函数：渲染树节点
     @Composable
-    fun TreeNodeItem(node: NodeItem, level: Int = 0) {
+    fun TreeNodeItem(node: SubscriptionNodeItem, level: Int = 0) {
         val isExpanded = expandedNodes[node.id] ?: false
         val isSelected = selectedNodes.contains(node.id)
         val hasChildren = node.children.isNotEmpty()
@@ -280,21 +361,35 @@ fun PublishNodeSelectorScreen(
             )
             
             // 节点名称
-            Text(
-                text = node.name,
+            Row(
                 modifier = Modifier
                     .weight(1f)
                     .clickable { expandedNodes[node.id] = !isExpanded },
-                fontWeight = if (isSelected || allChildrenSelected || someChildrenSelected) FontWeight.Bold else FontWeight.Normal,
-                color = if (isSelected || allChildrenSelected) PrimaryColor else Color.Black
-            )
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = node.name,
+                    fontWeight = if (isSelected || allChildrenSelected || someChildrenSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isSelected || allChildrenSelected) PrimaryColor else Color.Black
+                )
+                
+                if (node.hasHighlight) {
+                    Box(
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .size(8.dp)
+                            .background(color = Color.Red, shape = androidx.compose.foundation.shape.CircleShape)
+                    )
+                }
+            }
             
             // 显示节点类型标签
             val typeText = when (node.type) {
-                NodeType.PROVINCE -> "省份"
-                NodeType.CITY -> "城市"
-                NodeType.ATTRACTION -> "景点"
-                NodeType.COMPANY -> "公司"
+                SubscriptionNodeType.CATEGORY -> "类别"
+                SubscriptionNodeType.PROVINCE -> "省份"
+                SubscriptionNodeType.CITY -> "城市"
+                SubscriptionNodeType.ATTRACTION -> "景点"
+                SubscriptionNodeType.COMPANY -> "公司"
             }
             
             Text(
@@ -339,7 +434,7 @@ fun PublishNodeSelectorScreen(
                         )
                     }
                 }
-
+                
                 // 显示节点本身作为一个可选项
                 Row(
                     modifier = Modifier
@@ -353,9 +448,13 @@ fun PublishNodeSelectorScreen(
                             if (checked) {
                                 if (!selectedNodes.contains(node.id)) {
                                     selectedNodes.add(node.id)
+                                    selectedNodeNames.add(node.name)
+                                    viewModel.setSelectedNodes(selectedNodes.toList(), selectedNodeNames.toList())
                                 }
                             } else {
                                 selectedNodes.remove(node.id)
+                                selectedNodeNames.remove(node.name)
+                                viewModel.setSelectedNodes(selectedNodes.toList(), selectedNodeNames.toList())
                             }
                         },
                         colors = CheckboxDefaults.colors(
@@ -371,13 +470,35 @@ fun PublishNodeSelectorScreen(
                         color = if (isSelected) PrimaryColor else Color.Black
                     )
                 }
-
+                
                 Divider(modifier = Modifier.padding(start = (level * 20 + 32).dp, end = 16.dp, top = 4.dp, bottom = 4.dp))
                 
                 // 渲染子节点
                 node.children.forEach { child ->
                     TreeNodeItem(child, level + 1)
                 }
+            }
+        }
+    }
+
+    // 显示错误消息的组件
+    @Composable
+    fun ErrorMessage(message: String) {
+        if (message.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .background(
+                        color = Color(0xFFFFEBEE),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = message,
+                    color = Color(0xFFB71C1C)
+                )
             }
         }
     }
@@ -430,6 +551,31 @@ fun PublishNodeSelectorScreen(
                 )
             )
             
+            // 显示错误消息
+            publishState.errorMessage?.let { ErrorMessage(it) }
+            
+            // 当前选中的节点
+            if (selectedNodes.isNotEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .background(color = Color(0xFFE8F5E9), shape = RoundedCornerShape(8.dp))
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = "已选择 ${selectedNodes.size} 个节点",
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF2E7D32)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = selectedNodeNames.joinToString(", "),
+                        color = Color(0xFF388E3C)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            
             // 树形节点列表
             LazyColumn(
                 modifier = Modifier
@@ -443,85 +589,29 @@ fun PublishNodeSelectorScreen(
             }
             
             // 底部按钮
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    .background(Color.White)
+                    .padding(16.dp)
             ) {
-                // 取消按钮
-                Button(
-                    onClick = onBackClick,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFE0F2F1)
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        text = "取消",
-                        fontSize = 16.sp,
-                        color = PrimaryColor
-                    )
-                }
-                
-                // 确认按钮
                 Button(
                     onClick = {
-                        // 获取选中的节点名称列表
-                        val selectedNodeNames = mutableListOf<String>()
-                        
-                        // 辅助函数查找指定ID的节点
-                        fun findNode(nodeId: String, nodes: List<NodeItem>): NodeItem? {
-                            for (node in nodes) {
-                                if (node.id == nodeId) return node
-                                val found = findNode(nodeId, node.children)
-                                if (found != null) return found
-                            }
-                            return null
-                        }
-                        
-                        // 辅助函数获取所有节点
-                        fun findAllNodes(nodes: List<NodeItem>): List<NodeItem> {
-                            val result = mutableListOf<NodeItem>()
-                            for (node in nodes) {
-                                result.add(node)
-                                result.addAll(findAllNodes(node.children))
-                            }
-                            return result
-                        }
-                        
-                        // 获取所有节点
-                        val allNodes = findAllNodes(rootNodes)
-                        
-                        // 找出已选择的节点名称
-                        selectedNodes.forEach { nodeId ->
-                            allNodes.find { it.id == nodeId }?.name?.let {
-                                selectedNodeNames.add(it)
-                            }
-                        }
-                        
-                        // 如果有选中的节点，将节点名称传递回上一个界面
-                        if (selectedNodeNames.isNotEmpty()) {
-                            navController.previousBackStackEntry?.savedStateHandle?.set(
-                                "selected_nodes", selectedNodeNames.joinToString(", ")
-                            )
-                            navController.popBackStack()
-                        }
+                        // 导航到发布页面，带上选择的节点信息
+                        navController.navigate(AppRoutes.PUBLISH)
                     },
                     modifier = Modifier
-                        .weight(1f)
+                        .fillMaxWidth()
                         .height(48.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = PrimaryColor
+                        containerColor = PrimaryColor,
+                        disabledContainerColor = Color.Gray
                     ),
                     shape = RoundedCornerShape(8.dp),
-                    enabled = selectedNodes.isNotEmpty()
+                    enabled = selectedNodes.isNotEmpty() && isLoggedIn
                 ) {
                     Text(
-                        text = "确认",
+                        text = if (isLoggedIn) "确认选择 (${selectedNodes.size})" else "正在连接XMPP服务器...",
                         fontSize = 16.sp,
                         color = Color.White
                     )
