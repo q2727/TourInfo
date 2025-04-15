@@ -3,6 +3,8 @@ package com.example.travalms.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -118,6 +120,7 @@ fun ProfileScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .background(BackgroundColor)
+                .verticalScroll(rememberScrollState())
         ) {
             // 用户资料卡片
             Box(
@@ -162,7 +165,7 @@ fun ProfileScreen(
                 }
             }
             
-            // 功能列表 - 把"我的收藏"放在靠前位置
+            // 功能列表
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -175,14 +178,14 @@ fun ProfileScreen(
                 Column(
                     modifier = Modifier.padding(vertical = 8.dp)
                 ) {
-                    // 移动上来的"我的收藏"选项
+                    // 订阅管理
                     ListItem(
-                        headlineContent = { Text("我的收藏") },
+                        headlineContent = { Text("订阅管理") },
                         leadingContent = { 
                             Icon(
-                                Icons.Filled.Star, 
-                                contentDescription = "我的收藏",
-                                tint = PrimaryColor
+                                imageVector = Icons.Filled.List, 
+                                contentDescription = "订阅管理",
+                                tint = Color(0xFF00C2A8)
                             )
                         },
                         trailingContent = { 
@@ -192,20 +195,21 @@ fun ProfileScreen(
                             )
                         },
                         modifier = Modifier.clickable {
-                            navController.navigate(AppRoutes.MY_FAVORITES)
+                            // 导航到订阅节点界面
+                            navController.navigate(AppRoutes.SUBSCRIBE_SETTING)
                         }
                     )
                     
                     Divider()
                     
-                    // 我的发布
+                    // 资质管理
                     ListItem(
-                        headlineContent = { Text("我的发布") },
+                        headlineContent = { Text("资质管理") },
                         leadingContent = { 
                             Icon(
-                                Icons.Filled.List, 
-                                contentDescription = "我的发布",
-                                tint = PrimaryColor
+                                imageVector = Icons.Filled.Person, 
+                                contentDescription = "资质管理",
+                                tint = Color(0xFF4169E1)
                             )
                         },
                         trailingContent = { 
@@ -215,7 +219,54 @@ fun ProfileScreen(
                             )
                         },
                         modifier = Modifier.clickable {
-                            navController.navigate(AppRoutes.MY_POSTS)
+                            // 导航到资质管理页面
+                        }
+                    )
+                    
+                    Divider()
+                    
+                    // 可发布节点查询
+                    ListItem(
+                        headlineContent = { Text("可发布节点查询") },
+                        leadingContent = { 
+                            Icon(
+                                imageVector = Icons.Filled.Person, 
+                                contentDescription = "可发布节点查询",
+                                tint = Color(0xFF4169E1)
+                            )
+                        },
+                        trailingContent = { 
+                            Icon(
+                                Icons.Filled.KeyboardArrowRight, 
+                                contentDescription = "进入"
+                            )
+                        },
+                        modifier = Modifier.clickable {
+                            // 导航到可发布节点查询页面
+                        }
+                    )
+                    
+                    Divider()
+                    
+                    // 发布管理
+                    ListItem(
+                        headlineContent = { Text("发布管理") },
+                        leadingContent = { 
+                            Icon(
+                                imageVector = Icons.Filled.Person, 
+                                contentDescription = "发布管理",
+                                tint = Color(0xFF4169E1)
+                            )
+                        },
+                        trailingContent = { 
+                            Icon(
+                                Icons.Filled.KeyboardArrowRight, 
+                                contentDescription = "进入"
+                            )
+                        },
+                        modifier = Modifier.clickable {
+                            // 导航到发布节点选择界面
+                            navController.navigate(AppRoutes.PUBLISH_NODE_SELECTOR)
                         }
                     )
                     

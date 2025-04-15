@@ -86,9 +86,6 @@ fun PublishScreen(
     // 添加团型下拉菜单控制
     var showGroupTypeDropdown by remember { mutableStateOf(false) }
 
-    // 节点选择对话框控制
-    var showNodeSelector by remember { mutableStateOf(false) }
-
     // 发布类别选项
     val categories = listOf("同业社", "地接社", "组团社", "景区", "宾馆", "车队", "招聘", "签证", "票务", "其他")
     
@@ -128,6 +125,17 @@ fun PublishScreen(
     // 获取当前日期作为默认值
     val currentDate = LocalDate.now()
 
+    // Add this code to retrieve selected nodes when returning from selector screen
+    val selectedNodesResult = navController.currentBackStackEntry?.savedStateHandle?.get<String>("selected_nodes")
+    // Update the publishNode when we get a result
+    LaunchedEffect(selectedNodesResult) {
+        selectedNodesResult?.let {
+            publishNode = it
+            // Clear the saved state to avoid duplicate handling
+            navController.currentBackStackEntry?.savedStateHandle?.remove<String>("selected_nodes")
+        }
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -143,86 +151,6 @@ fun PublishScreen(
                     navigationIconContentColor = Color.White
                 )
             )
-        },
-        bottomBar = {
-            NavigationBar(
-                containerColor = Color.White,
-                modifier = Modifier.height(56.dp)
-            ) {
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Home, contentDescription = "产品") },
-                    label = { Text("产品", fontSize = 12.sp) },
-                    selected = false,
-                    onClick = onHomeClick,
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = PrimaryColor,
-                        selectedTextColor = PrimaryColor,
-                        unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray,
-                        indicatorColor = Color.Transparent
-                    )
-                )
-
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Add, contentDescription = "发布") },
-                    label = { Text("发布", fontSize = 12.sp) },
-                    selected = true,
-                    onClick = {
-                        navController.navigate(AppRoutes.MY_POSTS) {
-                            popUpTo(AppRoutes.PUBLISH) { inclusive = true }
-                        }
-                    },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = PrimaryColor,
-                        selectedTextColor = PrimaryColor,
-                        unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray,
-                        indicatorColor = Color.Transparent
-                    )
-                )
-
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Favorite, contentDescription = "尾单") },
-                    label = { Text("尾单", fontSize = 12.sp) },
-                    selected = false,
-                    onClick = { /* TODO: Navigate to Tail List */ },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = PrimaryColor,
-                        selectedTextColor = PrimaryColor,
-                        unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray,
-                        indicatorColor = Color.Transparent
-                    )
-                )
-
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Email, contentDescription = "消息") },
-                    label = { Text("消息", fontSize = 12.sp) },
-                    selected = false,
-                    onClick = onMessageClick,
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = PrimaryColor,
-                        selectedTextColor = PrimaryColor,
-                        unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray,
-                        indicatorColor = Color.Transparent
-                    )
-                )
-
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Person, contentDescription = "我的") },
-                    label = { Text("我的", fontSize = 12.sp) },
-                    selected = false,
-                    onClick = onProfileClick,
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = PrimaryColor,
-                        selectedTextColor = PrimaryColor,
-                        unselectedIconColor = Color.Gray,
-                        unselectedTextColor = Color.Gray,
-                        indicatorColor = Color.Transparent
-                    )
-                )
-            }
         }
     ) { paddingValues ->
         Column(
@@ -653,7 +581,10 @@ fun PublishScreen(
                     modifier = Modifier
                         .weight(1f)
                         .height(40.dp)
-                        .clickable { showNodeSelector = true },
+                        .clickable { 
+                            // Navigate to PublishNodeSelectorScreen instead of showing dialog
+                            navController.navigate(AppRoutes.PUBLISH_NODE_SELECTOR)
+                        },
                     shape = RoundedCornerShape(4.dp),
                     color = Color(0xFFF5F5F5)
                 ) {
@@ -801,17 +732,6 @@ fun PublishScreen(
         )
     }
 
-    // 节点选择对话框
-    if (showNodeSelector) {
-        PublishNodeSelector(
-            onDismiss = { showNodeSelector = false },
-            onNodeSelected = {
-                publishNode = it
-                showNodeSelector = false
-            }
-        )
-    }
-
     // 地点选择对话框
     if (showLocationSelector) {
         LocationSelector(
@@ -916,279 +836,221 @@ fun FormTextField(
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PublishNodeSelector(
+fun DatePickerDialog(
     onDismiss: () -> Unit,
-    onNodeSelected: (String) -> Unit
+    onDateSelected: (LocalDate) -> Unit,
+    initialDate: LocalDate
 ) {
-    // 模拟数据
-    val provinces = listOf("广东", "广西", "北京", "上海", "江苏", "浙江", "四川", "湖南", "福建", "山东")
-    val cities = listOf("广州", "深圳", "珠海", "佛山", "东莞", "惠州", "中山", "江门", "肇庆", "清远")
-    val attractions = listOf("长隆欢乐世界", "白云山", "珠江夜游", "小洲村", "陈家祠", "沙面", "广州塔", "宝墨园", "黄埔军校", "南沙湿地")
-    val companies = listOf("广州旅游集团", "南湖国旅", "广之旅", "中青旅", "携程旅游", "飞猪旅行", "广东旅游", "康辉旅行社", "广州中旅", "白云国际旅行社")
-
-    var selectedTabIndex by remember { mutableStateOf(0) }
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedItem by remember { mutableStateOf<String?>(null) }
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = initialDate.atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC) * 1000
+    )
 
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
-            usePlatformDefaultWidth = false
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
         )
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.White)
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = Color.White
         ) {
             Column(
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.padding(16.dp)
             ) {
-                // 顶部栏
+                Text(
+                    text = "选择日期",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                DatePicker(
+                    state = datePickerState,
+                    title = null,
+                    headline = null,
+                    showModeToggle = false
+                )
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(PrimaryColor)
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.End
                 ) {
-                    IconButton(
-                        onClick = onDismiss
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "返回",
-                            tint = Color.White
-                        )
+                    TextButton(onClick = onDismiss) {
+                        Text("取消")
                     }
 
-                    Text(
-                        text = "选择发布节点",
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f),
-                        textAlign = TextAlign.Center
-                    )
+                    Spacer(modifier = Modifier.width(8.dp))
 
-                    // 右侧空白平衡布局
-                    Spacer(modifier = Modifier.width(48.dp))
-                }
-
-                // 搜索框
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { newValue -> searchQuery = newValue },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        placeholder = { 
-                            Text("搜索", color = Color.Gray) 
-                        },
-                        leadingIcon = { 
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "搜索",
-                                tint = Color(0xFF2196F3)
-                            )
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(24.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedContainerColor = Color(0xFFF5F5F5),
-                            focusedContainerColor = Color(0xFFF5F5F5),
-                            unfocusedBorderColor = Color.Transparent,
-                            focusedBorderColor = Color.Transparent
-                        )
-                    )
-                }
-
-                // 选项卡
-                TabRow(
-                    selectedTabIndex = selectedTabIndex,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentColor = PrimaryColor,
-                    indicator = { tabPositions ->
-                        Box(
-                            modifier = Modifier
-                                .tabIndicatorOffset(tabPositions[selectedTabIndex])
-                                .height(3.dp)
-                                .background(
-                                    color = PrimaryColor,
-                                    shape = RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)
-                                )
-                        )
-                    },
-                    divider = {}
-                ) {
-                    Tab(
-                        selected = selectedTabIndex == 0,
-                        onClick = { selectedTabIndex = 0 },
-                        text = { Text("省市") }
-                    )
-
-                    Tab(
-                        selected = selectedTabIndex == 1,
-                        onClick = { selectedTabIndex = 1 },
-                        text = { Text("景区") }
-                    )
-
-                    Tab(
-                        selected = selectedTabIndex == 2,
-                        onClick = { selectedTabIndex = 2 },
-                        text = { Text("公司") }
-                    )
-                }
-
-                // 内容区域
-                Box(modifier = Modifier.weight(1f)) {
-                    when (selectedTabIndex) {
-                        0 -> {
-                            // 省市选项
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(rememberScrollState())
-                            ) {
-                                provinces.forEach { province ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { selectedItem = province }
-                                            .padding(16.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        RadioButton(
-                                            selected = selectedItem == province,
-                                            onClick = { selectedItem = province }
-                                        )
-                                        Text(
-                                            text = province,
-                                            modifier = Modifier.padding(start = 8.dp)
-                                        )
-                                    }
-                                    Divider()
-                                }
-                            }
-                        }
-                        1 -> {
-                            // 景区选项
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(rememberScrollState())
-                            ) {
-                                attractions.forEach { attraction ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { selectedItem = attraction }
-                                            .padding(16.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        RadioButton(
-                                            selected = selectedItem == attraction,
-                                            onClick = { selectedItem = attraction }
-                                        )
-                                        Text(
-                                            text = attraction,
-                                            modifier = Modifier.padding(start = 8.dp)
-                                        )
-                                    }
-                                    Divider()
-                                }
-                            }
-                        }
-                        2 -> {
-                            // 公司选项
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(rememberScrollState())
-                            ) {
-                                companies.forEach { company ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { selectedItem = company }
-                                            .padding(16.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        RadioButton(
-                                            selected = selectedItem == company,
-                                            onClick = { selectedItem = company }
-                                        )
-                                        Text(
-                                            text = company,
-                                            modifier = Modifier.padding(start = 8.dp)
-                                        )
-                                    }
-                                    Divider()
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 底部按钮
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // 取消按钮
-                    Button(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFE0F2F1)
-                        ),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = "取消",
-                            fontSize = 16.sp,
-                            color = PrimaryColor
-                        )
-                    }
-                    
-                    // 确认按钮
                     Button(
                         onClick = {
-                            selectedItem?.let {
-                                onNodeSelected(it)
-                                onDismiss()
+                            datePickerState.selectedDateMillis?.let { millis ->
+                                val selectedDate = java.time.Instant.ofEpochMilli(millis)
+                                    .atZone(java.time.ZoneId.systemDefault())
+                                    .toLocalDate()
+                                onDateSelected(selectedDate)
                             }
                         },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = PrimaryColor
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        enabled = selectedItem != null
+                            containerColor = Color(0xFF00B894)
+                        )
+                    ) {
+                        Text("确认")
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 消息预览卡片，用于显示发布后的消息预览
+ */
+@Composable
+fun MessagePreviewCard(
+    title: String,
+    features: List<String>,
+    validPeriod: String = "3天6:30",
+    publishLocations: List<String> = listOf("北京", "上海", "海淀")
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            // 标题
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.fillMaxWidth()
+            )
+            
+            // 行程特色内容
+            features.forEach { feature ->
+                Text(
+                    text = feature,
+                    fontSize = 14.sp,
+                    color = Color.DarkGray,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.padding(vertical = 2.dp)
+                )
+            }
+            
+            // 有效期
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Spacer(modifier = Modifier.weight(1f))
+                
+                Text(
+                    text = "有效期：",
+                    fontSize = 14.sp,
+                    color = Color.DarkGray
+                )
+                
+                Text(
+                    text = validPeriod,
+                    fontSize = 14.sp,
+                    color = Color(0xFFFF6E40),
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            
+            // 底部分隔线
+            Divider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = Color.LightGray
+            )
+            
+            // 发布节点
+            Text(
+                text = "发布节点：",
+                fontSize = 14.sp,
+                color = Color.Gray,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            
+            // 发布地点标签
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Start
+            ) {
+                publishLocations.forEach { location ->
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .background(
+                                color = PrimaryColor.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = "确认",
-                            fontSize = 16.sp,
-                            color = Color.White
+                            text = location,
+                            fontSize = 12.sp,
+                            color = PrimaryColor
                         )
                     }
                 }
             }
         }
+    }
+}
+
+// 在PublishScreen中添加预览部分，在提交前预览
+// 你可以在表单完成后添加以下代码来展示预览
+@Composable
+fun MessagePreviewSection(
+    routeName: String,
+    description: String
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp)
+    ) {
+        Text(
+            text = "发布预览",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        
+        // 将描述转换为行程特色列表
+        val features = if (description.isNotEmpty()) {
+            description.split("\n").filter { it.isNotBlank() }
+        } else {
+            listOf(
+                "1.在上海外国语大学浸入式英语环境中学习英语，培养孩子良好的英语语感及口语运用能力。",
+                "2.上海淮景点畅游、博物馆、知名大学参访，展开真正的上海文化寻根游学之旅。",
+                "3.上海迪斯尼乐园畅游，学习游乐两不误。"
+            )
+        }
+        
+        MessagePreviewCard(
+            title = routeName.ifEmpty { "上海外国语大学体验+迪士尼6日夏令营 ❤" },
+            features = features
+        )
     }
 }
 
@@ -1517,221 +1379,3 @@ data class LocationItem(
     val name: String,
     val province: String
 )
-
-@RequiresApi(Build.VERSION_CODES.O)
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DatePickerDialog(
-    onDismiss: () -> Unit,
-    onDateSelected: (LocalDate) -> Unit,
-    initialDate: LocalDate
-) {
-    val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = initialDate.atStartOfDay().toEpochSecond(java.time.ZoneOffset.UTC) * 1000
-    )
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true
-        )
-    ) {
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = Color.White
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Text(
-                    text = "选择日期",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-
-                DatePicker(
-                    state = datePickerState,
-                    title = null,
-                    headline = null,
-                    showModeToggle = false
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("取消")
-                    }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Button(
-                        onClick = {
-                            datePickerState.selectedDateMillis?.let { millis ->
-                                val selectedDate = java.time.Instant.ofEpochMilli(millis)
-                                    .atZone(java.time.ZoneId.systemDefault())
-                                    .toLocalDate()
-                                onDateSelected(selectedDate)
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF00B894)
-                        )
-                    ) {
-                        Text("确认")
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * 消息预览卡片，用于显示发布后的消息预览
- */
-@Composable
-fun MessagePreviewCard(
-    title: String,
-    features: List<String>,
-    validPeriod: String = "3天6:30",
-    publishLocations: List<String> = listOf("北京", "上海", "海淀")
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(8.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            // 标题
-            Text(
-                text = title,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.fillMaxWidth()
-            )
-            
-            // 行程特色内容
-            features.forEach { feature ->
-                Text(
-                    text = feature,
-                    fontSize = 14.sp,
-                    color = Color.DarkGray,
-                    lineHeight = 20.sp,
-                    modifier = Modifier.padding(vertical = 2.dp)
-                )
-            }
-            
-            // 有效期
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Spacer(modifier = Modifier.weight(1f))
-                
-                Text(
-                    text = "有效期：",
-                    fontSize = 14.sp,
-                    color = Color.DarkGray
-                )
-                
-                Text(
-                    text = validPeriod,
-                    fontSize = 14.sp,
-                    color = Color(0xFFFF6E40),
-                    fontWeight = FontWeight.Medium
-                )
-            }
-            
-            // 底部分隔线
-            Divider(
-                modifier = Modifier.padding(vertical = 8.dp),
-                color = Color.LightGray
-            )
-            
-            // 发布节点
-            Text(
-                text = "发布节点：",
-                fontSize = 14.sp,
-                color = Color.Gray,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-            
-            // 发布地点标签
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start
-            ) {
-                publishLocations.forEach { location ->
-                    Box(
-                        modifier = Modifier
-                            .padding(end = 8.dp)
-                            .background(
-                                color = PrimaryColor.copy(alpha = 0.1f),
-                                shape = RoundedCornerShape(4.dp)
-                            )
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = location,
-                            fontSize = 12.sp,
-                            color = PrimaryColor
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-// 在PublishScreen中添加预览部分，在提交前预览
-// 你可以在表单完成后添加以下代码来展示预览
-@Composable
-fun MessagePreviewSection(
-    routeName: String,
-    description: String
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 16.dp)
-    ) {
-        Text(
-            text = "发布预览",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        
-        // 将描述转换为行程特色列表
-        val features = if (description.isNotEmpty()) {
-            description.split("\n").filter { it.isNotBlank() }
-        } else {
-            listOf(
-                "1.在上海外国语大学浸入式英语环境中学习英语，培养孩子良好的英语语感及口语运用能力。",
-                "2.上海淮景点畅游、博物馆、知名大学参访，展开真正的上海文化寻根游学之旅。",
-                "3.上海迪斯尼乐园畅游，学习游乐两不误。"
-            )
-        }
-        
-        MessagePreviewCard(
-            title = routeName.ifEmpty { "上海外国语大学体验+迪士尼6日夏令营 ❤" },
-            features = features
-        )
-    }
-}

@@ -1,0 +1,18 @@
+[
+    {
+        "merged": "C:\\Users\\28443\\.gradle\\daemon\\8.11.1\\com.example.travalms.app-debug-50:\\drawable_ic_launcher_foreground.xml.flat",
+        "source": "C:\\Users\\28443\\.gradle\\daemon\\8.11.1\\com.example.travalms.app-main-52:\\drawable\\ic_launcher_foreground.xml"
+    },
+    {
+        "merged": "C:\\Users\\28443\\.gradle\\daemon\\8.11.1\\com.example.travalms.app-debug-50:\\mipmap_ic_launcher.xml.flat",
+        "source": "C:\\Users\\28443\\.gradle\\daemon\\8.11.1\\com.example.travalms.app-main-52:\\mipmap\\ic_launcher.xml"
+    },
+    {
+        "merged": "com.example.travalms.app-debug-50:/mipmap_ic_launcher_round.xml.flat",
+        "source": "com.example.travalms.app-main-52:/mipmap/ic_launcher_round.xml"
+    },
+    {
+        "merged": "C:\\Users\\28443\\.gradle\\daemon\\8.11.1\\com.example.travalms.app-debug-50:\\mipmap_ic_launcher_round.xml.flat",
+        "source": "C:\\Users\\28443\\.gradle\\daemon\\8.11.1\\com.example.travalms.app-main-52:\\mipmap\\ic_launcher_round.xml"
+    }
+]

@@ -1,0 +1,30 @@
+Index: app/src/main/java/com/example/travalms/MainActivity.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>package com.example.travalms\r\n\r\nimport android.os.Bundle\r\nimport androidx.activity.ComponentActivity\r\nimport androidx.activity.compose.setContent\r\nimport androidx.activity.enableEdgeToEdge\r\nimport androidx.compose.foundation.layout.fillMaxSize\r\nimport androidx.compose.material3.MaterialTheme\r\nimport androidx.compose.material3.Surface\r\nimport androidx.compose.ui.Modifier\r\nimport com.example.travalms.ui.navigation.AppNavigation\r\nimport com.example.travalms.ui.theme.TravalMSTheme\r\n\r\n/**\r\n * MainActivity是应用程序的主活动，负责初始化界面\r\n */\r\nclass MainActivity : ComponentActivity() {\r\n    override fun onCreate(savedInstanceState: Bundle?) {\r\n        super.onCreate(savedInstanceState)\r\n        // 启用边缘到边缘的显示，提供更大的屏幕显示区域\r\n        enableEdgeToEdge()\r\n        // 设置内容视图为Compose布局，使用Jetpack Compose构建UI\r\n        setContent {\r\n            // 应用自定义主题，TravalMSTheme包含应用的颜色、排版等\r\n            TravalMSTheme {\r\n                Surface(\r\n                    modifier = Modifier.fillMaxSize(),\r\n                    color = MaterialTheme.colorScheme.background\r\n                ) {\r\n                    AppNavigation()\r\n                }\r\n            }\r\n        }\r\n    }\r\n}\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/app/src/main/java/com/example/travalms/MainActivity.kt b/app/src/main/java/com/example/travalms/MainActivity.kt
+--- a/app/src/main/java/com/example/travalms/MainActivity.kt	(revision cdc05ca5e1ada5725a98d99f596b23eb5d9f18ac)
++++ b/app/src/main/java/com/example/travalms/MainActivity.kt	(date 1744711933450)
+@@ -1,9 +1,11 @@
+ package com.example.travalms
+ 
++import android.os.Build
+ import android.os.Bundle
+ import androidx.activity.ComponentActivity
+ import androidx.activity.compose.setContent
+ import androidx.activity.enableEdgeToEdge
++import androidx.annotation.RequiresApi
+ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Surface
+@@ -15,6 +17,7 @@
+  * MainActivity是应用程序的主活动，负责初始化界面
+  */
+ class MainActivity : ComponentActivity() {
++    @RequiresApi(Build.VERSION_CODES.O)
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
+         // 启用边缘到边缘的显示，提供更大的屏幕显示区域

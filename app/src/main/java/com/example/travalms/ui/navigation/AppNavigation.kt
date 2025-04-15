@@ -30,6 +30,8 @@ import com.example.travalms.ui.screens.ChatRoomScreen
 import com.example.travalms.ui.screens.MessageListScreen
 import com.example.travalms.ui.screens.MyFavoritesScreen
 import com.example.travalms.ui.screens.TailListScreen
+import com.example.travalms.ui.screens.ProfileScreen
+import com.example.travalms.ui.publish.PublishNodeSelectorScreen
 
 // 定义应用中的路由路径
 object AppRoutes {
@@ -53,6 +55,7 @@ object AppRoutes {
     const val MESSAGE_LIST = "message_list"
     const val MY_FAVORITES = "my_favorites"
     const val TAIL_LIST = "tail_list"
+    const val PUBLISH_NODE_SELECTOR = "publish_node_selector"
 }
 
 /**
@@ -141,11 +144,15 @@ fun AppNavigation(
                 onProfileClick = { navController.navigate(AppRoutes.PROFILE) },
                 onTailListClick = navigateToTailList,
                 onItemClick = { post -> 
-                    navController.navigate(AppRoutes.POST_EDIT.replace("{postId}", post.id.toString()))
+                    navController.navigate(AppRoutes.POST_DETAIL.replace("{postId}", post.id.toString()))
                 },
                 // 只有点击"发布新信息"按钮才导航到发布页面
                 onPublishNewClick = { 
                     navController.navigate(AppRoutes.PUBLISH)
+                },
+                // 重新发布 - 导航到编辑界面
+                onEditPost = { post ->
+                    navController.navigate(AppRoutes.POST_EDIT.replace("{postId}", post.id.toString()))
                 }
             )
         }
@@ -165,9 +172,18 @@ fun AppNavigation(
             )
         }
         
+        // 发布节点选择页面
+        composable(AppRoutes.PUBLISH_NODE_SELECTOR) {
+            PublishNodeSelectorScreen(
+                navController = navController,
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+        
         // 消息页面
         composable(AppRoutes.MESSAGE) {
             MessageScreen(
+                navController = navController,
                 onHomeClick = { navController.navigate(AppRoutes.HOME) },
                 onPublishClick = navigateToMyPosts,
                 onTailListClick = navigateToTailList,

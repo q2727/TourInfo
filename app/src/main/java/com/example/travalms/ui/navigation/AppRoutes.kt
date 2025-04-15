@@ -4,6 +4,7 @@ object AppRoutes {
     const val HOME = "home"
     const val MY_POSTS = "my_posts"
     const val PUBLISH = "publish"
+    const val PUBLISH_NODE_SELECTOR = "publish_node_selector"
     const val MESSAGE = "message"
     const val CHAT_ROOM = "chat_room/{sessionId}/{targetName}/{targetType}"
     const val SUBSCRIBE_SETTING = "subscribe_setting"
