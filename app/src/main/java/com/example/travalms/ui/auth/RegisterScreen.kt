@@ -1,4 +1,4 @@
-package com.example.travalms.ui.screens
+package com.example.travalms.ui.auth
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
@@ -12,7 +12,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -23,15 +22,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.CircularProgressIndicator
-import org.jxmpp.jid.parts.Localpart
-import org.jxmpp.jid.impl.JidCreate
-import org.jxmpp.stringprep.XmppStringprepException
-import org.jivesoftware.smack.SmackException
-import org.jivesoftware.smack.XMPPException
-import org.jivesoftware.smack.tcp.XMPPTCPConnection
-import org.jivesoftware.smack.tcp.XMPPTCPConnectionConfiguration
-import org.jivesoftware.smackx.iqregister.AccountManager
-import org.jivesoftware.smack.ConnectionConfiguration
 
 /**
  * 注册屏幕组件

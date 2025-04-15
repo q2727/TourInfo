@@ -10,12 +10,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.travalms.ui.auth.LoginScreen
+import com.example.travalms.ui.publish.PublishScreen
+import com.example.travalms.ui.auth.RegisterScreen
+import com.example.travalms.ui.message.MessageScreen
 import com.example.travalms.ui.screens.HomeScreen
-import com.example.travalms.ui.screens.LoginScreen
 import com.example.travalms.ui.screens.MyPostsScreen
-import com.example.travalms.ui.screens.PublishScreen
-import com.example.travalms.ui.screens.RegisterScreen
-import com.example.travalms.ui.screens.MessageScreen
 import com.example.travalms.ui.screens.SubscribeSettingScreen
 import com.example.travalms.ui.screens.ProfileScreen
 import com.example.travalms.ui.screens.ProfileEditScreen
@@ -167,36 +167,11 @@ fun AppNavigation(
         
         // 消息页面
         composable(AppRoutes.MESSAGE) {
-            MessageListScreen(
-                onSessionClick = { sessionId ->
-                    // 这里简单处理，实际应该根据sessionId查询目标信息
-                    val targetName = when(sessionId) {
-                        "1" -> "上海旅行社"
-                        "2" -> "曾圆圆"
-                        "3" -> "北京导游协会"
-                        else -> "聊天对象"
-                    }
-                    val targetType = when(sessionId) {
-                        "2" -> "person"
-                        else -> "company"
-                    }
-                    
-                    navController.navigate(
-                        AppRoutes.CHAT_ROOM
-                            .replace("{sessionId}", sessionId)
-                            .replace("{targetName}", targetName)
-                            .replace("{targetType}", targetType)
-                    )
-                },
-                onNotificationClick = { postId ->
-                    // 处理推送消息点击，跳转到相应的帖子/景点详情页
-                    navController.navigate("post_detail/$postId")
-                },
+            MessageScreen(
                 onHomeClick = { navController.navigate(AppRoutes.HOME) },
                 onPublishClick = navigateToMyPosts,
-                onProfileClick = { navController.navigate(AppRoutes.PROFILE) },
                 onTailListClick = navigateToTailList,
-                navController = navController
+                onProfileClick = { navController.navigate(AppRoutes.PROFILE) }
             )
         }
         

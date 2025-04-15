@@ -1,6 +1,5 @@
 package com.example.travalms.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -127,7 +126,7 @@ fun CompanyDetailScreen(
                 InfoRow(label = "QQ", value = company.qq)
                 
                 // 微信
-                InfoRow(label = "微信", value = company.wechat) 
+                InfoRow(label = "微信", value = company.wechat)
                 
                 // 业务
                 InfoRow(label = "业务", value = company.businessType)

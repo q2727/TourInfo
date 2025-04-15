@@ -1,17 +1,11 @@
-package com.example.travalms.ui.screens
+package com.example.travalms.ui.publish
 
 import android.os.Build
-import android.os.Bundle
-import android.util.Log
-import androidx.activity.ComponentActivity
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -19,16 +13,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
@@ -36,7 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -46,14 +36,15 @@ import java.time.format.DateTimeFormatter
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerState
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import com.example.travalms.ui.theme.PrimaryColor
 import com.example.travalms.ui.theme.PrimaryLight
 import androidx.navigation.NavHostController
 import com.example.travalms.ui.navigation.AppRoutes
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 
 /**
  * 发布页面
@@ -154,49 +145,82 @@ fun PublishScreen(
             )
         },
         bottomBar = {
-            BottomNavigation(
-                backgroundColor = Color.White,
+            NavigationBar(
+                containerColor = Color.White,
                 modifier = Modifier.height(56.dp)
             ) {
-                BottomNavigationItem(
+                NavigationBarItem(
                     icon = { Icon(Icons.Filled.Home, contentDescription = "产品") },
                     label = { Text("产品", fontSize = 12.sp) },
                     selected = false,
                     onClick = onHomeClick,
-                    selectedContentColor = PrimaryColor,
-                    unselectedContentColor = Color.Gray
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryColor,
+                        selectedTextColor = PrimaryColor,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = Color.Transparent
+                    )
                 )
 
-                BottomNavigationItem(
+                NavigationBarItem(
                     icon = { Icon(Icons.Filled.Add, contentDescription = "发布") },
                     label = { Text("发布", fontSize = 12.sp) },
                     selected = true,
                     onClick = {
-                        // 如果在发布表单页，点击应导航到我的发布页面
                         navController.navigate(AppRoutes.MY_POSTS) {
                             popUpTo(AppRoutes.PUBLISH) { inclusive = true }
                         }
                     },
-                    selectedContentColor = PrimaryColor,
-                    unselectedContentColor = Color.Gray
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryColor,
+                        selectedTextColor = PrimaryColor,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = Color.Transparent
+                    )
                 )
 
-                BottomNavigationItem(
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.Favorite, contentDescription = "尾单") },
+                    label = { Text("尾单", fontSize = 12.sp) },
+                    selected = false,
+                    onClick = { /* TODO: Navigate to Tail List */ },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryColor,
+                        selectedTextColor = PrimaryColor,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = Color.Transparent
+                    )
+                )
+
+                NavigationBarItem(
                     icon = { Icon(Icons.Filled.Email, contentDescription = "消息") },
                     label = { Text("消息", fontSize = 12.sp) },
                     selected = false,
                     onClick = onMessageClick,
-                    selectedContentColor = PrimaryColor,
-                    unselectedContentColor = Color.Gray
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryColor,
+                        selectedTextColor = PrimaryColor,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = Color.Transparent
+                    )
                 )
 
-                BottomNavigationItem(
+                NavigationBarItem(
                     icon = { Icon(Icons.Filled.Person, contentDescription = "我的") },
                     label = { Text("我的", fontSize = 12.sp) },
                     selected = false,
                     onClick = onProfileClick,
-                    selectedContentColor = PrimaryColor,
-                    unselectedContentColor = Color.Gray
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryColor,
+                        selectedTextColor = PrimaryColor,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = Color.Transparent
+                    )
                 )
             }
         }

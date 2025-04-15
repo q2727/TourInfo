@@ -1,8 +1,8 @@
-package com.example.travalms.ui.screens
+package com.example.travalms.ui.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.travalms.xmpp.XMPPManager
+import com.example.travalms.data.remote.XMPPManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

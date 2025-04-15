@@ -1,7 +1,6 @@
-package com.example.travalms.ui.screens
+package com.example.travalms.ui.message
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,13 +17,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.travalms.ui.theme.PrimaryColor
-import com.example.travalms.ui.theme.TextOnPrimary
-import java.time.format.DateTimeFormatter
+import com.example.travalms.data.model.ContactItem
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 
 /**
  * 消息界面 - 按照图片样式重新实现
@@ -48,31 +53,27 @@ fun MessageScreen(
     val alphabet = ('A'..'Z').map { it.toString() }
     var selectedLetter by remember { mutableStateOf<String?>(null) }
     
-    // 模拟好友数据
+    // 模拟好友数据 - 注意：avatarResId已改为avatarUrl
     val friends = listOf(
         ContactItem(
             id = 1,
             name = "哈铁国旅",
-            status = "目前哈尔滨冰雪大世界7日还有2人空缺",
-            avatarResId = 0
+            status = "目前哈尔滨冰雪大世界7日还有2人空缺"
         ),
         ContactItem(
             id = 2,
             name = "新疆导游",
-            status = "目前哈尔滨冰雪大世界7日还有2人空缺",
-            avatarResId = 0
+            status = "目前哈尔滨冰雪大世界7日还有2人空缺"
         ),
         ContactItem(
             id = 3,
             name = "内蒙古旅行推荐官",
-            status = "目前哈尔滨冰雪大世界7日还有2人空缺",
-            avatarResId = 0
+            status = "目前哈尔滨冰雪大世界7日还有2人空缺"
         ),
         ContactItem(
             id = 4,
             name = "北京向导",
-            status = "目前哈尔滨冰雪大世界7日还有2人空缺",
-            avatarResId = 0
+            status = "目前哈尔滨冰雪大世界7日还有2人空缺"
         )
     )
     
@@ -87,53 +88,78 @@ fun MessageScreen(
             )
         },
         bottomBar = {
-            BottomNavigation(
-                backgroundColor = Color.White,
+            NavigationBar(
+                containerColor = Color.White,
                 modifier = Modifier.height(56.dp)
             ) {
-                BottomNavigationItem(
+                NavigationBarItem(
                     icon = { Icon(Icons.Filled.Home, contentDescription = "产品") },
                     label = { Text("产品", fontSize = 12.sp) },
                     selected = false,
                     onClick = onHomeClick,
-                    selectedContentColor = PrimaryColor,
-                    unselectedContentColor = Color.Gray
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryColor,
+                        selectedTextColor = PrimaryColor,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = Color.Transparent
+                    )
                 )
                 
-                BottomNavigationItem(
+                NavigationBarItem(
                     icon = { Icon(Icons.Filled.Add, contentDescription = "发布") },
                     label = { Text("发布", fontSize = 12.sp) },
                     selected = false,
                     onClick = onPublishClick,
-                    selectedContentColor = PrimaryColor,
-                    unselectedContentColor = Color.Gray
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryColor,
+                        selectedTextColor = PrimaryColor,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = Color.Transparent
+                    )
                 )
                 
-                BottomNavigationItem(
+                NavigationBarItem(
                     icon = { Icon(Icons.Filled.Favorite, contentDescription = "尾单") },
                     label = { Text("尾单", fontSize = 12.sp) },
                     selected = false,
                     onClick = onTailListClick,
-                    selectedContentColor = PrimaryColor,
-                    unselectedContentColor = Color.Gray
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryColor,
+                        selectedTextColor = PrimaryColor,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = Color.Transparent
+                    )
                 )
                 
-                BottomNavigationItem(
+                NavigationBarItem(
                     icon = { Icon(Icons.Filled.Email, contentDescription = "消息") },
                     label = { Text("消息", fontSize = 12.sp) },
                     selected = true,
                     onClick = { /* 已在消息页面 */ },
-                    selectedContentColor = PrimaryColor,
-                    unselectedContentColor = Color.Gray
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryColor,
+                        selectedTextColor = PrimaryColor,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = Color.Transparent
+                    )
                 )
                 
-                BottomNavigationItem(
+                NavigationBarItem(
                     icon = { Icon(Icons.Filled.Person, contentDescription = "我的") },
                     label = { Text("我的", fontSize = 12.sp) },
                     selected = false,
                     onClick = onProfileClick,
-                    selectedContentColor = PrimaryColor,
-                    unselectedContentColor = Color.Gray
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = PrimaryColor,
+                        selectedTextColor = PrimaryColor,
+                        unselectedIconColor = Color.Gray,
+                        unselectedTextColor = Color.Gray,
+                        indicatorColor = Color.Transparent
+                    )
                 )
             }
         }
@@ -368,37 +394,3 @@ fun ContactListItem(
         }
     }
 }
-
-/**
- * 联系人数据模型
- */
-data class ContactItem(
-    val id: Int,
-    val name: String,
-    val status: String,
-    val avatarResId: Int
-)
-
-/**
- * 消息数据模型（保留原有的）
- */
-data class Message(
-    val id: Int,
-    val title: String,
-    val content: String,
-    val time: String,
-    val isRead: Boolean,
-    val relatedPostId: Int
-)
-
-/**
- * MessageItem数据类（保留原有的）
- */
-data class MessageItem(
-    val id: Int,
-    val title: String,
-    val content: String,
-    val timestamp: String,
-    val isRead: Boolean = false,
-    val isHighlighted: Boolean = false
-)

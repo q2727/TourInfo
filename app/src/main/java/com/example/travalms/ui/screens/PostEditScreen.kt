@@ -11,7 +11,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
@@ -25,14 +24,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import com.example.travalms.ui.screens.PostItem
 import com.example.travalms.ui.theme.PrimaryColor
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 
 // 导入已存在的日期选择器
 // 1. 确保从PublishScreen导入DatePickerDialog
-import com.example.travalms.ui.screens.DatePickerDialog as ExistingDatePickerDialog
+// import com.example.travalms.ui.screens.DatePickerDialog as ExistingDatePickerDialog
 
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -534,24 +532,28 @@ fun PostEditScreen(
 
     // 显示开始日期选择器
     if (showStartDatePicker) {
-        ExistingDatePickerDialog(
-            onDismiss = { showStartDatePicker = false },
-            onDateSelected = { selectedDate ->
-                startDate = selectedDate.format(dateFormatter)
-                showStartDatePicker = false
+        // Comment out DatePickerDialog usage temporarily
+        /*
+        DatePickerDialog(
+            onDismissRequest = { showStartDatePicker = false },
+            confirmButton = { 
+                TextButton(onClick = { /* handle date confirm */ }) { Text("确定") }
             },
-            initialDate = try {
-                LocalDate.parse(startDate, dateFormatter)
-            } catch (e: Exception) {
-                LocalDate.now()
+            dismissButton = { 
+                TextButton(onClick = { showStartDatePicker = false }) { Text("取消") }
             }
-        )
+        ) {
+            // DatePicker content goes here
+        }
+        */
     }
 
     // 显示结束日期选择器
     if (showEndDatePicker) {
+        // Comment out ExistingDatePickerDialog usage temporarily
+        /*
         ExistingDatePickerDialog(
-            onDismiss = { showEndDatePicker = false },
+            onDismissRequest = { showEndDatePicker = false },
             onDateSelected = { selectedDate ->
                 endDate = selectedDate.format(dateFormatter)
                 showEndDatePicker = false
@@ -562,17 +564,21 @@ fun PostEditScreen(
                 LocalDate.now().plusDays(10)
             }
         )
+        */
     }
 
     // 节点选择对话框
     if (showNodeSelector) {
+        // Comment out PublishNodeSelector usage temporarily
+        /*
         PublishNodeSelector(
-            onDismiss = { showNodeSelector = false },
+            onDismissRequest = { showNodeSelector = false },
             onNodeSelected = {
                 publishNode = it
                 showNodeSelector = false
             }
         )
+        */
     }
 }
 

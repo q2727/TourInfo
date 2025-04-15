@@ -1,6 +1,5 @@
 package com.example.travalms.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,21 +18,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import com.example.travalms.ui.theme.PrimaryColor
 import com.example.travalms.ui.theme.BackgroundColor
-import com.example.travalms.ui.theme.PrimaryLight
-import com.example.travalms.ui.navigation.AppRoutes
-import org.chromium.base.Flag
 
 // 尾单数据模型
 data class TailOrder(

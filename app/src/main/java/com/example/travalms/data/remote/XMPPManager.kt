@@ -1,4 +1,4 @@
-package com.example.travalms.xmpp
+package com.example.travalms.data.remote
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
@@ -8,9 +8,6 @@ import org.jivesoftware.smack.tcp.XMPPTCPConnection
 import org.jivesoftware.smack.tcp.XMPPTCPConnectionConfiguration
 import org.jivesoftware.smackx.iqregister.AccountManager
 import org.jxmpp.jid.parts.Localpart
-import javax.net.ssl.SSLContext
-import javax.net.ssl.X509TrustManager
-import java.security.SecureRandom
 import org.jivesoftware.smack.SmackConfiguration
 
 /**
