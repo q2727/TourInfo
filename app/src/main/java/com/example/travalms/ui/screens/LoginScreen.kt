@@ -22,12 +22,14 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,7 +48,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.travalms.ui.theme.PrimaryColor
 import com.example.travalms.ui.theme.PrimaryLight
-import kotlinx.coroutines.launch
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.collectAsState
 
 /**
  * 登录界面组件
@@ -56,11 +59,37 @@ import kotlinx.coroutines.launch
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onRegisterClick: () -> Unit,
-    onForgotPasswordClick: () -> Unit = {}
+    onForgotPasswordClick: () -> Unit = {},
+    // 注入ViewModel
+    loginViewModel: LoginViewModel = viewModel() 
 ) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    
+    // val scope = rememberCoroutineScope() // No longer needed here
+    val context = LocalContext.current
+    // val xmppManager = remember { XMPPManager() } // No longer needed here
+
+    // 从ViewModel收集UI状态
+    val uiState by loginViewModel.uiState.collectAsState()
+
+    // 使用LaunchedEffect处理一次性事件（如Toast显示和导航）
+    LaunchedEffect(key1 = uiState) {
+        when (val state = uiState) {
+            is LoginUiState.Success -> {
+                Toast.makeText(context, "登录成功!", Toast.LENGTH_SHORT).show()
+                onLoginSuccess() // 导航
+                // loginViewModel.resetState() // Optional: Reset state after navigation
+            }
+            is LoginUiState.Error -> {
+                Toast.makeText(context, "登录失败: ${state.message}", Toast.LENGTH_LONG).show()
+                loginViewModel.resetState() // Reset state after showing error
+            }
+            else -> {
+                // Idle or Loading state, no immediate action needed here
+            }
+        }
+    }
+
     // 简化的渐变背景
     Box(
         modifier = Modifier
@@ -174,7 +203,12 @@ fun LoginScreen(
             
             // 登录按钮
             Button(
-                onClick = onLoginSuccess,
+                onClick = {
+                    // 调用ViewModel中的登录方法
+                    loginViewModel.performLogin(username, password)
+                },
+                // 根据加载状态禁用按钮
+                enabled = uiState != LoginUiState.Loading, 
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
@@ -183,11 +217,20 @@ fun LoginScreen(
                 ),
                 shape = RoundedCornerShape(28.dp)
             ) {
-                Text(
-                    text = "登录",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                // 根据加载状态显示文本或加载指示器
+                if (uiState == LoginUiState.Loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        text = "登录",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
             
             Spacer(modifier = Modifier.height(16.dp))

@@ -19,10 +19,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.travalms.xmpp.XMPPManager
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Dispatchers
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.CircularProgressIndicator
 import org.jxmpp.jid.parts.Localpart
 import org.jxmpp.jid.impl.JidCreate
 import org.jxmpp.stringprep.XmppStringprepException
@@ -40,25 +40,35 @@ import org.jivesoftware.smack.ConnectionConfiguration
 @Composable
 fun RegisterScreen(
     onBackClick: () -> Unit,
-    onLoginClick: () -> Unit
+    onLoginClick: () -> Unit,
+    registerViewModel: RegisterViewModel = viewModel()
 ) {
-    // 获取当前上下文，用于显示Toast
     val context = LocalContext.current
     
-    // 创建协程作用域，用于执行异步操作
-    val scope = rememberCoroutineScope()
-    
-    // 创建XMPP管理器实例
-    val xmppManager = remember { XMPPManager() }
-    
-    // 用户输入状态
     var username by remember { mutableStateOf("") }
     var nickname by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     
-    // 顶层布局，提供背景色和填充
+    val uiState by registerViewModel.uiState.collectAsState()
+
+    LaunchedEffect(key1 = uiState) {
+        when (val state = uiState) {
+            is RegisterUiState.Success -> {
+                Toast.makeText(context, "注册成功", Toast.LENGTH_SHORT).show()
+                onLoginClick()
+            }
+            is RegisterUiState.Error -> {
+                Toast.makeText(context, "注册失败: ${state.message}", Toast.LENGTH_LONG).show()
+                registerViewModel.resetState()
+            }
+            else -> {
+                // Idle or Loading
+            }
+        }
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -189,42 +199,18 @@ fun RegisterScreen(
             // 注册按钮
             Button(
                 onClick = {
-                    // 检查密码是否匹配
                     if (password != confirmPassword) {
                         Toast.makeText(context, "两次输入的密码不一致", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    
-                    // 检查密码长度
-                    if (password.length < 8 || password.length > 20) {
-                        Toast.makeText(context, "密码长度应为8-20位", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    
-                    // 检查其他字段是否填写
-                    if (username.isBlank() || nickname.isBlank()) {
-                        Toast.makeText(context, "用户名和昵称为必填项", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    
-                    // 执行注册操作
-                    scope.launch {
-                        // 显示加载中提示
-                        Toast.makeText(context, "正在注册，请稍候...", Toast.LENGTH_SHORT).show()
-                        
-                        // 调用修复后的注册方法
-                        val result = xmppManager.register(username, password, nickname, email.takeIf { it.isNotBlank() })
-                        result.fold(
-                            onSuccess = {
-                                Toast.makeText(context, "注册成功", Toast.LENGTH_SHORT).show()
-                                onLoginClick() // 注册成功后返回登录页面
-                            },
-                            onFailure = { e ->
-                                Toast.makeText(context, "注册失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
+                    } else {
+                        registerViewModel.performRegister(
+                            username = username,
+                            password = password,
+                            nickname = nickname.takeIf { it.isNotBlank() },
+                            email = email.takeIf { it.isNotBlank() }
                         )
                     }
                 },
+                enabled = uiState != RegisterUiState.Loading,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
@@ -233,10 +219,18 @@ fun RegisterScreen(
                     containerColor = MaterialTheme.colorScheme.primary
                 )
             ) {
-                Text(
-                    text = "立即注册",
-                    fontSize = 16.sp
-                )
+                if (uiState == RegisterUiState.Loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        text = "立即注册",
+                        fontSize = 16.sp
+                    )
+                }
             }
             
             Spacer(modifier = Modifier.height(16.dp))

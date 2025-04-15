@@ -165,7 +165,7 @@ fun MessageScreen(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
-                    ) {
+            ) {
                         Icon(
                             imageVector = Icons.Default.Search,
                             contentDescription = "搜索",
@@ -336,8 +336,8 @@ fun ContactListItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 头像
-        Box(
-            modifier = Modifier
+            Box(
+                modifier = Modifier
                 .size(50.dp)
                 .clip(CircleShape)
                 .background(Color.LightGray)
