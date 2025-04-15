@@ -18,4 +18,5 @@ object AppRoutes {
     const val PERSON_DETAIL = "person_detail/{personId}"
     const val MESSAGE_LIST = "message_list"
     const val MY_FAVORITES = "my_favorites"
+    const val TAIL_LIST = "tail_list"
 } 

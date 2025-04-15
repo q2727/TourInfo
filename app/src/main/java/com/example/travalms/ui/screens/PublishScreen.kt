@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -21,6 +22,8 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Person
@@ -46,6 +49,7 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerState
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Dp
 import com.example.travalms.ui.theme.PrimaryColor
 import com.example.travalms.ui.theme.PrimaryLight
 import androidx.navigation.NavHostController
@@ -77,9 +81,9 @@ fun PublishScreen(
     var detailLink by remember { mutableStateOf("选填") }
     var publishNode by remember { mutableStateOf("点击选择") }
     var validDays by remember { mutableStateOf("15") }
-
-    // 节点选择对话框控制
-    var showNodeSelector by remember { mutableStateOf(false) }
+    
+    // 添加搜索状态 (简单添加变量，但不修改UI)
+    var searchText by remember { mutableStateOf("") }
 
     // 添加地点选择对话框控制
     var showLocationSelector by remember { mutableStateOf(false) }
@@ -91,9 +95,12 @@ fun PublishScreen(
     // 添加团型下拉菜单控制
     var showGroupTypeDropdown by remember { mutableStateOf(false) }
 
+    // 节点选择对话框控制
+    var showNodeSelector by remember { mutableStateOf(false) }
+
     // 发布类别选项
     val categories = listOf("同业社", "地接社", "组团社", "景区", "宾馆", "车队", "招聘", "签证", "票务", "其他")
-
+    
     // 类别颜色映射
     val categoryColors = mapOf(
         "同业社" to PrimaryLight,
@@ -133,7 +140,7 @@ fun PublishScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("发布", fontWeight = FontWeight.Bold) },
+                title = { Text("创建发布", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
@@ -152,8 +159,8 @@ fun PublishScreen(
                 modifier = Modifier.height(56.dp)
             ) {
                 BottomNavigationItem(
-                    icon = { Icon(Icons.Filled.Home, contentDescription = "首页") },
-                    label = { Text("首页", fontSize = 12.sp) },
+                    icon = { Icon(Icons.Filled.Home, contentDescription = "产品") },
+                    label = { Text("产品", fontSize = 12.sp) },
                     selected = false,
                     onClick = onHomeClick,
                     selectedContentColor = PrimaryColor,
@@ -165,7 +172,7 @@ fun PublishScreen(
                     label = { Text("发布", fontSize = 12.sp) },
                     selected = true,
                     onClick = {
-                        // 如果已在发布页面，点击应导航到我的发布页面
+                        // 如果在发布表单页，点击应导航到我的发布页面
                         navController.navigate(AppRoutes.MY_POSTS) {
                             popUpTo(AppRoutes.PUBLISH) { inclusive = true }
                         }
@@ -201,6 +208,7 @@ fun PublishScreen(
                 .verticalScroll(scrollState)
                 .padding(16.dp)
         ) {
+            // 发布表单界面
             // 发布类别
             Text(
                 text = "发布类别:",
@@ -553,36 +561,24 @@ fun PublishScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 行程描述
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
-            ) {
-                Text(
-                    text = "行程描述",
-                    modifier = Modifier.width(80.dp),
-                    color = Color.Gray,
-                    fontSize = 14.sp
-                )
+            // 添加描述
+            FormTextField(
+                value = description,
+                onValueChange = { description = it },
+                placeholder = "输入行程描述（每条特色用换行分隔）",
+                label = "行程描述",
+                backgroundColor = Color(0xFFF5F5F5),
+                singleLine = false,
+                maxLines = 5,
+                height = 120.dp
+            )
 
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(120.dp),
-                    placeholder = { Text("请输入行程描述") },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedContainerColor = Color(0xFFF5F5F5),
-                        focusedContainerColor = Color(0xFFF5F5F5),
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedBorderColor = Color(0xFF3F51B5)
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // 消息预览部分
+            MessagePreviewSection(routeName, description)
+            
+            Spacer(modifier = Modifier.height(24.dp))
 
             // 详情链接
             Row(
@@ -732,51 +728,27 @@ fun PublishScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // 底部按钮
-            Row(
+            // 提交按钮
+            Button(
+                onClick = {
+                    // 处理提交逻辑
+                    navController.navigate(AppRoutes.MY_POSTS)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)  // 添加间距
+                    .height(48.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = PrimaryColor
+                ),
+                shape = RoundedCornerShape(8.dp)
             ) {
-                // 取消按钮
-                Button(
-                    onClick = { showNodeSelector = false },
-                    modifier = Modifier
-                        .weight(1f)  // 占一半宽度
-                        .height(48.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFE0F2F1)
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        text = "取消",
-                        fontSize = 16.sp,
-                        color = PrimaryColor
-                    )
-                }
-                
-                // 确认按钮
-                Button(
-                    onClick = { showNodeSelector = false },
-                    modifier = Modifier
-                        .weight(1f)  // 占一半宽度
-                        .height(48.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = PrimaryColor
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        text = "确认",
-                        fontSize = 16.sp,
-                        color = Color.White
-                    )
-                }
+                Text(
+                    text = "发布信息",
+                    fontSize = 16.sp,
+                    color = Color.White
+                )
             }
-
-            // 添加底部空间
+            
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
@@ -866,11 +838,14 @@ fun FormTextField(
     onValueChange: (String) -> Unit,
     placeholder: String,
     label: String,
-    backgroundColor: Color = Color.White
+    backgroundColor: Color = Color.White,
+    singleLine: Boolean = true,
+    maxLines: Int = 1,
+    height: Dp = 48.dp
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
     ) {
         Text(
             text = label,
@@ -878,21 +853,42 @@ fun FormTextField(
             color = Color.Gray,
             fontSize = 14.sp
         )
-
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.weight(1f),
-            placeholder = { Text(placeholder) },
-            singleLine = true,
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedContainerColor = backgroundColor,
-                focusedContainerColor = backgroundColor,
-                unfocusedBorderColor = Color.Transparent,
-                focusedBorderColor = Color(0xFF3F51B5)
-            ),
-            shape = RoundedCornerShape(8.dp)
-        )
+        
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(height)
+                .background(
+                    color = backgroundColor,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color.Transparent,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = singleLine,
+                maxLines = maxLines,
+                decorationBox = { innerTextField ->
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        if (value.isEmpty()) {
+                            Text(
+                                text = placeholder,
+                                color = Color.Gray,
+                                fontSize = 14.sp
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -958,23 +954,38 @@ fun PublishNodeSelector(
                 }
 
                 // 搜索框
-                TextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                    placeholder = { Text("输入省份/城市/景点/企业名称") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "搜索") },
-                    singleLine = true,
-                    colors = TextFieldDefaults.colors(
-                        unfocusedContainerColor = Color(0xFFF5F5F5),
-                        focusedContainerColor = Color(0xFFF5F5F5),
-                        unfocusedIndicatorColor = Color.Transparent,
-                        focusedIndicatorColor = Color(0xFF00B894)
-                    ),
-                    shape = RoundedCornerShape(24.dp)
-                )
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { newValue -> searchQuery = newValue },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        placeholder = { 
+                            Text("搜索", color = Color.Gray) 
+                        },
+                        leadingIcon = { 
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "搜索",
+                                tint = Color(0xFF2196F3)
+                            )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(24.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = Color(0xFFF5F5F5),
+                            focusedContainerColor = Color(0xFFF5F5F5),
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedBorderColor = Color.Transparent
+                        )
+                    )
+                }
 
                 // 选项卡
                 TabRow(
@@ -1185,6 +1196,7 @@ fun LocationSelector(
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedLocation by remember { mutableStateOf<LocationItem?>(null) }
+    var selectedTabIndex by remember { mutableStateOf(0) }
 
     // 字母导航列表
     val alphabet = ('A'..'Z').filter {
@@ -1244,28 +1256,78 @@ fun LocationSelector(
                 }
 
                 // 搜索框
-                TextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                    placeholder = { Text("输入起止地点名称") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "搜索") },
-                    singleLine = true,
-                    colors = TextFieldDefaults.colors(
-                        unfocusedContainerColor = Color(0xFFF5F5F5),
-                        focusedContainerColor = Color(0xFFF5F5F5),
-                        unfocusedIndicatorColor = Color.Transparent,
-                        focusedIndicatorColor = Color(0xFF00B894)
-                    ),
-                    shape = RoundedCornerShape(24.dp)
-                )
-
-                // 地点列表
-                Box(
-                    modifier = Modifier.weight(1f)
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { newValue -> searchQuery = newValue },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        placeholder = { 
+                            Text("搜索", color = Color.Gray) 
+                        },
+                        leadingIcon = { 
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "搜索",
+                                tint = Color(0xFF2196F3)
+                            )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(24.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = Color(0xFFF5F5F5),
+                            focusedContainerColor = Color(0xFFF5F5F5),
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedBorderColor = Color.Transparent
+                        )
+                    )
+                }
+
+                // 选项卡
+                TabRow(
+                    selectedTabIndex = selectedTabIndex,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentColor = PrimaryColor,
+                    indicator = { tabPositions ->
+                        Box(
+                            modifier = Modifier
+                                .tabIndicatorOffset(tabPositions[selectedTabIndex])
+                                .height(3.dp)
+                                .background(
+                                    color = PrimaryColor,
+                                    shape = RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)
+                                )
+                        )
+                    },
+                    divider = {}
+                ) {
+                    Tab(
+                        selected = selectedTabIndex == 0,
+                        onClick = { selectedTabIndex = 0 },
+                        text = { Text("省市") }
+                    )
+
+                    Tab(
+                        selected = selectedTabIndex == 1,
+                        onClick = { selectedTabIndex = 1 },
+                        text = { Text("景区") }
+                    )
+
+                    Tab(
+                        selected = selectedTabIndex == 2,
+                        onClick = { selectedTabIndex = 2 },
+                        text = { Text("公司") }
+                    )
+                }
+
+                // 内容区域
+                Box(modifier = Modifier.weight(1f)) {
                     // 主内容列表
                     val scrollState = rememberScrollState()
                     Column(
@@ -1505,12 +1567,147 @@ fun DatePickerDialog(
     }
 }
 
-// 添加到AppNavigation.kt
-// 在AppRoutes对象中添加: const val PUBLISH = "publish"
-// 添加导航:
-// composable(AppRoutes.PUBLISH) {
-//     PublishScreen(
-//         onBackClick = { navController.popBackStack() },
-//         onPublishSuccess = { navController.navigate(AppRoutes.HOME) }
-//     )
-// }
+/**
+ * 消息预览卡片，用于显示发布后的消息预览
+ */
+@Composable
+fun MessagePreviewCard(
+    title: String,
+    features: List<String>,
+    validPeriod: String = "3天6:30",
+    publishLocations: List<String> = listOf("北京", "上海", "海淀")
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            // 标题
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.fillMaxWidth()
+            )
+            
+            // 行程特色内容
+            features.forEach { feature ->
+                Text(
+                    text = feature,
+                    fontSize = 14.sp,
+                    color = Color.DarkGray,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.padding(vertical = 2.dp)
+                )
+            }
+            
+            // 有效期
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Spacer(modifier = Modifier.weight(1f))
+                
+                Text(
+                    text = "有效期：",
+                    fontSize = 14.sp,
+                    color = Color.DarkGray
+                )
+                
+                Text(
+                    text = validPeriod,
+                    fontSize = 14.sp,
+                    color = Color(0xFFFF6E40),
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            
+            // 底部分隔线
+            Divider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = Color.LightGray
+            )
+            
+            // 发布节点
+            Text(
+                text = "发布节点：",
+                fontSize = 14.sp,
+                color = Color.Gray,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            
+            // 发布地点标签
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Start
+            ) {
+                publishLocations.forEach { location ->
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .background(
+                                color = PrimaryColor.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = location,
+                            fontSize = 12.sp,
+                            color = PrimaryColor
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// 在PublishScreen中添加预览部分，在提交前预览
+// 你可以在表单完成后添加以下代码来展示预览
+@Composable
+fun MessagePreviewSection(
+    routeName: String,
+    description: String
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 16.dp)
+    ) {
+        Text(
+            text = "发布预览",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        
+        // 将描述转换为行程特色列表
+        val features = if (description.isNotEmpty()) {
+            description.split("\n").filter { it.isNotBlank() }
+        } else {
+            listOf(
+                "1.在上海外国语大学浸入式英语环境中学习英语，培养孩子良好的英语语感及口语运用能力。",
+                "2.上海淮景点畅游、博物馆、知名大学参访，展开真正的上海文化寻根游学之旅。",
+                "3.上海迪斯尼乐园畅游，学习游乐两不误。"
+            )
+        }
+        
+        MessagePreviewCard(
+            title = routeName.ifEmpty { "上海外国语大学体验+迪士尼6日夏令营 ❤" },
+            features = features
+        )
+    }
+}

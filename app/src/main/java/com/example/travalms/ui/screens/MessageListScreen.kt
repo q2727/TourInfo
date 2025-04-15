@@ -36,8 +36,9 @@ fun MessageListScreen(
     onSessionClick: (String) -> Unit,
     onNotificationClick: (String) -> Unit,
     onHomeClick: () -> Unit,
-    onPublishClick: () -> Unit = {},
+    onPublishClick: () -> Unit,
     onProfileClick: () -> Unit,
+    onTailListClick: () -> Unit,
     navController: NavController
 ) {
     // 在实际应用中，应该从数据源获取会话列表
@@ -146,8 +147,8 @@ fun MessageListScreen(
                 modifier = Modifier.height(56.dp)
             ) {
                 BottomNavigationItem(
-                    icon = { Icon(Icons.Filled.Home, contentDescription = "首页") },
-                    label = { Text("首页", fontSize = 12.sp) },
+                    icon = { Icon(Icons.Filled.Home, contentDescription = "产品") },
+                    label = { Text("产品", fontSize = 12.sp) },
                     selected = false,
                     onClick = onHomeClick,
                     selectedContentColor = PrimaryColor,
@@ -159,6 +160,15 @@ fun MessageListScreen(
                     label = { Text("发布", fontSize = 12.sp) },
                     selected = false,
                     onClick = onPublishClick,
+                    selectedContentColor = PrimaryColor,
+                    unselectedContentColor = Color.Gray
+                )
+                
+                BottomNavigationItem(
+                    icon = { Icon(Icons.Filled.Favorite, contentDescription = "尾单") },
+                    label = { Text("尾单", fontSize = 12.sp) },
+                    selected = false,
+                    onClick = onTailListClick,
                     selectedContentColor = PrimaryColor,
                     unselectedContentColor = Color.Gray
                 )

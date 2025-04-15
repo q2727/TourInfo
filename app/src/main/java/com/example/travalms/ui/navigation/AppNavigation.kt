@@ -29,6 +29,7 @@ import com.example.travalms.ui.screens.PersonDetailScreen
 import com.example.travalms.ui.screens.ChatRoomScreen
 import com.example.travalms.ui.screens.MessageListScreen
 import com.example.travalms.ui.screens.MyFavoritesScreen
+import com.example.travalms.ui.screens.TailListScreen
 
 // 定义应用中的路由路径
 object AppRoutes {
@@ -51,6 +52,7 @@ object AppRoutes {
     const val CHAT_ROOM = "chat_room/{sessionId}/{targetName}/{targetType}"
     const val MESSAGE_LIST = "message_list"
     const val MY_FAVORITES = "my_favorites"
+    const val TAIL_LIST = "tail_list"
 }
 
 /**
@@ -71,6 +73,14 @@ fun AppNavigation(
         if ((currentRoute ?: "") != AppRoutes.MY_POSTS) {
             navController.navigate(AppRoutes.MY_POSTS) {
                 // 避免重复创建页面
+                launchSingleTop = true
+            }
+        }
+    }
+
+    val navigateToTailList = {
+        if ((currentRoute ?: "") != AppRoutes.TAIL_LIST) {
+            navController.navigate(AppRoutes.TAIL_LIST) {
                 launchSingleTop = true
             }
         }
@@ -108,6 +118,10 @@ fun AppNavigation(
                 onPublishClick = navigateToMyPosts,
                 onMessageClick = { navController.navigate(AppRoutes.MESSAGE) },
                 onProfileClick = { navController.navigate(AppRoutes.PROFILE) },
+                onTailListClick = navigateToTailList,
+                onCompanyClick = { companyId ->
+                    navController.navigate(AppRoutes.COMPANY_DETAIL.replace("{companyId}", companyId))
+                },
                 navController = navController
             )
         }
@@ -125,6 +139,7 @@ fun AppNavigation(
                 onPublishClick = { /* 已在我的发布页面，不执行导航 */ },
                 onMessageClick = { navController.navigate(AppRoutes.MESSAGE) },
                 onProfileClick = { navController.navigate(AppRoutes.PROFILE) },
+                onTailListClick = navigateToTailList,
                 onItemClick = { post -> 
                     navController.navigate(AppRoutes.POST_EDIT.replace("{postId}", post.id.toString()))
                 },
@@ -180,6 +195,7 @@ fun AppNavigation(
                 onHomeClick = { navController.navigate(AppRoutes.HOME) },
                 onPublishClick = navigateToMyPosts,
                 onProfileClick = { navController.navigate(AppRoutes.PROFILE) },
+                onTailListClick = navigateToTailList,
                 navController = navController
             )
         }
@@ -210,6 +226,7 @@ fun AppNavigation(
                 },
                 onPublishClick = navigateToMyPosts,
                 onMessageClick = { navController.navigate(AppRoutes.MESSAGE) },
+                onTailListClick = navigateToTailList,
                 navController = navController
             )
         }
@@ -396,6 +413,39 @@ fun AppNavigation(
                 onItemClick = { postId -> 
                     navController.navigate(AppRoutes.POST_DETAIL.replace("{postId}", postId))
                 }
+            )
+        }
+
+        // 尾单页面
+        composable(AppRoutes.TAIL_LIST) {
+            TailListScreen(
+                onItemClick = { postId -> 
+                    navController.navigate(AppRoutes.POST_DETAIL.replace("{postId}", postId.toString()))
+                },
+                onHomeClick = { 
+                    navController.navigate(AppRoutes.HOME) {
+                        popUpTo(AppRoutes.HOME) { inclusive = true }
+                    }
+                },
+                onPublishClick = navigateToMyPosts,
+                onMessageClick = { navController.navigate(AppRoutes.MESSAGE) },
+                onProfileClick = { navController.navigate(AppRoutes.PROFILE) },
+                onCompanyClick = { companyId ->
+                    navController.navigate(AppRoutes.COMPANY_DETAIL.replace("{companyId}", companyId))
+                },
+                onContactClick = { phoneNumber ->
+                    // 这里可以添加拨打电话的意图
+                },
+                onPersonClick = { personId ->
+                    navController.navigate(AppRoutes.PERSON_DETAIL.replace("{personId}", personId))
+                },
+                onReportItem = { itemId, reason ->
+                    // 处理举报逻辑，包含举报原因
+                },
+                onDeleteItem = { itemId ->
+                    // 处理删除逻辑
+                },
+                navController = navController
             )
         }
     }

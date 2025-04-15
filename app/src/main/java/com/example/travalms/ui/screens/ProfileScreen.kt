@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.List
@@ -47,6 +48,7 @@ fun ProfileScreen(
     onHomeClick: () -> Unit,
     onPublishClick: () -> Unit,
     onMessageClick: () -> Unit,
+    onTailListClick: () -> Unit,
     navController: NavController
 ) {
     Scaffold(
@@ -65,8 +67,8 @@ fun ProfileScreen(
                 modifier = Modifier.height(56.dp)
             ) {
                 BottomNavigationItem(
-                    icon = { Icon(Icons.Filled.Home, contentDescription = "首页") },
-                    label = { Text("首页", fontSize = 12.sp) },
+                    icon = { Icon(Icons.Filled.Home, contentDescription = "产品") },
+                    label = { Text("产品", fontSize = 12.sp) },
                     selected = false,
                     onClick = onHomeClick,
                     selectedContentColor = PrimaryColor,
@@ -78,6 +80,15 @@ fun ProfileScreen(
                     label = { Text("发布", fontSize = 12.sp) },
                     selected = false,
                     onClick = onPublishClick,
+                    selectedContentColor = PrimaryColor,
+                    unselectedContentColor = Color.Gray
+                )
+                
+                BottomNavigationItem(
+                    icon = { Icon(Icons.Filled.Favorite, contentDescription = "尾单") },
+                    label = { Text("尾单", fontSize = 12.sp) },
+                    selected = false,
+                    onClick = onTailListClick,
                     selectedContentColor = PrimaryColor,
                     unselectedContentColor = Color.Gray
                 )
