@@ -79,21 +79,29 @@ dependencies {
     implementation 'androidx.compose.material:material'
     implementation "androidx.navigation:navigation-compose:2.7.5"
     
+    // Added javax.inject dependency
+    implementation 'javax.inject:javax.inject:1'
+    
     // XMPP Smack 依赖 - 统一使用稳定版本 4.4.5
     implementation ('org.igniterealtime.smack:smack-android:4.4.5') {
         exclude group: 'xpp3', module: 'xpp3'
+        exclude group: 'org.igniterealtime.smack', module: 'smack-resolver-javax'
     }
     implementation ('org.igniterealtime.smack:smack-tcp:4.4.5') {
         exclude group: 'xpp3', module: 'xpp3'
+        exclude group: 'org.igniterealtime.smack', module: 'smack-resolver-javax'
     }
     implementation ('org.igniterealtime.smack:smack-im:4.4.5') {
         exclude group: 'xpp3', module: 'xpp3'
+        exclude group: 'org.igniterealtime.smack', module: 'smack-resolver-javax'
     }
     implementation ('org.igniterealtime.smack:smack-extensions:4.4.5') {
         exclude group: 'xpp3', module: 'xpp3'
+        exclude group: 'org.igniterealtime.smack', module: 'smack-resolver-javax'
     }
     implementation ('org.igniterealtime.smack:smack-experimental:4.4.5') {
         exclude group: 'xpp3', module: 'xpp3'
+        exclude group: 'org.igniterealtime.smack', module: 'smack-resolver-javax'
     }
     implementation 'org.igniterealtime.smack:smack-xmlparser:4.4.5'
     implementation ('org.igniterealtime.smack:smack-resolver-minidns:4.4.5') {
@@ -101,9 +109,7 @@ dependencies {
     }
     implementation ('org.igniterealtime.smack:smack-sasl-provided:4.4.5') {
         exclude group: 'xpp3', module: 'xpp3'
-    }
-    implementation ('org.igniterealtime.smack:smack-java8:4.4.5') {
-        exclude group: 'xpp3', module: 'xpp3'
+        exclude group: 'org.igniterealtime.smack', module: 'smack-resolver-javax'
     }
     
     // 添加 jxmpp 依赖

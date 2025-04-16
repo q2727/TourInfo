@@ -2,6 +2,7 @@ package com.example.travalms
 
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -12,6 +13,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.example.travalms.ui.navigation.AppNavigation
 import com.example.travalms.ui.theme.TravalMSTheme
+import org.jivesoftware.smack.SmackConfiguration
+import org.jivesoftware.smack.util.dns.DNSResolver
+import org.jivesoftware.smack.util.dns.minidns.MiniDnsResolver
 
 /**
  * MainActivity是应用程序的主活动，负责初始化界面

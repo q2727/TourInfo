@@ -18,8 +18,8 @@ sealed interface RegisterUiState {
 
 class RegisterViewModel : ViewModel() {
 
-    // 创建XMPPManager实例 (同样，更好的方式是依赖注入)
-    private val xmppManager = XMPPManager()
+    // 使用单例模式
+    private val xmppManager = XMPPManager.getInstance()
 
     // 使用 StateFlow 暴露 UI 状态
     private val _uiState = MutableStateFlow<RegisterUiState>(RegisterUiState.Idle)

@@ -1,5 +1,7 @@
 package com.example.travalms.ui.publish
 
+import android.content.ContentValues.TAG
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -22,11 +24,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.travalms.data.remote.XMPPManager
 import com.example.travalms.ui.navigation.AppRoutes
 import com.example.travalms.ui.screens.SubscriptionNodeItem
 import com.example.travalms.ui.screens.SubscriptionNodeType
 import com.example.travalms.ui.theme.PrimaryColor
 import com.example.travalms.ui.viewmodels.PublishViewModel
+import kotlinx.coroutines.delay
 
 /**
  * 选择发布节点的界面，采用树形结构展示
@@ -246,16 +250,39 @@ fun PublishNodeSelectorScreen(
     // 监听ViewModel状态
     val publishState by viewModel.uiState.collectAsState()
     val isLoggedIn by viewModel.isLoggedIn.collectAsState()
+    // 新增：获取连接状态
+    val connectionState by viewModel.connectionState.collectAsState()
     
-    // 创建所有可用节点
+    // 使用单一LaunchedEffect进行串行处理
     LaunchedEffect(Unit) {
-        // 首次启动时尝试自动登录
-        if (!isLoggedIn) {
-            viewModel.loginToXMPP("admin", "admin")  // 使用应用默认账号，在生产环境中应改为安全的方式
+        Log.d(TAG, "初始化发布节点选择器")
+        
+        // 注释掉连接相关操作
+        /*
+        // 1. 检查登录状态
+        if (connectionState != com.example.travalms.data.remote.ConnectionState.AUTHENTICATED) {
+            Log.d(TAG, "未认证，尝试登录")
+            // 2. 执行登录
+            val loginResult = viewModel.loginToXMPP("qinchong", "qc@BIT")
+            
+            // 3. 等待登录结果
+            if (loginResult) {
+                Log.d(TAG, "登录成功")
+                // 给系统一些时间完成认证流程
+                delay(500)
+            } else {
+                Log.d(TAG, "登录失败，无法创建节点")
+                return@LaunchedEffect
+            }
+        } else {
+            Log.d(TAG, "已经认证，无需登录")
         }
         
-        // 确保在XMPP上创建节点
-        viewModel.createNodesForHierarchy(rootNodes)
+        // 4. 创建节点
+        Log.d(TAG, "开始创建节点层次结构")
+        // viewModel.createNodesForHierarchy(rootNodes) // 暂时注释掉创建节点的逻辑
+        Log.d(TAG, "节点创建流程已启动")
+        */
     }
 
     // 辅助函数：获取节点及其所有子节点的ID
@@ -597,8 +624,18 @@ fun PublishNodeSelectorScreen(
             ) {
                 Button(
                     onClick = {
-                        // 导航到发布页面，带上选择的节点信息
-                        navController.navigate(AppRoutes.PUBLISH)
+                        // 将节点信息存储到导航参数中
+                        navController.previousBackStackEntry?.savedStateHandle?.set(
+                            "selected_nodes", 
+                            selectedNodeNames.joinToString(", ")
+                        )
+                        // 同时传递节点ID列表用于实际发布
+                        navController.previousBackStackEntry?.savedStateHandle?.set(
+                            "selected_node_ids", 
+                            ArrayList(selectedNodes.toList())
+                        )
+                        // 导航到发布页面
+                        navController.popBackStack()
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -608,10 +645,12 @@ fun PublishNodeSelectorScreen(
                         disabledContainerColor = Color.Gray
                     ),
                     shape = RoundedCornerShape(8.dp),
-                    enabled = selectedNodes.isNotEmpty() && isLoggedIn
+                    // 注释掉连接状态检查，只检查是否有选择节点
+                    enabled = selectedNodes.isNotEmpty() // && isLoggedIn
                 ) {
                     Text(
-                        text = if (isLoggedIn) "确认选择 (${selectedNodes.size})" else "正在连接XMPP服务器...",
+                        // 修改按钮文本，移除连接状态提示
+                        text = "确认选择 (${selectedNodes.size})",
                         fontSize = 16.sp,
                         color = Color.White
                     )

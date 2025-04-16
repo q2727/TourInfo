@@ -13,14 +13,14 @@ import org.jivesoftware.smack.tcp.XMPPTCPConnection
 sealed interface LoginUiState {
     object Idle : LoginUiState // 初始状态
     object Loading : LoginUiState // 正在登录
-    data class Success(val connection: XMPPTCPConnection) : LoginUiState // 登录成功
+    object Success : LoginUiState // 登录成功 - 修改为不需要Connection参数
     data class Error(val message: String) : LoginUiState // 登录失败
 }
 
 class LoginViewModel : ViewModel() {
 
-    // 在ViewModel内部创建XMPPManager实例 (同样，更好的方式是依赖注入)
-    private val xmppManager = XMPPManager()
+    // 使用单例模式
+    private val xmppManager = XMPPManager.getInstance()
 
     // 使用 StateFlow 暴露 UI 状态
     private val _uiState = MutableStateFlow<LoginUiState>(LoginUiState.Idle)
@@ -38,7 +38,7 @@ class LoginViewModel : ViewModel() {
         viewModelScope.launch {
             val result = xmppManager.login(username, password)
             if (result.isSuccess) {
-                _uiState.value = LoginUiState.Success(result.getOrThrow())
+                _uiState.value = LoginUiState.Success // 修改为使用不带参数的Success
             } else {
                 val exception = result.exceptionOrNull()
                 val errorMessage = exception?.message ?: "未知错误"
