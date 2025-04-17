@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -21,11 +22,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.travalms.data.models.ContactItem
+import com.example.travalms.data.model.ContactItem
 import com.example.travalms.data.remote.XMPPManager
-import com.example.travalms.ui.common.Text as MaterialText
-import com.example.travalms.ui.common.PrimaryColor
-import com.example.travalms.ui.theme.AppRoutes
+import com.example.travalms.ui.components.LetterIndex
+import com.example.travalms.ui.navigation.AppRoutes
+import com.example.travalms.ui.theme.PrimaryColor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -36,11 +37,17 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import com.example.travalms.ui.screens.BottomNavigation
+import com.example.travalms.ui.screens.BottomNavigationItem
+
+// 添加自定义BottomNavigation导入，与HomeScreen保持一致
 
 /**
  * 消息列表屏幕
+ * 
+ * 注：此实现使用了实验性API，添加注解以抑制警告
  */
-@OptIn(ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun MessageScreen(
     navController: NavController,
@@ -195,18 +202,19 @@ fun MessageScreen(
                     Log.d("MessageScreen", "成功获取 ${fetchedFriends.size} 个好友")
 
                     // 更新好友JID集合用于公司黄页的"已添加"状态
-                    friendsJidSet = fetchedFriends.mapNotNull { it.first }.toSet()
+                    friendsJidSet = fetchedFriends.mapNotNull { pair -> pair.first }.toSet()
 
                     // 转换为ContactItem
-                    val friendItems = fetchedFriends.mapIndexed { index, (jid, name) ->
-                        val userName = name ?: jid?.localpartOrNull?.toString() ?: jid?.toString() ?: "未知用户"
+                    val friendItems = fetchedFriends.mapIndexed { index, pair ->
+                        val jid = pair.first
+                        val name = pair.second ?: jid?.localpartOrNull?.toString() ?: jid?.toString() ?: "未知用户"
                         ContactItem(
                             id = jid?.hashCode()?.plus(index) ?: index,
-                            name = userName,
+                            name = name,
                             status = "在线", // 默认状态，实际应该从presence信息获取
                             jid = jid
                         )
-                    }.sortedBy { it.name }
+                    }.sortedBy { item -> item.name }
 
                     realFriendsList = friendItems
                     Log.d("MessageScreen", "好友列表加载完成，共 ${realFriendsList.size} 个好友")
@@ -493,8 +501,8 @@ fun MessageScreen(
             ) {
                 BottomNavigationItem(
                     icon = { Icon(Icons.Filled.Home, contentDescription = "产品") },
-                    label = { MaterialText("产品", fontSize = 12.sp) },
-                    selected = false,
+                    label = { Text("产品", fontSize = 12.sp) },
+                    selected = true,
                     onClick = onHomeClick,
                     selectedContentColor = PrimaryColor,
                     unselectedContentColor = Color.Gray
@@ -502,7 +510,7 @@ fun MessageScreen(
 
                 BottomNavigationItem(
                     icon = { Icon(Icons.Filled.Add, contentDescription = "发布") },
-                    label = { MaterialText("发布", fontSize = 12.sp) },
+                    label = { Text("发布", fontSize = 12.sp) },
                     selected = false,
                     onClick = onPublishClick,
                     selectedContentColor = PrimaryColor,
@@ -511,7 +519,7 @@ fun MessageScreen(
 
                 BottomNavigationItem(
                     icon = { Icon(Icons.Filled.Favorite, contentDescription = "尾单") },
-                    label = { MaterialText("尾单", fontSize = 12.sp) },
+                    label = { Text("尾单", fontSize = 12.sp) },
                     selected = false,
                     onClick = onTailListClick,
                     selectedContentColor = PrimaryColor,
@@ -520,16 +528,16 @@ fun MessageScreen(
 
                 BottomNavigationItem(
                     icon = { Icon(Icons.Filled.Email, contentDescription = "消息") },
-                    label = { MaterialText("消息", fontSize = 12.sp) },
-                    selected = true,
-                    onClick = { /* Already on 消息 screen */ },
+                    label = { Text("消息", fontSize = 12.sp) },
+                    selected = false,
+                    onClick = {},
                     selectedContentColor = PrimaryColor,
                     unselectedContentColor = Color.Gray
                 )
 
                 BottomNavigationItem(
                     icon = { Icon(Icons.Filled.Person, contentDescription = "我的") },
-                    label = { MaterialText("我的", fontSize = 12.sp) },
+                    label = { Text("我的", fontSize = 12.sp) },
                     selected = false,
                     onClick = onProfileClick,
                     selectedContentColor = PrimaryColor,
@@ -537,7 +545,7 @@ fun MessageScreen(
                 )
             }
         }
-    ) { paddingValues ->
+    ){ paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -655,193 +663,204 @@ fun MessageScreen(
             // 主内容区域
             Box(modifier = Modifier.weight(1f)) {
                 // 联系人列表
-                LazyColumn(
-                    state = currentListState,
-                    modifier = Modifier.fillMaxSize()
+                val refreshing = remember { mutableStateOf(false) }
+                val pullRefreshState = rememberPullRefreshState(
+                    refreshing = refreshing.value,
+                    onRefresh = { 
+                        refreshing.value = true
+                        // 执行刷新操作
+                        if (selectedTab == 3) {
+                            loadDirectoryUsers()
+                        } else if (selectedTab == 1) {
+                            loadFriendsList()
+                        }
+                        // 延迟后重置刷新状态
+                        scope.launch {
+                            delay(1000)
+                            refreshing.value = false
+                        }
+                    }
+                )
+                
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pullRefresh(pullRefreshState)
                 ) {
-                    // 调试状态
-                    if (selectedTab == 3) {
-                        item {
-                            // 这里添加调试信息，方便观察状态
-                            Text(
-                                text = "状态: users=${companyDirectoryUsers.size}, loading=$directoryLoadingState",
-                                modifier = Modifier.padding(8.dp),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.Gray
-                            )
-                        }
-                    }
-
-                    // Show loading or error state for directory
-                    if (selectedTab == 3) {
-                        // Add a header showing the number of users found
-                        if (companyDirectoryUsers.isNotEmpty()) {
-                            Log.d("MessageScreen", "渲染公司黄页: 找到 ${companyDirectoryUsers.size} 个用户")
-                            item {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        "找到 ${companyDirectoryUsers.size} 个用户",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color.Gray
-                                    )
-
-                                    TextButton(onClick = { loadDirectoryUsers() }) {
-                                        Icon(
-                                            Icons.Filled.Refresh,
-                                            contentDescription = "刷新",
-                                            modifier = Modifier.size(14.dp)
+                    LazyColumn(
+                        state = currentListState,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        // Show loading or error state for directory
+                        if (selectedTab == 3) {
+                            // Add a header showing the number of users found
+                            if (companyDirectoryUsers.isNotEmpty()) {
+                                Log.d("MessageScreen", "渲染公司黄页: 找到 ${companyDirectoryUsers.size} 个用户")
+                                item {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            "找到 ${companyDirectoryUsers.size} 个用户",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.Gray
                                         )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("刷新", style = MaterialTheme.typography.labelSmall)
                                     }
+                                    Divider()
                                 }
-                                Divider()
-                            }
-                        } else if (directoryLoadingState != null) {
-                            // 仅当列表为空且有加载状态时，显示加载状态
-                            Log.d("MessageScreen", "渲染公司黄页加载状态: $directoryLoadingState")
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
+                            } else if (directoryLoadingState != null) {
+                                // 仅当列表为空且有加载状态时，显示加载状态
+                                Log.d("MessageScreen", "渲染公司黄页加载状态: $directoryLoadingState")
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        if (directoryLoadingState?.startsWith("正在加载") == true) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(24.dp),
-                                                strokeWidth = 2.dp
-                                            )
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                        }
-                                        Text(directoryLoadingState ?: "")
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // 好友标签页加载状态
-                    if (selectedTab == 1) {
-                        if (friendsLoadingState != null && realFriendsList.isEmpty()) {
-                            // 仅当列表为空且有加载状态时，显示加载状态
-                            Log.d("MessageScreen", "渲染好友列表加载状态: $friendsLoadingState")
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        if (friendsLoadingState?.startsWith("正在加载") == true) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(24.dp),
-                                                strokeWidth = 2.dp
-                                            )
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                        }
-                                        Text(friendsLoadingState ?: "")
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    items(filteredList, key = { it.id }) { contact ->
-                        ContactListItem(
-                            friend = contact,
-                            isCompanyTab = selectedTab == 3,
-                            isAdded = if (selectedTab == 3 && contact.jid != null) {
-                                friendsJidSet.contains(contact.jid)
-                            } else {
-                                false
-                            },
-                            onAddFriend = {
-                                if (contact.jid != null) {
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("正在发送请求给 ${contact.name}...")
-                                        val result = XMPPManager.getInstance().sendFriendRequest(contact.jid.toString())
-                                        if (result.isSuccess) {
-                                            snackbarHostState.showSnackbar("好友请求已发送")
-                                            val refreshResult = XMPPManager.getInstance().getFriendsJids()
-                                            if (refreshResult.isSuccess) {
-                                                friendsJidSet = refreshResult.getOrDefault(emptySet())
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            if (directoryLoadingState?.startsWith("正在加载") == true) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(24.dp),
+                                                    strokeWidth = 2.dp
+                                                )
+                                                Spacer(modifier = Modifier.height(8.dp))
                                             }
-                                        } else {
-                                            snackbarHostState.showSnackbar("发送请求失败: ${result.exceptionOrNull()?.message ?: "未知错误"}")
+                                            Text(directoryLoadingState ?: "")
                                         }
-                                    }
-                                } else {
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("无法添加好友: JID 无效")
                                     }
                                 }
-                            },
-                            onClick = {
-                                when (selectedTab) {
-                                    0, 2 -> {
-                                        val targetType = when (selectedTab) {
-                                            0 -> "message"
-                                            2 -> "group"
-                                            else -> "message"
+                            }
+                        }
+
+                        // 好友标签页加载状态
+                        if (selectedTab == 1) {
+                            if (friendsLoadingState != null && realFriendsList.isEmpty()) {
+                                // 仅当列表为空且有加载状态时，显示加载状态
+                                Log.d("MessageScreen", "渲染好友列表加载状态: $friendsLoadingState")
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.Center
+                                        ) {
+                                            if (friendsLoadingState?.startsWith("正在加载") == true) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(24.dp),
+                                                    strokeWidth = 2.dp
+                                                )
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                            }
+                                            Text(friendsLoadingState ?: "")
                                         }
-                                        navController.navigate(
-                                            AppRoutes.CHAT_ROOM
-                                                .replace("{sessionId}", contact.id.toString())
-                                                .replace("{targetName}", contact.name)
-                                                .replace("{targetType}", targetType)
-                                        )
                                     }
-                                    1 -> {
-                                        navController.navigate(
-                                            AppRoutes.PERSON_DETAIL
-                                                .replace("{personId}", contact.id.toString())
-                                        )
+                                }
+                            }
+                        }
+
+                        items(filteredList, key = { it.id }) { contact ->
+                            ContactListItem(
+                                friend = contact,
+                                isCompanyTab = selectedTab == 3,
+                                isAdded = if (selectedTab == 3 && contact.jid != null) {
+                                    friendsJidSet.contains(contact.jid)
+                                } else {
+                                    false
+                                },
+                                onAddFriend = {
+                                    if (contact.jid != null) {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("正在发送请求给 ${contact.name}...")
+                                            val result = XMPPManager.getInstance().sendFriendRequest(contact.jid.toString())
+                                            if (result.isSuccess) {
+                                                snackbarHostState.showSnackbar("好友请求已发送")
+                                                val refreshResult = XMPPManager.getInstance().getFriendsJids()
+                                                if (refreshResult.isSuccess) {
+                                                    friendsJidSet = refreshResult.getOrDefault(emptySet())
+                                                }
+                                            } else {
+                                                snackbarHostState.showSnackbar("发送请求失败: ${result.exceptionOrNull()?.message ?: "未知错误"}")
+                                            }
+                                        }
+                                    } else {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("无法添加好友: JID 无效")
+                                        }
                                     }
-                                    3 -> {
-                                        navController.navigate(
-                                            AppRoutes.COMPANY_DETAIL
-                                                .replace("{companyId}", contact.id.toString())
-                                        )
+                                },
+                                onClick = {
+                                    when (selectedTab) {
+                                        0, 2 -> {
+                                            val targetType = when (selectedTab) {
+                                                0 -> "message"
+                                                2 -> "group"
+                                                else -> "message"
+                                            }
+                                            navController.navigate(
+                                                AppRoutes.CHAT_ROOM
+                                                    .replace("{sessionId}", contact.id.toString())
+                                                    .replace("{targetName}", contact.name)
+                                                    .replace("{targetType}", targetType)
+                                            )
+                                        }
+                                        1 -> {
+                                            navController.navigate(
+                                                AppRoutes.PERSON_DETAIL
+                                                    .replace("{personId}", contact.id.toString())
+                                            )
+                                        }
+                                        3 -> {
+                                            navController.navigate(
+                                                AppRoutes.COMPANY_DETAIL
+                                                    .replace("{companyId}", contact.id.toString())
+                                            )
+                                        }
+                                    }
+                                }
+                            )
+                            Divider(color = Color(0xFFEEEEEE), thickness = 1.dp)
+                        }
+                    }
+
+                    // 使用LetterIndex组件
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .padding(end = 2.dp)
+                    ) {
+                        LetterIndex(
+                            selectedLetter = selectedLetter,
+                            onLetterSelected = { letter ->
+                                selectedLetter = letter
+                                letterToIndexMap[letter]?.let { index ->
+                                    scope.launch {
+                                        currentListState.animateScrollToItem(index)
                                     }
                                 }
                             }
                         )
-                        Divider(color = Color(0xFFEEEEEE), thickness = 1.dp)
                     }
-                }
 
-                // 使用LetterIndex组件
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .fillMaxHeight()
-                        .padding(end = 2.dp)
-                ) {
-                    LetterIndex(
-                        selectedLetter = selectedLetter,
-                        onLetterSelected = { letter ->
-                            selectedLetter = letter
-                            letterToIndexMap[letter]?.let { index ->
-                                scope.launch {
-                                    currentListState.animateScrollToItem(index)
-                                }
-                            }
-                        }
+                    // Add pull-to-refresh indicator
+                    PullRefreshIndicator(
+                        refreshing = refreshing.value,
+                        state = pullRefreshState,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                        backgroundColor = MaterialTheme.colorScheme.surface,
+                        contentColor = PrimaryColor
                     )
                 }
             }

@@ -1443,72 +1443,6 @@ class XMPPManager private constructor() {
                             // 继续尝试其他解析方法
                         }
 
-                        // 方法2: 使用直接JID值查找
-                        if (!parsed) {
-                            try {
-                                val jidValuePattern = "<field\\s+var=\"jid\"[^>]*>.*?<value>\\s*(.*?)\\s*</value>".toRegex(RegexOption.DOT_MATCHES_ALL)
-
-                                // 直接查找所有JID值
-                                val jidMatches = jidValuePattern.findAll(resultXml)
-                                val jidList = jidMatches.map { it.groupValues[1].trim() }.toList()
-
-                                Log.d(TAG, "找到 ${jidList.size} 个JID值 (方法2)")
-
-                                for (jidStr in jidList) {
-                                    try {
-                                        if (jidStr.isNotEmpty() && jidStr.contains("@")) {
-                                            val userJid = JidCreate.bareFrom(jidStr)
-
-                                            if (userJid != currentUserJid && !isServiceComponent(getLocalpartSafely(userJid))) {
-                                                val userName = getLocalpartSafely(userJid)
-                                                usersMap[userJid] = userName
-                                                Log.d(TAG, "添加用户(方法2): $userJid -> $userName")
-                                                foundUsers = true
-                                                parsed = true
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        // 忽略单个JID解析错误
-                                        Log.e(TAG, "处理单个JID失败(方法2): $jidStr, ${e.message}")
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "方法2解析失败: ${e.message}")
-                                lastError = e
-                            }
-                        }
-
-                        // 方法3: 备用简单正则匹配
-                        if (!parsed) {
-                            try {
-                                Log.d(TAG, "尝试备用解析方法3")
-                                // 简单查找所有形如 jid...value...tt@localhost...value 的模式
-                                val simpleJidPattern = "jid[\\s\\S]*?value[\\s\\S]*?([^<\\s]+@[^<\\s]+)[\\s\\S]*?value".toRegex()
-                                val matches = simpleJidPattern.findAll(resultXml)
-
-                                for (match in matches) {
-                                    val jidStr = match.groupValues[1].trim()
-                                    try {
-                                        val userJid = JidCreate.bareFrom(jidStr)
-                                        if (userJid != currentUserJid && !isServiceComponent(getLocalpartSafely(userJid))) {
-                                            val userName = getLocalpartSafely(userJid)
-                                            usersMap[userJid] = userName
-                                            Log.d(TAG, "添加用户(备用方法3): $userJid -> $userName")
-                                            foundUsers = true
-                                            parsed = true
-                                        } else {
-                                            Log.d(TAG, "跳过用户 $jidStr (当前用户或服务组件)")
-                                        }
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "处理JID失败(备用方法3): $jidStr, 错误: ${e.message}")
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "备用解析方法3失败: ${e.message}")
-                                lastError = e
-                            }
-                        }
-
                         // 方法4: 极简匹配，尝试最后的解析努力
                         if (!parsed) {
                             try {
@@ -1587,16 +1521,17 @@ class XMPPManager private constructor() {
 
                     usersMap.forEach { (bareJid, name) ->
                         try {
-                            val entityBareJid = JidCreate.entityBareFrom(bareJid.toString())
-                            val vCard = vCardManager.loadVCard(entityBareJid)
-                            val vCardName = vCard.nickName ?: vCard.firstName ?: vCard.lastName
-
-                            if (!vCardName.isNullOrBlank()) {
-                                Log.d(TAG, "用户 $bareJid VCard名称: $vCardName")
-                                usersList.add(bareJid to vCardName)
-                            } else {
-                                usersList.add(bareJid to name)
-                            }
+//                            val entityBareJid = JidCreate.entityBareFrom(bareJid.toString())
+//                            val vCard = vCardManager.loadVCard(entityBareJid)
+//                            val vCardName = vCard.nickName ?: vCard.firstName ?: vCard.lastName
+//
+//                            if (!vCardName.isNullOrBlank()) {
+//                                Log.d(TAG, "用户 $bareJid VCard名称: $vCardName")
+//                                usersList.add(bareJid to vCardName)
+//                            } else {
+//                                usersList.add(bareJid to name)
+                            usersList.add(bareJid to name)
+//                            }
                         } catch (e: Exception) {
                             // 忽略VCard获取错误，继续使用原始名称
                             if (e !is SmackException.NotConnectedException && e !is SmackException.NoResponseException) {
@@ -1651,6 +1586,35 @@ class XMPPManager private constructor() {
             val friendsJids = roster.entries.mapNotNull { it.jid }.toSet()
             Log.d(TAG, "获取到好友列表 JIDs: 数量=${friendsJids.size}")
             Result.success(friendsJids)
+        } catch (e: Exception) {
+            Log.e(TAG, "获取好友列表失败", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 获取好友列表，包含JID和昵称
+     */
+    suspend fun getFriends(): Result<List<Pair<BareJid?, String?>>> = withContext(Dispatchers.IO) {
+        if (connectionState.value != ConnectionState.AUTHENTICATED) {
+            return@withContext Result.failure(IllegalStateException("用户未认证"))
+        }
+        val connection = currentConnection ?: return@withContext Result.failure(IllegalStateException("连接无效"))
+
+        try {
+            val roster = Roster.getInstanceFor(connection)
+            if (!roster.isLoaded) {
+                roster.reloadAndWait()
+            }
+            
+            val friends = roster.entries.map { entry ->
+                // 优先使用昵称，如果没有则使用JID的本地部分
+                val name = entry.name ?: entry.jid?.let { getLocalpartSafely(it) } ?: "未知好友"
+                Pair(entry.jid, name)
+            }
+            
+            Log.d(TAG, "获取到好友列表，数量=${friends.size}")
+            Result.success(friends)
         } catch (e: Exception) {
             Log.e(TAG, "获取好友列表失败", e)
             Result.failure(e)
