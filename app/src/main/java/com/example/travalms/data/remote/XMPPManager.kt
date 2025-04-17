@@ -483,6 +483,19 @@ class XMPPManager private constructor() {
         val connection = currentConnection ?: return@withContext Result.failure(IllegalStateException("连接无效"))
 
         try {
+            // 首先验证节点是否存在
+            val allNodes = getAllNodes()
+            if (allNodes.isFailure) {
+                return@withContext Result.failure(IllegalStateException("无法获取可用节点列表"))
+            }
+            
+            val availableNodes = allNodes.getOrThrow()
+            if (!availableNodes.contains(nodeId)) {
+                Log.e(TAG, "订阅失败: 节点 $nodeId 不存在")
+                return@withContext Result.failure(IllegalStateException("节点不存在"))
+            }
+            
+            // 节点存在，继续订阅流程
             val node = pubsub.getNode(nodeId) as LeafNode
             val subscription = node.subscribe(connection.user.asEntityBareJidString())
 
@@ -516,25 +529,61 @@ class XMPPManager private constructor() {
     }
 
     /**
-     * 取消订阅节点
-     * @param nodeId 要取消订阅的节点ID
-     * @return 操作结果
+     * 取消订阅一个节点
      */
-    suspend fun unsubscribeFromNode(nodeId: String): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun unsubscribeFromNode(nodeId: String): Result<Boolean> = withContext(Dispatchers.IO) {
         if (connectionState.value != ConnectionState.AUTHENTICATED) {
             return@withContext Result.failure(IllegalStateException("用户未认证"))
         }
+        
         val pubsub = pubSubManager ?: return@withContext Result.failure(IllegalStateException("PubSub管理器未初始化"))
-        val connection = currentConnection ?: return@withContext Result.failure(IllegalStateException("连接无效"))
-
+        
         try {
-            val node = pubsub.getNode(nodeId) as LeafNode
-            node.unsubscribe(connection.user.asEntityBareJidString())
-            Log.d(TAG, "成功取消订阅节点: $nodeId")
-            Result.success(Unit)
+            Log.d(TAG, "尝试获取用户订阅信息")
+            // 先获取用户在该节点上的所有订阅
+            val allSubscriptions = pubsub.getSubscriptions()
+            
+            // 找到对应节点的订阅
+            val nodeSubscriptions = allSubscriptions.filter { it.node == nodeId }
+            
+            if (nodeSubscriptions.isNotEmpty()) {
+                // 获取节点对象
+                val node = pubsub.getNode(nodeId)
+                var allSuccess = true
+                
+                // 逐一取消每个订阅
+                for (subscription in nodeSubscriptions) {
+                    try {
+                        Log.d(TAG, "正在取消订阅: 节点=${subscription.node}, JID=${subscription.jid}, 订阅ID=${subscription.id}")
+                        if (subscription.id != null) {
+                            // 如果有订阅ID，使用带订阅ID的方法
+                            node.unsubscribe(subscription.jid.toString(), subscription.id)
+                        } else {
+                            // 没有订阅ID，使用不带订阅ID的方法
+                            node.unsubscribe(subscription.jid.toString())
+                        }
+                        Log.d(TAG, "成功取消单个订阅")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "取消单个订阅失败", e)
+                        allSuccess = false
+                    }
+                }
+                
+                if (allSuccess) {
+                    Log.d(TAG, "成功取消所有订阅: $nodeId")
+                    return@withContext Result.success(true)
+                } else {
+                    Log.w(TAG, "部分订阅取消失败: $nodeId")
+                    return@withContext Result.success(false)  // 返回部分成功
+                }
+            } else {
+                Log.w(TAG, "未找到节点的订阅信息: $nodeId")
+                // 如果没有找到订阅，也视为成功（因为最终状态是未订阅）
+                return@withContext Result.success(true)
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "取消订阅节点失败: ${e.message}", e)
-            Result.failure(e)
+            Log.e(TAG, "取消订阅节点失败: $nodeId", e)
+            return@withContext Result.failure(e)
         }
     }
 
@@ -556,49 +605,76 @@ class XMPPManager private constructor() {
             val node = pubsub.getNode(nodeId) as LeafNode
             val itemId = UUID.randomUUID().toString()
             
-            Log.d(TAG, "准备发布到节点: $nodeId，包含简单负载，内容长度: ${content.length}字节")
-            
             try {
-                // 创建一个非常简单的XML负载
-                // 只发送一个标识符和时间戳，不包含实际JSON内容
-                val timestamp = System.currentTimeMillis()
-                val simplePayload = SimplePayload(
-                    "notification", 
-                    "urn:xmpp:taillist:notification",
-                    "<notification xmlns='urn:xmpp:taillist:notification'><id>${itemId}</id><timestamp>${timestamp}</timestamp></notification>"
+                // 对 JSON 内容进行 XML 转义，避免特殊字符导致的解析问题
+                val escapedContent = content.replace("&", "&amp;")
+                                         .replace("<", "&lt;")
+                                         .replace(">", "&gt;")
+                                         .replace("\"", "&quot;")
+                                         .replace("'", "&apos;")
+                
+                // 创建包含完整内容的 XML 负载
+                val xmlContent = """
+                    <taillist xmlns='urn:xmpp:taillist:0'>
+                        <id>${itemId}</id>
+                        <timestamp>${System.currentTimeMillis()}</timestamp>
+                        <content type='application/json'>${escapedContent}</content>
+                    </taillist>
+                """.trimIndent()
+
+                Log.d(TAG, "准备发布完整内容到节点: $nodeId")
+                
+                // 创建 SimplePayload，使用我们的自定义 XML
+                val payload = SimplePayload(
+                    "taillist",
+                    "urn:xmpp:taillist:0",
+                    xmlContent
                 )
                 
-                val item = PayloadItem<SimplePayload>(itemId, simplePayload)
+                val item = PayloadItem<SimplePayload>(itemId, payload)
                 node.publish(item)
                 
-                Log.d(TAG, "成功发布项目到节点: $nodeId, itemId=$itemId")
-                
-                // 返回生成的 itemId，应用可以将实际内容存储在本地数据库中
+                Log.d(TAG, "成功发布完整内容到节点: $nodeId, itemId=$itemId")
                 Result.success(itemId)
             } catch (e: Exception) {
-                Log.e(TAG, "发布带有简单负载的项目失败: ${e.message}", e)
+                Log.e(TAG, "发布完整内容失败: ${e.message}", e)
                 
-                // 如果简单负载也失败，尝试最小化的负载
+                // 如果发布完整内容失败，尝试发布简化版本
                 try {
-                    Log.d(TAG, "尝试使用最小化的负载...")
-                    val minimalPayload = SimplePayload(
-                        "data", 
-                        "urn:xmpp:data",
-                        "<data xmlns='urn:xmpp:data'>minimal</data>"
+                    Log.d(TAG, "尝试发布简化版本...")
+                    // 从 JSON 中提取基本信息
+                    val jsonObject = org.json.JSONObject(content)
+                    val title = jsonObject.optString("title", "未知标题")
+                    val price = jsonObject.optDouble("price", 0.0)
+                    
+                    // 创建简化的 XML 负载，只包含基本信息
+                    val simpleXmlContent = """
+                        <taillist xmlns='urn:xmpp:taillist:0'>
+                            <id>${itemId}</id>
+                            <timestamp>${System.currentTimeMillis()}</timestamp>
+                            <title>${title.replace("&", "&amp;").replace("<", "&lt;")}</title>
+                            <price>${price}</price>
+                        </taillist>
+                    """.trimIndent()
+                    
+                    val simplePayload = SimplePayload(
+                        "taillist",
+                        "urn:xmpp:taillist:0",
+                        simpleXmlContent
                     )
                     
-                    val item = PayloadItem<SimplePayload>(itemId, minimalPayload)
-                    node.publish(item)
+                    val simpleItem = PayloadItem<SimplePayload>(itemId, simplePayload)
+                    node.publish(simpleItem)
                     
-                    Log.d(TAG, "使用最小化负载成功发布: $nodeId, itemId=$itemId")
+                    Log.d(TAG, "成功发布简化版本到节点: $nodeId, itemId=$itemId")
                     Result.success(itemId)
                 } catch (e2: Exception) {
-                    Log.e(TAG, "使用最小化负载也失败了: ${e2.message}", e2)
+                    Log.e(TAG, "发布简化版本也失败了: ${e2.message}", e2)
                     Result.failure(e2)
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "发布项目到节点失败: ${e.message}", e)
+            Log.e(TAG, "发布过程中发生顶级异常: ${e.message}", e)
             Result.failure(e)
         }
     }
@@ -729,22 +805,64 @@ class XMPPManager private constructor() {
         if (connectionState.value != ConnectionState.AUTHENTICATED) {
             return@withContext Result.failure(IllegalStateException("用户未认证"))
         }
+        
         try {
+            // 首先获取所有可用节点
+            val allNodesResult = getAllNodes()
+            if (allNodesResult.isFailure) {
+                return@withContext Result.failure(IllegalStateException("无法获取可用节点列表"))
+            }
+            
+            val availableNodes = allNodesResult.getOrThrow().toSet()
+            
             val successfulSubscriptions = mutableListOf<String>()
+            val invalidNodes = mutableListOf<String>()
+            val failedNodes = mutableListOf<String>()
 
+            // 筛选出有效节点和无效节点
             for (nodeId in nodeIds) {
+                if (!availableNodes.contains(nodeId)) {
+                    Log.w(TAG, "节点 $nodeId 不存在，跳过订阅")
+                    invalidNodes.add(nodeId)
+                    continue
+                }
+                
                 try {
                     val result = subscribeToNode(nodeId)
                     if (result.isSuccess) {
                         successfulSubscriptions.add(nodeId)
+                        Log.d(TAG, "成功订阅节点: $nodeId")
+                    } else {
+                        failedNodes.add(nodeId)
+                        Log.e(TAG, "订阅节点 $nodeId 失败: ${result.exceptionOrNull()?.message}")
                     }
                 } catch (e: Exception) {
+                    failedNodes.add(nodeId)
                     Log.e(TAG, "订阅节点 $nodeId 失败: ${e.message}")
-                    // 继续处理其他节点
                 }
             }
 
-            Log.d(TAG, "批量订阅完成: 成功=${successfulSubscriptions.size}/${nodeIds.size}")
+            // 记录详细的结果日志
+            if (invalidNodes.isNotEmpty()) {
+                Log.w(TAG, "以下节点不存在，已跳过: ${invalidNodes.joinToString()}")
+            }
+            
+            if (failedNodes.isNotEmpty()) {
+                Log.e(TAG, "以下节点订阅失败: ${failedNodes.joinToString()}")
+            }
+            
+            Log.d(TAG, "批量订阅完成: 成功=${successfulSubscriptions.size}, 无效=${invalidNodes.size}, 失败=${failedNodes.size}, 总请求=${nodeIds.size}")
+            
+            // 如果有无效节点，在结果中包含提示信息
+            if (invalidNodes.isNotEmpty() || failedNodes.isNotEmpty()) {
+                val message = buildString {
+                    if (invalidNodes.isNotEmpty()) append("${invalidNodes.size}个节点不存在")
+                    if (invalidNodes.isNotEmpty() && failedNodes.isNotEmpty()) append(", ")
+                    if (failedNodes.isNotEmpty()) append("${failedNodes.size}个节点订阅失败")
+                }
+                Log.w(TAG, message)
+            }
+            
             Result.success(successfulSubscriptions)
         } catch (e: Exception) {
             Log.e(TAG, "批量订阅失败: ${e.message}", e)
@@ -753,35 +871,34 @@ class XMPPManager private constructor() {
     }
 
     /**
-     * 批量取消订阅多个节点
-     * @param nodeIds 要取消订阅的节点ID列表
-     * @return 成功取消订阅的节点ID列表
+     * 批量取消订阅节点
      */
     suspend fun batchUnsubscribe(nodeIds: List<String>): Result<List<String>> = withContext(Dispatchers.IO) {
-        if (connectionState.value != ConnectionState.AUTHENTICATED) {
-            return@withContext Result.failure(IllegalStateException("用户未认证"))
+        if (nodeIds.isEmpty()) {
+            return@withContext Result.success(emptyList())
         }
-        try {
-            val successfulUnsubscriptions = mutableListOf<String>()
-
-            for (nodeId in nodeIds) {
-                try {
-                    val result = unsubscribeFromNode(nodeId)
-                    if (result.isSuccess) {
-                        successfulUnsubscriptions.add(nodeId)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "取消订阅节点 $nodeId 失败: ${e.message}")
-                    // 继续处理其他节点
+        
+        val successfulNodes = mutableListOf<String>()
+        val failedNodes = mutableListOf<String>()
+        
+        for (nodeId in nodeIds) {
+            try {
+                val result = unsubscribeFromNode(nodeId)
+                if (result.isSuccess && result.getOrDefault(false)) {
+                    successfulNodes.add(nodeId)
+                } else {
+                    failedNodes.add(nodeId)
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "批量取消订阅时出错: $nodeId", e)
+                failedNodes.add(nodeId)
             }
-
-            Log.d(TAG, "批量取消订阅完成: 成功=${successfulUnsubscriptions.size}/${nodeIds.size}")
-            Result.success(successfulUnsubscriptions)
-        } catch (e: Exception) {
-            Log.e(TAG, "批量取消订阅失败: ${e.message}", e)
-            Result.failure(e)
         }
+        
+        Log.d(TAG, "批量取消订阅完成: 成功=${successfulNodes.size}/${nodeIds.size}")
+        
+        // 即使有些失败，也返回成功的节点列表
+        return@withContext Result.success(successfulNodes)
     }
 
     /**

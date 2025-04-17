@@ -32,12 +32,15 @@ android {
     }
     kotlinOptions {
         jvmTarget = '1.8'
+        freeCompilerArgs += [
+            "-Xjvm-default=all",
+        ]
     }
     buildFeatures {
         compose true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion '1.5.1'
+        kotlinCompilerExtensionVersion '1.4.0'
     }
     packagingOptions {
         exclude 'META-INF/DEPENDENCIES'
@@ -81,6 +84,16 @@ dependencies {
     
     // Added javax.inject dependency
     implementation 'javax.inject:javax.inject:1'
+    
+    // ViewModel依赖
+    implementation "androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2"
+    implementation "androidx.lifecycle:lifecycle-runtime-compose:2.6.2"
+    
+    // Accompanist dependencies for pull-to-refresh
+    implementation 'com.google.accompanist:accompanist-swiperefresh:0.25.1'
+    
+    // JSoup for HTML/XML parsing
+    implementation 'org.jsoup:jsoup:1.15.3'
     
     // XMPP Smack 依赖 - 统一使用稳定版本 4.4.5
     implementation ('org.igniterealtime.smack:smack-android:4.4.5') {

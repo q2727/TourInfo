@@ -19,7 +19,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.travalms.ui.theme.PrimaryColor
+import com.example.travalms.ui.viewmodels.SubscriptionViewModel
 
 /**
  * 订阅设置页面，采用树形结构展示
@@ -27,8 +29,14 @@ import com.example.travalms.ui.theme.PrimaryColor
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SubscribeSettingScreen(
-    onBackClick: () -> Unit = {}
+    onBackClick: () -> Unit = {},
+    viewModel: SubscriptionViewModel = viewModel()
 ) {
+    // 获取已订阅的节点列表
+    val uiState by viewModel.uiState.collectAsState()
+    val subscribedNodeIds = uiState.subscribedNodeIds
+    val isLoading = uiState.isLoading
+    
     // 模拟层级数据
     val rootNodes = remember {
         listOf(
@@ -234,8 +242,13 @@ fun SubscribeSettingScreen(
     // 保存已展开的节点ID列表
     val expandedNodes = remember { mutableStateMapOf<String, Boolean>() }
     
-    // 保存已选择的节点ID列表
-    val selectedNodes = remember { mutableStateListOf<String>() }
+    // 保存已选择的节点ID列表，初始化为已订阅的节点
+    val selectedNodes = remember(subscribedNodeIds) { 
+        mutableStateListOf<String>().apply {
+            clear()
+            addAll(subscribedNodeIds)
+        }
+    }
 
     // 辅助函数：获取节点及其所有子节点的ID
     fun getAllChildrenIds(node: SubscriptionNodeItem): List<String> {
@@ -484,16 +497,37 @@ fun SubscribeSettingScreen(
                 )
             )
             
-            // 树形节点列表
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 16.dp)
-            ) {
-                items(rootNodes) { rootNode ->
-                    TreeNodeItem(rootNode)
-                    Divider(modifier = Modifier.padding(start = 32.dp, end = 16.dp))
+            // 加载状态
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = PrimaryColor)
                 }
+            } else {
+                // 树形节点列表
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 16.dp)
+                ) {
+                    items(rootNodes) { rootNode ->
+                        TreeNodeItem(rootNode)
+                        Divider(modifier = Modifier.padding(start = 32.dp, end = 16.dp))
+                    }
+                }
+            }
+            
+            // 错误消息显示
+            uiState.errorMessage?.let { error ->
+                Text(
+                    text = error,
+                    color = Color.Red,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
             }
             
             // 底部按钮
@@ -505,7 +539,8 @@ fun SubscribeSettingScreen(
             ) {
                 Button(
                     onClick = {
-                        // 返回上一页，订阅设置完成
+                        // 将选择的节点订阅到XMPP服务器
+                        viewModel.subscribeToNodes(selectedNodes.toList())
                         onBackClick()
                     },
                     modifier = Modifier

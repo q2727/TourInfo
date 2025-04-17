@@ -70,7 +70,7 @@ fun AppNavigation(
 ) {
     // 获取当前路由
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-    
+
     // 为所有屏幕设置一致的导航逻辑
     val navigateToMyPosts = {
         if ((currentRoute ?: "") != AppRoutes.MY_POSTS) {
@@ -88,7 +88,7 @@ fun AppNavigation(
             }
         }
     }
-    
+
     NavHost(
         navController = navController,
         startDestination = startDestination
@@ -103,7 +103,7 @@ fun AppNavigation(
                 }}
             )
         }
-        
+
         // 注册屏幕
         composable(AppRoutes.REGISTER) {
             RegisterScreen(
@@ -111,11 +111,11 @@ fun AppNavigation(
                 onLoginClick = { navController.navigate(AppRoutes.LOGIN) }
             )
         }
-        
+
         // 首页
         composable(AppRoutes.HOME) {
             HomeScreen(
-                onItemClick = { postId -> 
+                onItemClick = { postId ->
                     navController.navigate(AppRoutes.POST_DETAIL.replace("{postId}", postId.toString()))
                 },
                 onPublishClick = navigateToMyPosts,
@@ -128,7 +128,7 @@ fun AppNavigation(
                 navController = navController
             )
         }
-        
+
         // 我的帖子页面
         composable(AppRoutes.MY_POSTS) {
             MyPostsScreen(
@@ -143,11 +143,11 @@ fun AppNavigation(
                 onMessageClick = { navController.navigate(AppRoutes.MESSAGE) },
                 onProfileClick = { navController.navigate(AppRoutes.PROFILE) },
                 onTailListClick = navigateToTailList,
-                onItemClick = { post -> 
+                onItemClick = { post ->
                     navController.navigate(AppRoutes.POST_DETAIL.replace("{postId}", post.id.toString()))
                 },
                 // 只有点击"发布新信息"按钮才导航到发布页面
-                onPublishNewClick = { 
+                onPublishNewClick = {
                     navController.navigate(AppRoutes.PUBLISH)
                 },
                 // 重新发布 - 导航到编辑界面
@@ -156,12 +156,12 @@ fun AppNavigation(
                 }
             )
         }
-        
+
         // 发布页面
         composable(AppRoutes.PUBLISH) {
             PublishScreen(
                 onBackClick = { navController.popBackStack() },
-                onHomeClick = { 
+                onHomeClick = {
                     navController.navigate(AppRoutes.HOME) {
                         popUpTo(AppRoutes.HOME) { inclusive = true }
                     }
@@ -171,7 +171,7 @@ fun AppNavigation(
                 navController = navController
             )
         }
-        
+
         // 发布节点选择页面
         composable(AppRoutes.PUBLISH_NODE_SELECTOR) {
             PublishNodeSelectorScreen(
@@ -179,7 +179,7 @@ fun AppNavigation(
                 onBackClick = { navController.popBackStack() }
             )
         }
-        
+
         // 消息页面
         composable(AppRoutes.MESSAGE) {
             MessageScreen(
@@ -190,14 +190,14 @@ fun AppNavigation(
                 onProfileClick = { navController.navigate(AppRoutes.PROFILE) }
             )
         }
-        
+
         // 订阅设置页面
         composable(AppRoutes.SUBSCRIBE_SETTING) {
             SubscribeSettingScreen(
                 onBackClick = { navController.popBackStack() }
             )
         }
-        
+
         // 个人主页
         composable(AppRoutes.PROFILE) {
             ProfileScreen(
@@ -210,7 +210,7 @@ fun AppNavigation(
                 onProfileEditClick = { navController.navigate(AppRoutes.PROFILE_EDIT) },
                 onVerificationClick = { navController.navigate(AppRoutes.VERIFICATION) },
                 onBusinessCertClick = { navController.navigate(AppRoutes.COMPANY_BINDING) },
-                onHomeClick = { 
+                onHomeClick = {
                     navController.navigate(AppRoutes.HOME) {
                         popUpTo(AppRoutes.HOME) { inclusive = true }
                     }
@@ -225,20 +225,20 @@ fun AppNavigation(
         composable(AppRoutes.PROFILE_EDIT) {
             ProfileEditScreen(
                 onBackClick = { navController.popBackStack() },
-                onSaveClick = { 
+                onSaveClick = {
                     // Save profile changes
                     // You could add logic to update user profile data here
-                    navController.popBackStack() 
+                    navController.popBackStack()
                 },
-                onBindCompanyClick = { 
-                    navController.navigate(AppRoutes.COMPANY_BINDING) 
+                onBindCompanyClick = {
+                    navController.navigate(AppRoutes.COMPANY_BINDING)
                 },
                 onVerificationClick = {
                     navController.navigate(AppRoutes.VERIFICATION)
                 }
             )
         }
-        
+
         // 企业绑定页面
         composable(AppRoutes.COMPANY_BINDING) {
             CompanyBindingScreen(
@@ -253,7 +253,7 @@ fun AppNavigation(
                 }
             )
         }
-        
+
         // 企业注册页面
         composable(AppRoutes.COMPANY_REGISTER) {
             CompanyRegisterScreen(
@@ -268,7 +268,7 @@ fun AppNavigation(
                 }
             )
         }
-        
+
         // 实名认证页面
         composable(AppRoutes.VERIFICATION) {
             VerificationScreen(
@@ -279,7 +279,7 @@ fun AppNavigation(
                 }
             )
         }
-        
+
         // 信息详情页面
         composable(
             route = AppRoutes.POST_DETAIL,
@@ -318,7 +318,7 @@ fun AppNavigation(
             PostEditScreen(
                 postId = postId,
                 onBackClick = { navController.popBackStack() },
-                onSaveSuccess = { 
+                onSaveSuccess = {
                     // 保存成功后返回到我的帖子页面
                     navController.navigate(AppRoutes.MY_POSTS) {
                         popUpTo(AppRoutes.POST_EDIT) { inclusive = true }
@@ -336,11 +336,11 @@ fun AppNavigation(
             CompanyDetailScreen(
                 companyId = companyId,
                 onBackClick = { navController.popBackStack() },
-                onChatClick = { 
+                onChatClick = {
                     // 根据公司ID选择合适的会话ID
                     val sessionId = when(companyId) {
                         "上海旅行社" -> "1"
-                        "彩云旅游社" -> "3" 
+                        "彩云旅游社" -> "3"
                         else -> companyId ?: "1"
                     }
                     navController.navigate(
@@ -362,7 +362,7 @@ fun AppNavigation(
             PersonDetailScreen(
                 personId = personId,
                 onBackClick = { navController.popBackStack() },
-                onChatClick = { 
+                onChatClick = {
                     navController.navigate(
                         AppRoutes.CHAT_ROOM
                             .replace("{sessionId}", "2")  // 使用曾圆圆的会话ID
@@ -388,7 +388,7 @@ fun AppNavigation(
             val sessionId = backStackEntry.arguments?.getString("sessionId") ?: ""
             val targetName = backStackEntry.arguments?.getString("targetName") ?: ""
             val targetType = backStackEntry.arguments?.getString("targetType") ?: "company"
-            
+
             ChatRoomScreen(
                 sessionId = sessionId,
                 targetName = targetName,
@@ -401,7 +401,7 @@ fun AppNavigation(
         composable(AppRoutes.MY_FAVORITES) {
             MyFavoritesScreen(
                 onBackClick = { navController.popBackStack() },
-                onItemClick = { postId -> 
+                onItemClick = { postId ->
                     navController.navigate(AppRoutes.POST_DETAIL.replace("{postId}", postId))
                 }
             )
@@ -410,10 +410,10 @@ fun AppNavigation(
         // 尾单页面
         composable(AppRoutes.TAIL_LIST) {
             TailListScreen(
-                onItemClick = { postId -> 
+                onItemClick = { postId ->
                     navController.navigate(AppRoutes.POST_DETAIL.replace("{postId}", postId.toString()))
                 },
-                onHomeClick = { 
+                onHomeClick = {
                     navController.navigate(AppRoutes.HOME) {
                         popUpTo(AppRoutes.HOME) { inclusive = true }
                     }

@@ -26,23 +26,6 @@ import androidx.navigation.NavController
 import com.example.travalms.ui.theme.PrimaryColor
 import com.example.travalms.ui.theme.BackgroundColor
 
-// 尾单数据模型
-data class TailOrder(
-    val id: Int,
-    val title: String,
-    val company: String,
-    val companyId: String,
-    val contactPerson: String,
-    val contactPersonId: String,
-    val contactPhone: String,
-    val price: String,
-    val remainingDays: String,
-    val remainingHours: String,
-    val content: List<String>,  // 行程内容列表
-    val summary: String,  // 新增行程概要字段
-    val isFavorite: Boolean = false
-)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TailListScreen(
@@ -62,15 +45,15 @@ fun TailListScreen(
     var tailOrders by remember { mutableStateOf(
         listOf(
             TailOrder(
-                id = 1, 
-                title = "上海外国语大学体验+迪士尼6日夏令营", 
-                company = "上海旅行社", 
+                id = 1,
+                title = "上海外国语大学体验+迪士尼6日夏令营",
+                company = "上海旅行社",
                 companyId = "sh_travel",
                 contactPerson = "张伟",
                 contactPersonId = "1001",
                 contactPhone = "13912345678",
-                price = "¥5980", 
-                remainingDays = "3", 
+                price = "¥5980",
+                remainingDays = "3",
                 remainingHours = "6:30",
                 content = listOf(
                     "在上海外国语大学浸入式英语环境中学习英语，培养孩子良好的英语语感及口语运用能力。",
@@ -81,15 +64,15 @@ fun TailListScreen(
                 isFavorite = true
             ),
             TailOrder(
-                id = 2, 
-                title = "北京清华北大文化探访3日游", 
-                company = "北京导游协会", 
+                id = 2,
+                title = "北京清华北大文化探访3日游",
+                company = "北京导游协会",
                 companyId = "bj_guide",
                 contactPerson = "李明",
                 contactPersonId = "1002",
                 contactPhone = "13887654321",
-                price = "¥2380", 
-                remainingDays = "2", 
+                price = "¥2380",
+                remainingDays = "2",
                 remainingHours = "12:45",
                 content = listOf(
                     "参访中国顶尖学府清华大学和北京大学，感受百年学府的文化底蕴和学术氛围。",
@@ -100,15 +83,15 @@ fun TailListScreen(
                 isFavorite = false
             ),
             TailOrder(
-                id = 3, 
-                title = "杭州西湖+乌镇4日文化之旅", 
-                company = "杭州旅游公司", 
+                id = 3,
+                title = "杭州西湖+乌镇4日文化之旅",
+                company = "杭州旅游公司",
                 companyId = "hz_travel",
                 contactPerson = "王芳",
                 contactPersonId = "1003",
                 contactPhone = "13566778899",
-                price = "¥3280", 
-                remainingDays = "1", 
+                price = "¥3280",
+                remainingDays = "1",
                 remainingHours = "8:20",
                 content = listOf(
                     "游览西湖十景，欣赏上有天堂，下有苏杭的美景，体验杭州的自然与人文之美。",
@@ -119,15 +102,15 @@ fun TailListScreen(
                 isFavorite = true
             ),
             TailOrder(
-                id = 4, 
-                title = "厦门鼓浪屿海景2日休闲游", 
+                id = 4,
+                title = "厦门鼓浪屿海景2日休闲游",
                 company = "厦门旅行社",
                 companyId = "xm_travel",
                 contactPerson = "陈小玲",
                 contactPersonId = "1004",
-                contactPhone = "13277889900", 
-                price = "¥1680", 
-                remainingDays = "4", 
+                contactPhone = "13277889900",
+                price = "¥1680",
+                remainingDays = "4",
                 remainingHours = "15:10",
                 content = listOf(
                     "漫步鼓浪屿，探访万国建筑博物馆，聆听钢琴之岛的动人旋律。",
@@ -138,15 +121,15 @@ fun TailListScreen(
                 isFavorite = false
             ),
             TailOrder(
-                id = 5, 
-                title = "成都熊猫基地+都江堰3日游", 
+                id = 5,
+                title = "成都熊猫基地+都江堰3日游",
                 company = "四川旅游集团",
                 companyId = "sc_travel",
                 contactPerson = "赵刚",
                 contactPersonId = "1005",
                 contactPhone = "13588990011",
-                price = "¥2580", 
-                remainingDays = "2", 
+                price = "¥2580",
+                remainingDays = "2",
                 remainingHours = "10:30",
                 content = listOf(
                     "近距离观赏国宝大熊猫，了解熊猫保护与繁育知识。",
@@ -157,15 +140,15 @@ fun TailListScreen(
                 isFavorite = true
             ),
             TailOrder(
-                id = 6, 
-                title = "青岛海滨度假4日游", 
+                id = 6,
+                title = "青岛海滨度假4日游",
                 company = "山东旅行社",
                 companyId = "sd_travel",
                 contactPerson = "孙媛",
                 contactPersonId = "1006",
                 contactPhone = "13644556677",
-                price = "¥2980", 
-                remainingDays = "5", 
+                price = "¥2980",
+                remainingDays = "5",
                 remainingHours = "9:15",
                 content = listOf(
                     "漫步青岛栈桥和八大关，欣赏德国风情建筑与碧海蓝天。",
@@ -176,15 +159,15 @@ fun TailListScreen(
                 isFavorite = false
             ),
             TailOrder(
-                id = 7, 
-                title = "云南丽江大理5日民族风情游", 
-                company = "云南旅游公司", 
+                id = 7,
+                title = "云南丽江大理5日民族风情游",
+                company = "云南旅游公司",
                 companyId = "yn_travel",
                 contactPerson = "王小明",
                 contactPersonId = "1007",
                 contactPhone = "13712345678",
-                price = "¥4580", 
-                remainingDays = "3", 
+                price = "¥4580",
+                remainingDays = "3",
                 remainingHours = "14:25",
                 content = listOf(
                     "探访丽江古城和大理古城，感受纳西族与白族文化的独特魅力。",
@@ -194,15 +177,15 @@ fun TailListScreen(
                 summary = "行程特色：1.探访丽江古城和大理古城，感受纳西族与白族文化的独特魅力。\n2.游览洱海和玉龙雪山，欣赏云南多样自然风光。\n3.体验当地民族特色活动，品尝云南特色美食。"
             ),
             TailOrder(
-                id = 8, 
-                title = "西安兵马俑+华山4日历史探索", 
-                company = "陕西文化旅游", 
+                id = 8,
+                title = "西安兵马俑+华山4日历史探索",
+                company = "陕西文化旅游",
                 companyId = "sx_travel",
                 contactPerson = "李小红",
                 contactPersonId = "1008",
                 contactPhone = "13987654321",
-                price = "¥3180", 
-                remainingDays = "2", 
+                price = "¥3180",
+                remainingDays = "2",
                 remainingHours = "11:40",
                 content = listOf(
                     "探访世界第八大奇迹兵马俑，领略秦始皇陵的宏伟气势。",
@@ -216,7 +199,7 @@ fun TailListScreen(
 
     // 添加状态跟踪当前选择的标签
     var selectedTab by remember { mutableStateOf(0) }
-    
+
     // 根据selectedTab筛选要显示的尾单
     val displayedTailOrders = if (selectedTab == 0) {
         // 显示所有尾单
@@ -316,7 +299,7 @@ fun TailListScreen(
                     )
                 )
             }
-            
+
             // 标签选择器
             Row(
                 modifier = Modifier
@@ -346,7 +329,7 @@ fun TailListScreen(
                             color = if (selectedTab == 0) Color.Black else Color.Gray
                         )
                     }
-                    
+
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
@@ -377,14 +360,14 @@ fun TailListScreen(
                         onContactClick = { onContactClick(tailOrder.contactPhone) },
                         onPersonClick = { onPersonClick(tailOrder.contactPersonId) },
                         onReportItem = { reason -> onReportItem(tailOrder.id, reason) },
-                        onDeleteItem = { 
+                        onDeleteItem = {
                             tailOrders = tailOrders.filter { it.id != tailOrder.id }
-                            onDeleteItem(tailOrder.id) 
+                            onDeleteItem(tailOrder.id)
                         },
                         onFavoriteClick = { isFavorite ->
                             // 更新尾单的收藏状态
-                            tailOrders = tailOrders.map { 
-                                if (it.id == tailOrder.id) it.copy(isFavorite = isFavorite) else it 
+                            tailOrders = tailOrders.map {
+                                if (it.id == tailOrder.id) it.copy(isFavorite = isFavorite) else it
                             }
                         }
                     )
@@ -410,7 +393,7 @@ fun TailOrderItem(
     var showMenu by remember { mutableStateOf(false) }
     var showReportDialog by remember { mutableStateOf(false) }
     var reportReason by remember { mutableStateOf("") }
-    
+
     // 举报对话框
     if (showReportDialog) {
         Dialog(
@@ -437,7 +420,7 @@ fun TailOrderItem(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
-                    
+
                     OutlinedTextField(
                         value = reportReason,
                         onValueChange = { reportReason = it },
@@ -449,9 +432,9 @@ fun TailOrderItem(
                             focusedBorderColor = PrimaryColor
                         )
                     )
-                    
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    
+
                     Button(
                         onClick = {
                             onReportItem(reportReason)
@@ -472,7 +455,7 @@ fun TailOrderItem(
             }
         }
     }
-    
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -525,9 +508,9 @@ fun TailOrderItem(
                                     )
                                 }
                             }
-                            
+
                             Divider()
-                            
+
                             TextButton(
                                 onClick = {
                                     onDeleteItem()
@@ -556,9 +539,9 @@ fun TailOrderItem(
                                     )
                                 }
                             }
-                            
+
                             Divider()
-                            
+
                             TextButton(
                                 onClick = { showMenu = false },
                                 modifier = Modifier.fillMaxWidth(),
@@ -588,7 +571,7 @@ fun TailOrderItem(
                     }
                 )
             }
-            
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -607,9 +590,9 @@ fun TailOrderItem(
                         fontSize = 16.sp,
                         modifier = Modifier.weight(1f)
                     )
-                    
+
                     IconButton(
-                        onClick = { 
+                        onClick = {
                             isFavorite = !isFavorite
                             onFavoriteClick(isFavorite)
                         },
@@ -622,14 +605,14 @@ fun TailOrderItem(
                         )
                     }
                 }
-                
+
                 // 分隔线
                 Divider(
                     color = Color(0xFFE0E0E0),
                     thickness = 1.dp,
                     modifier = Modifier.padding(vertical = 8.dp)
                 )
-                
+
                 // 行程内容
                 Text(
                     text = "行程内容：",
@@ -637,9 +620,9 @@ fun TailOrderItem(
                     fontSize = 15.sp,
                     color = Color.DarkGray
                 )
-                
+
                 Spacer(modifier = Modifier.height(4.dp))
-                
+
                 // 显示行程内容，以编号列表形式展示
                 tailOrder.content.forEachIndexed { index, content ->
                     Row(
@@ -654,7 +637,7 @@ fun TailOrderItem(
                             color = Color.DarkGray,
                             modifier = Modifier.width(20.dp)
                         )
-                        
+
                         Text(
                             text = content,
                             fontSize = 14.sp,
@@ -663,7 +646,7 @@ fun TailOrderItem(
                         )
                     }
                 }
-                
+
                 // 有效期和价格
                 Row(
                     modifier = Modifier
@@ -678,21 +661,21 @@ fun TailOrderItem(
                         color = Color(0xFFE53935),
                         fontWeight = FontWeight.Bold
                     )
-                    
+
                     Text(
                         text = "有效期: ${tailOrder.remainingDays}天${tailOrder.remainingHours}",
                         fontSize = 14.sp,
                         color = Color.Gray
                     )
                 }
-                
+
                 // 分隔线
                 Divider(
                     color = Color(0xFFE0E0E0),
                     thickness = 1.dp,
                     modifier = Modifier.padding(vertical = 8.dp)
                 )
-                
+
                 // 底部信息区域 - 公司信息和联系人头像
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -710,9 +693,9 @@ fun TailOrderItem(
                             tint = PrimaryColor,
                             modifier = Modifier.size(16.dp)
                         )
-                        
+
                         Spacer(modifier = Modifier.width(8.dp))
-                        
+
                         Text(
                             text = tailOrder.company,
                             color = PrimaryColor,
@@ -720,7 +703,7 @@ fun TailOrderItem(
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -741,9 +724,9 @@ fun TailOrderItem(
                                 modifier = Modifier.size(18.dp)
                             )
                         }
-                        
+
                         Spacer(modifier = Modifier.width(12.dp))
-                        
+
                         // 电话图标（可点击拨打电话）
                         IconButton(
                             onClick = onContactClick,

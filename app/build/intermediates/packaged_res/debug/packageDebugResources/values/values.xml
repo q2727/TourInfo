@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="ic_launcher_background">#FFFFFF</color>
-    <string name="app_name">TravalMS</string>
-    <style name="Theme.TravalMS" parent="android:Theme.Material.Light.NoActionBar"/>
-</resources>
