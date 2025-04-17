@@ -25,11 +25,17 @@ import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import com.example.travalms.ui.theme.PrimaryColor
 import com.example.travalms.ui.theme.BackgroundColor
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.travalms.ui.viewmodels.TailListViewModel
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
 fun TailListScreen(
-    onItemClick: (Int) -> Unit,
+    onTailOrderClick: (TailOrder) -> Unit,
     onHomeClick: () -> Unit,
     onPublishClick: () -> Unit,
     onMessageClick: () -> Unit,
@@ -39,163 +45,11 @@ fun TailListScreen(
     onPersonClick: (String) -> Unit,
     onReportItem: (Int, String) -> Unit,
     onDeleteItem: (Int) -> Unit,
-    navController: NavController
+    navController: NavController,
+    viewModel: TailListViewModel = viewModel(factory = TailListViewModel.Factory())
 ) {
-    // 模拟尾单数据
-    var tailOrders by remember { mutableStateOf(
-        listOf(
-            TailOrder(
-                id = 1,
-                title = "上海外国语大学体验+迪士尼6日夏令营",
-                company = "上海旅行社",
-                companyId = "sh_travel",
-                contactPerson = "张伟",
-                contactPersonId = "1001",
-                contactPhone = "13912345678",
-                price = "¥5980",
-                remainingDays = "3",
-                remainingHours = "6:30",
-                content = listOf(
-                    "在上海外国语大学浸入式英语环境中学习英语，培养孩子良好的英语语感及口语运用能力。",
-                    "上海滩景点畅游、博物馆、知名大学参访，展开真正的上海文化寻根游学之旅。",
-                    "上海迪士尼乐园畅游，学习游乐两不误。"
-                ),
-                summary = "行程特色：1.在上海外国语大学浸入式英语环境中学习英语，培养孩子良好的英语语感及口语运用能力。\n2.上海滩景点畅游、博物馆、知名大学参访，展开真正的上海文化寻根游学之旅。\n3.上海迪士尼乐园畅游，学习游乐两不误。",
-                isFavorite = true
-            ),
-            TailOrder(
-                id = 2,
-                title = "北京清华北大文化探访3日游",
-                company = "北京导游协会",
-                companyId = "bj_guide",
-                contactPerson = "李明",
-                contactPersonId = "1002",
-                contactPhone = "13887654321",
-                price = "¥2380",
-                remainingDays = "2",
-                remainingHours = "12:45",
-                content = listOf(
-                    "参访中国顶尖学府清华大学和北京大学，感受百年学府的文化底蕴和学术氛围。",
-                    "游览北京故宫、长城等著名景点，深入了解中国传统文化与历史。",
-                    "特别安排与在校学生交流互动环节，开拓视野。"
-                ),
-                summary = "行程特色：1.参访中国顶尖学府清华大学和北京大学，感受百年学府的文化底蕴和学术氛围。\n2.游览北京故宫、长城等著名景点，深入了解中国传统文化与历史。\n3.特别安排与在校学生交流互动环节，开拓视野。",
-                isFavorite = false
-            ),
-            TailOrder(
-                id = 3,
-                title = "杭州西湖+乌镇4日文化之旅",
-                company = "杭州旅游公司",
-                companyId = "hz_travel",
-                contactPerson = "王芳",
-                contactPersonId = "1003",
-                contactPhone = "13566778899",
-                price = "¥3280",
-                remainingDays = "1",
-                remainingHours = "8:20",
-                content = listOf(
-                    "游览西湖十景，欣赏上有天堂，下有苏杭的美景，体验杭州的自然与人文之美。",
-                    "探访千年水乡乌镇，感受江南水乡的古朴风情与悠久历史。",
-                    "品尝地道杭帮菜，体验当地茶文化，深度感受江南水乡生活。"
-                ),
-                summary = "行程特色：1.游览西湖十景，欣赏上有天堂，下有苏杭的美景，体验杭州的自然与人文之美。\n2.探访千年水乡乌镇，感受江南水乡的古朴风情与悠久历史。\n3.品尝地道杭帮菜，体验当地茶文化，深度感受江南水乡生活。",
-                isFavorite = true
-            ),
-            TailOrder(
-                id = 4,
-                title = "厦门鼓浪屿海景2日休闲游",
-                company = "厦门旅行社",
-                companyId = "xm_travel",
-                contactPerson = "陈小玲",
-                contactPersonId = "1004",
-                contactPhone = "13277889900",
-                price = "¥1680",
-                remainingDays = "4",
-                remainingHours = "15:10",
-                content = listOf(
-                    "漫步鼓浪屿，探访万国建筑博物馆，聆听钢琴之岛的动人旋律。",
-                    "游览厦门大学，感受中国最美大学校园的独特魅力。",
-                    "品尝正宗闽南美食，尽享海岛休闲时光。"
-                ),
-                summary = "行程特色：1.漫步鼓浪屿，探访万国建筑博物馆，聆听钢琴之岛的动人旋律。\n2.游览厦门大学，感受中国最美大学校园的独特魅力。\n3.品尝正宗闽南美食，尽享海岛休闲时光。",
-                isFavorite = false
-            ),
-            TailOrder(
-                id = 5,
-                title = "成都熊猫基地+都江堰3日游",
-                company = "四川旅游集团",
-                companyId = "sc_travel",
-                contactPerson = "赵刚",
-                contactPersonId = "1005",
-                contactPhone = "13588990011",
-                price = "¥2580",
-                remainingDays = "2",
-                remainingHours = "10:30",
-                content = listOf(
-                    "近距离观赏国宝大熊猫，了解熊猫保护与繁育知识。",
-                    "参观都江堰水利工程，领略古代科技智慧的瑰宝。",
-                    "品尝成都地道川菜，感受天府之国的美食文化。"
-                ),
-                summary = "行程特色：1.近距离观赏国宝大熊猫，了解熊猫保护与繁育知识。\n2.参观都江堰水利工程，领略古代科技智慧的瑰宝。\n3.品尝成都地道川菜，感受天府之国的美食文化。",
-                isFavorite = true
-            ),
-            TailOrder(
-                id = 6,
-                title = "青岛海滨度假4日游",
-                company = "山东旅行社",
-                companyId = "sd_travel",
-                contactPerson = "孙媛",
-                contactPersonId = "1006",
-                contactPhone = "13644556677",
-                price = "¥2980",
-                remainingDays = "5",
-                remainingHours = "9:15",
-                content = listOf(
-                    "漫步青岛栈桥和八大关，欣赏德国风情建筑与碧海蓝天。",
-                    "参观青岛啤酒博物馆，了解百年啤酒历史与文化。",
-                    "品尝新鲜海鲜，尽享滨海城市的休闲生活。"
-                ),
-                summary = "行程特色：1.漫步青岛栈桥和八大关，欣赏德国风情建筑与碧海蓝天。\n2.参观青岛啤酒博物馆，了解百年啤酒历史与文化。\n3.品尝新鲜海鲜，尽享滨海城市的休闲生活。",
-                isFavorite = false
-            ),
-            TailOrder(
-                id = 7,
-                title = "云南丽江大理5日民族风情游",
-                company = "云南旅游公司",
-                companyId = "yn_travel",
-                contactPerson = "王小明",
-                contactPersonId = "1007",
-                contactPhone = "13712345678",
-                price = "¥4580",
-                remainingDays = "3",
-                remainingHours = "14:25",
-                content = listOf(
-                    "探访丽江古城和大理古城，感受纳西族与白族文化的独特魅力。",
-                    "游览洱海和玉龙雪山，欣赏云南多样自然风光。",
-                    "体验当地民族特色活动，品尝云南特色美食。"
-                ),
-                summary = "行程特色：1.探访丽江古城和大理古城，感受纳西族与白族文化的独特魅力。\n2.游览洱海和玉龙雪山，欣赏云南多样自然风光。\n3.体验当地民族特色活动，品尝云南特色美食。"
-            ),
-            TailOrder(
-                id = 8,
-                title = "西安兵马俑+华山4日历史探索",
-                company = "陕西文化旅游",
-                companyId = "sx_travel",
-                contactPerson = "李小红",
-                contactPersonId = "1008",
-                contactPhone = "13987654321",
-                price = "¥3180",
-                remainingDays = "2",
-                remainingHours = "11:40",
-                content = listOf(
-                    "探访世界第八大奇迹兵马俑，领略秦始皇陵的宏伟气势。",
-                    "登临华山，体验中国五岳之一的险峻壮美。",
-                    "品尝陕西特色小吃，漫步回民街，感受古都文化。"
-                ),
-                summary = "行程特色：1.探访世界第八大奇迹兵马俑，领略秦始皇陵的宏伟气势。\n2.登临华山，体验中国五岳之一的险峻壮美。\n3.品尝陕西特色小吃，漫步回民街，感受古都文化。"
-            )
-        )
-    )}
+    val state by viewModel.state.collectAsState()
+    val refreshState = rememberPullRefreshState(state.isLoading, { viewModel.refreshTailLists() })
 
     // 添加状态跟踪当前选择的标签
     var selectedTab by remember { mutableStateOf(0) }
@@ -203,10 +57,10 @@ fun TailListScreen(
     // 根据selectedTab筛选要显示的尾单
     val displayedTailOrders = if (selectedTab == 0) {
         // 显示所有尾单
-        tailOrders
+        state.tailOrders
     } else {
         // 只显示已收藏的尾单
-        tailOrders.filter { it.isFavorite }
+        state.tailOrders.filter { it.isFavorite }
     }
 
     Scaffold(
@@ -271,108 +125,143 @@ fun TailListScreen(
             }
         }
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(BackgroundColor)
+                .pullRefresh(refreshState)
         ) {
-            // 搜索框
-            Row(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxSize()
+                    .background(BackgroundColor)
             ) {
-                OutlinedTextField(
-                    value = "",
-                    onValueChange = { },
+                // 搜索框
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(24.dp)),
-                    placeholder = { Text("搜索尾单") },
-                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "搜索") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedBorderColor = Color.LightGray,
-                        unfocusedContainerColor = Color.White
-                    )
-                )
-            }
-
-            // 标签选择器
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-            ) {
-                TabRow(
-                    selectedTabIndex = selectedTab,
-                    modifier = Modifier.fillMaxWidth(),
-                    containerColor = Color(0xFFF5F5F5),
-                    contentColor = PrimaryColor,
-                    indicator = { tabPositions ->
-                        Box {}  // 不显示指示器
-                    },
-                    divider = { }  // 不显示分隔线
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
+                    OutlinedTextField(
+                        value = "",
+                        onValueChange = { },
                         modifier = Modifier
-                            .weight(1f)
-                            .background(if (selectedTab == 0) Color.White else Color(0xFFF5F5F5))
-                    ) {
-                        Text(
-                            text = "全部信息",
-                            modifier = Modifier.padding(vertical = 12.dp),
-                            color = if (selectedTab == 0) Color.Black else Color.Gray
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp)),
+                        placeholder = { Text("搜索尾单") },
+                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "搜索") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedBorderColor = Color.LightGray,
+                            unfocusedContainerColor = Color.White
                         )
-                    }
-
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        modifier = Modifier
-                            .weight(1f)
-                            .background(if (selectedTab == 1) Color.White else Color(0xFFF5F5F5))
-                    ) {
-                        Text(
-                            text = "我的收藏",
-                            modifier = Modifier.padding(vertical = 12.dp),
-                            color = if (selectedTab == 1) Color.Black else Color.Gray
-                        )
-                    }
-                }
-            }
-
-            // 尾单列表 - 使用过滤后的列表
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(displayedTailOrders) { tailOrder ->
-                    TailOrderItem(
-                        tailOrder = tailOrder,
-                        onClick = { onItemClick(tailOrder.id) },
-                        onCompanyClick = { onCompanyClick(tailOrder.companyId) },
-                        onContactClick = { onContactClick(tailOrder.contactPhone) },
-                        onPersonClick = { onPersonClick(tailOrder.contactPersonId) },
-                        onReportItem = { reason -> onReportItem(tailOrder.id, reason) },
-                        onDeleteItem = {
-                            tailOrders = tailOrders.filter { it.id != tailOrder.id }
-                            onDeleteItem(tailOrder.id)
-                        },
-                        onFavoriteClick = { isFavorite ->
-                            // 更新尾单的收藏状态
-                            tailOrders = tailOrders.map {
-                                if (it.id == tailOrder.id) it.copy(isFavorite = isFavorite) else it
-                            }
-                        }
                     )
                 }
+
+                // 标签选择器
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                ) {
+                    TabRow(
+                        selectedTabIndex = selectedTab,
+                        modifier = Modifier.fillMaxWidth(),
+                        containerColor = Color(0xFFF5F5F5),
+                        contentColor = PrimaryColor,
+                        indicator = { tabPositions ->
+                            Box {}  // 不显示指示器
+                        },
+                        divider = { }  // 不显示分隔线
+                    ) {
+                        Tab(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(if (selectedTab == 0) Color.White else Color(0xFFF5F5F5))
+                        ) {
+                            Text(
+                                text = "全部信息",
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                color = if (selectedTab == 0) Color.Black else Color.Gray
+                            )
+                        }
+
+                        Tab(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(if (selectedTab == 1) Color.White else Color(0xFFF5F5F5))
+                        ) {
+                            Text(
+                                text = "我的收藏",
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                color = if (selectedTab == 1) Color.Black else Color.Gray
+                            )
+                        }
+                    }
+                }
+
+                if (displayedTailOrders.isEmpty() && !state.isLoading) {
+                    // 显示空状态
+                    Box(
+                        modifier = Modifier.fillMaxSize().weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("没有可用的尾单", style = MaterialTheme.typography.bodyLarge)
+                    }
+                } else {
+                    // 尾单列表 - 使用过滤后的列表
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize().weight(1f),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(displayedTailOrders) { tailOrder ->
+                            TailOrderItem(
+                                tailOrder = tailOrder,
+                                onClick = { onTailOrderClick(tailOrder) },
+                                onCompanyClick = { onCompanyClick(tailOrder.companyId) },
+                                onContactClick = { onContactClick(tailOrder.contactPhone) },
+                                onPersonClick = { onPersonClick(tailOrder.contactPersonId) },
+                                onReportItem = { reason -> onReportItem(tailOrder.id, reason) },
+                                onDeleteItem = {
+                                    onDeleteItem(tailOrder.id)
+                                },
+                                onFavoriteClick = { isFavorite ->
+                                    viewModel.toggleFavorite(tailOrder.id)
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                // 显示错误消息
+                state.error?.let { errorMsg ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = errorMsg,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
             }
+            
+            // 显示下拉刷新指示器
+            PullRefreshIndicator(
+                refreshing = state.isLoading,
+                state = refreshState,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
     }
 }
@@ -688,7 +577,7 @@ fun TailOrderItem(
                         modifier = Modifier.clickable(onClick = onCompanyClick)
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Home,
+                            imageVector = Icons.Filled.AccountCircle,
                             contentDescription = "公司",
                             tint = PrimaryColor,
                             modifier = Modifier.size(16.dp)
@@ -718,7 +607,7 @@ fun TailOrderItem(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Person,
+                                imageVector = Icons.Filled.MailOutline,
                                 contentDescription = "联系人头像",
                                 tint = PrimaryColor,
                                 modifier = Modifier.size(18.dp)

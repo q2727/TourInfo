@@ -257,7 +257,7 @@ fun LoginScreen(
             
             // 版权信息
             Text(
-                text = "© 2023 TravalIP 旅游信息交换平台",
+                text = "© 2025 TravalIP 旅游信息交换平台",
                 fontSize = 12.sp,
                 color = Color.Gray,
                 textAlign = TextAlign.Center,

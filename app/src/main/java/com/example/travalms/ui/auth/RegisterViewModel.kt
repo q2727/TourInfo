@@ -28,7 +28,19 @@ class RegisterViewModel : ViewModel() {
     /**
      * 执行注册操作
      */
-    fun performRegister(username: String, password: String, nickname: String?, email: String?) {
+    fun performRegister(
+        username: String, 
+        password: String, 
+        nickname: String?, 
+        email: String?,
+        companyName: String,
+        mobileNumber: String,
+        province: String,
+        city: String,
+        businessLicensePath: String? = null,
+        idCardFrontPath: String? = null,
+        idCardBackPath: String? = null
+    ) {
         // 防止重复注册请求
         if (_uiState.value == RegisterUiState.Loading) return
 
@@ -40,9 +52,34 @@ class RegisterViewModel : ViewModel() {
                  _uiState.value = RegisterUiState.Error("用户名和密码不能为空")
                  return@launch
             }
-            // 可以在这里添加密码强度、邮箱格式等验证
+            if (companyName.isBlank()) {
+                _uiState.value = RegisterUiState.Error("公司名称不能为空")
+                return@launch
+            }
+            if (mobileNumber.isBlank()) {
+                _uiState.value = RegisterUiState.Error("手机号不能为空")
+                return@launch
+            }
+            if (province.isBlank() || city.isBlank()) {
+                _uiState.value = RegisterUiState.Error("所在地不能为空")
+                return@launch
+            }
+            // 可以在这里添加更多验证逻辑
 
-            val result = xmppManager.register(username, password, nickname, email)
+            val result = xmppManager.register(
+                username = username, 
+                password = password, 
+                nickname = nickname, 
+                email = email,
+                companyName = companyName,
+                mobileNumber = mobileNumber,
+                province = province,
+                city = city,
+                businessLicensePath = businessLicensePath,
+                idCardFrontPath = idCardFrontPath,
+                idCardBackPath = idCardBackPath
+            )
+            
             if (result.isSuccess) {
                 _uiState.value = RegisterUiState.Success
             } else {

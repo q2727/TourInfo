@@ -36,7 +36,9 @@ import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
-
+import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
+import com.example.travalms.data.remote.XMPPManager
 import androidx.navigation.NavController
 import com.example.travalms.ui.navigation.AppRoutes
 
@@ -53,6 +55,24 @@ fun ProfileScreen(
     onTailListClick: () -> Unit,
     navController: NavController
 ) {
+    var nickname by remember { mutableStateOf<String?>("加载中...") }
+    var username by remember { mutableStateOf<String?>("用户") }
+
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        scope.launch {
+            val result = XMPPManager.getInstance().getUserProfile()
+            if (result.isSuccess) {
+                val profileData = result.getOrNull()
+                nickname = profileData?.get("name") ?: profileData?.get("username")
+                username = profileData?.get("username") ?: "用户"
+            } else {
+                nickname = "加载失败"
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -147,7 +167,7 @@ fun ProfileScreen(
                     // 用户信息
                     Column {
                         Text(
-                            text = "用户昵称",
+                            text = nickname ?: username ?: "用户",
                             color = Color.White,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold

@@ -19,9 +19,7 @@ import com.example.travalms.ui.screens.MyPostsScreen
 import com.example.travalms.ui.screens.SubscribeSettingScreen
 import com.example.travalms.ui.screens.ProfileScreen
 import com.example.travalms.ui.screens.ProfileEditScreen
-import com.example.travalms.ui.screens.CompanyBindingScreen
 import com.example.travalms.ui.screens.VerificationScreen
-import com.example.travalms.ui.screens.CompanyRegisterScreen
 import com.example.travalms.ui.screens.PostDetailScreen
 import com.example.travalms.ui.screens.PostEditScreen
 import com.example.travalms.ui.screens.CompanyDetailScreen
@@ -225,9 +223,9 @@ fun AppNavigation(
         composable(AppRoutes.PROFILE_EDIT) {
             ProfileEditScreen(
                 onBackClick = { navController.popBackStack() },
-                onSaveClick = {
-                    // Save profile changes
-                    // You could add logic to update user profile data here
+                onSaveClick = { updatedInfo ->
+                    // 处理保存个人资料的操作
+                    // 成功后返回上一页
                     navController.popBackStack()
                 },
                 onBindCompanyClick = {
@@ -236,36 +234,7 @@ fun AppNavigation(
                 onVerificationClick = {
                     navController.navigate(AppRoutes.VERIFICATION)
                 }
-            )
-        }
-
-        // 企业绑定页面
-        composable(AppRoutes.COMPANY_BINDING) {
-            CompanyBindingScreen(
-                onBackClick = { navController.popBackStack() },
-                onCompanySelect = { company ->
-                    // 处理企业选择，这里可以先返回编辑页面
-                    navController.popBackStack()
-                },
-                onRegisterCompany = {
-                    // 企业注册流程，导航到注册页面
-                    navController.navigate(AppRoutes.COMPANY_REGISTER)
-                }
-            )
-        }
-
-        // 企业注册页面
-        composable(AppRoutes.COMPANY_REGISTER) {
-            CompanyRegisterScreen(
-                onBackClick = { navController.popBackStack() },
-                onRegisterSubmit = {
-                    // 处理注册表单提交
-                    // 这里可以添加表单验证和提交逻辑
-                    // 提交后返回到个人中心页面
-                    navController.navigate(AppRoutes.PROFILE) {
-                        popUpTo(AppRoutes.COMPANY_REGISTER) { inclusive = true }
-                    }
-                }
+                // ProfileEditViewModel会通过viewModel()自动注入
             )
         }
 
@@ -410,10 +379,10 @@ fun AppNavigation(
         // 尾单页面
         composable(AppRoutes.TAIL_LIST) {
             TailListScreen(
-                onItemClick = { postId ->
-                    navController.navigate(AppRoutes.POST_DETAIL.replace("{postId}", postId.toString()))
+                onTailOrderClick = { tailOrder -> 
+                    navController.navigate(AppRoutes.POST_DETAIL.replace("{postId}", tailOrder.id.toString()))
                 },
-                onHomeClick = {
+                onHomeClick = { 
                     navController.navigate(AppRoutes.HOME) {
                         popUpTo(AppRoutes.HOME) { inclusive = true }
                     }
