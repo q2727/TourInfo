@@ -2,6 +2,7 @@ package com.example.travalms.ui.message
 
 import android.util.Log
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -86,6 +87,47 @@ fun MessageScreen(
     // 新增：真实好友列表和加载状态
     var realFriendsList by remember { mutableStateOf<List<ContactItem>>(emptyList()) }
     var friendsLoadingState by remember { mutableStateOf<String?>(null) }
+    
+    // 刷新好友在线状态的函数 - 移动到这里，在调用之前定义
+    fun refreshFriendsStatus() {
+        scope.launch {
+            try {
+                val presenceResult = XMPPManager.getInstance().getFriendsPresence()
+                if (presenceResult.isSuccess) {
+                    val statusMap = presenceResult.getOrDefault(emptyMap())
+                    Log.d("MessageScreen", "刷新好友状态: 获取到 ${statusMap.size} 个好友的在线状态")
+                    
+                    // 更新好友列表状态
+                    if (statusMap.isNotEmpty() && realFriendsList.isNotEmpty()) {
+                        realFriendsList = realFriendsList.map { contact ->
+                            if (contact.jid != null && statusMap.containsKey(contact.jid)) {
+                                contact.copy(status = statusMap[contact.jid] ?: contact.status)
+                            } else {
+                                contact
+                            }
+                        }
+                    }
+                } else {
+                    Log.e("MessageScreen", "刷新好友状态失败: ${presenceResult.exceptionOrNull()?.message}")
+                }
+            } catch (e: Exception) {
+                Log.e("MessageScreen", "刷新好友状态异常", e)
+            }
+        }
+    }
+    
+    // 添加周期性刷新在线状态逻辑
+    LaunchedEffect(selectedTab) {
+        // 只有当选择了好友标签页时启动刷新
+        if (selectedTab == 1) {
+            while (isActive) {
+                if (realFriendsList.isNotEmpty()) {
+                    refreshFriendsStatus()
+                }
+                delay(30000) // 每30秒更新一次
+            }
+        }
+    }
 
     // Function to load directory users
     fun loadDirectoryUsers() {
@@ -204,14 +246,31 @@ fun MessageScreen(
                     // 更新好友JID集合用于公司黄页的"已添加"状态
                     friendsJidSet = fetchedFriends.mapNotNull { pair -> pair.first }.toSet()
 
-                    // 转换为ContactItem
+                    // 获取好友在线状态
+                    val presenceResult = XMPPManager.getInstance().getFriendsPresence()
+                    val statusMap = if (presenceResult.isSuccess) {
+                        presenceResult.getOrDefault(emptyMap())
+                    } else {
+                        Log.e("MessageScreen", "获取好友在线状态失败: ${presenceResult.exceptionOrNull()?.message}")
+                        emptyMap()
+                    }
+
+                    // 转换为ContactItem，并更新为真实状态
                     val friendItems = fetchedFriends.mapIndexed { index, pair ->
                         val jid = pair.first
                         val name = pair.second ?: jid?.localpartOrNull?.toString() ?: jid?.toString() ?: "未知用户"
+                        
+                        // 获取此好友的在线状态
+                        val status = if (jid != null && statusMap.containsKey(jid)) {
+                            statusMap[jid] ?: "未知状态"
+                        } else {
+                            "离线" // 默认为离线
+                        }
+
                         ContactItem(
                             id = jid?.hashCode()?.plus(index) ?: index,
                             name = name,
-                            status = "在线", // 默认状态，实际应该从presence信息获取
+                            status = status,
                             jid = jid
                         )
                     }.sortedBy { item -> item.name }
@@ -971,8 +1030,8 @@ fun ContactListItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 头像
-            Box(
-                modifier = Modifier
+        Box(
+            modifier = Modifier
                 .size(50.dp)
                 .clip(CircleShape)
                 .background(Color.LightGray),
@@ -986,6 +1045,25 @@ fun ContactListItem(
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
+            
+            // 状态指示器 - 好友不在公司黄页标签时显示
+            if (!isCompanyTab) {
+                val statusColor = when {
+                    friend.status.contains("在线") && !friend.status.contains("离线") -> Color.Green
+                    friend.status.contains("忙碌") -> Color(0xFFFFA500) // 橙色表示忙碌
+                    friend.status.contains("离开") -> Color(0xFFFFFF00) // 黄色表示离开
+                    else -> Color.Gray // 默认灰色表示离线
+                }
+                
+                Box(
+                    modifier = Modifier
+                        .size(14.dp)
+                        .clip(CircleShape)
+                        .background(statusColor)
+                        .border(1.dp, Color.White, CircleShape)
+                        .align(Alignment.BottomEnd)
+                )
+            }
         }
 
         // 名称和状态
@@ -1002,11 +1080,35 @@ fun ContactListItem(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            Text(
-                text = if (isCompanyTab && friend.jid != null) friend.status else friend.status,
-                fontSize = 14.sp,
-                color = Color.Gray
-            )
+            // 状态文本 - 带有颜色指示点
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 状态指示点 - 好友不在公司黄页标签时显示
+                if (!isCompanyTab) {
+                    val statusColor = when {
+                        friend.status.contains("在线") && !friend.status.contains("离线") -> Color.Green
+                        friend.status.contains("忙碌") -> Color(0xFFFFA500) // 橙色表示忙碌
+                        friend.status.contains("离开") -> Color(0xFFFFFF00) // 黄色表示离开
+                        else -> Color.Gray // 默认灰色表示离线
+                    }
+                    
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(statusColor)
+                    )
+                    
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
+                
+                Text(
+                    text = if (isCompanyTab && friend.jid != null) friend.status else friend.status,
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+            }
         }
 
         // 公司黄页中显示添加好友按钮

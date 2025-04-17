@@ -1237,8 +1237,6 @@ class XMPPManager private constructor() {
         }
     }
 
-
-
     /**
      * 获取服务器上的所有用户 (使用User Search XEP-0055优先，失败则回退到服务发现和花名册)
      * @return 用户列表，包含 JID 和 昵称 (如果可用) Result<List<Pair<BareJid, String?>>>
@@ -1617,6 +1615,122 @@ class XMPPManager private constructor() {
             Result.success(friends)
         } catch (e: Exception) {
             Log.e(TAG, "获取好友列表失败", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 获取好友的在线状态
+     * @param jid 好友的BareJid
+     * @return 好友的在线状态描述
+     */
+    suspend fun getFriendPresence(jid: BareJid): Result<String> = withContext(Dispatchers.IO) {
+        if (connectionState.value != ConnectionState.AUTHENTICATED) {
+            return@withContext Result.failure(IllegalStateException("用户未认证"))
+        }
+        val connection = currentConnection ?: return@withContext Result.failure(IllegalStateException("连接无效"))
+
+        try {
+            val roster = Roster.getInstanceFor(connection)
+            if (!roster.isLoaded) {
+                roster.reloadAndWait()
+            }
+            
+            // 确保是好友才获取状态
+            if (!roster.contains(jid)) {
+                return@withContext Result.failure(IllegalArgumentException("该用户不是好友"))
+            }
+            
+            // 获取好友的所有Presence信息
+            val presences = roster.getPresences(jid)
+            if (presences.isEmpty()) {
+                return@withContext Result.success("离线")
+            }
+            
+            // 遍历所有Presence找出最高可用性
+            var bestPresence: Presence? = null
+            for (presence in presences) {
+                if (presence.type == Presence.Type.available) {
+                    if (bestPresence == null || presence.mode.ordinal < bestPresence.mode.ordinal) {
+                        bestPresence = presence
+                    }
+                }
+            }
+            
+            // 根据最高优先级的Presence返回状态
+            val status = when {
+                bestPresence == null -> "离线"
+                bestPresence.mode == Presence.Mode.chat -> "在线-空闲"
+                bestPresence.mode == Presence.Mode.available -> "在线"
+                bestPresence.mode == Presence.Mode.away -> "离开"
+                bestPresence.mode == Presence.Mode.xa -> "长时间离开"
+                bestPresence.mode == Presence.Mode.dnd -> "忙碌"
+                else -> bestPresence.status ?: "在线"
+            }
+            
+            return@withContext Result.success(status)
+        } catch (e: Exception) {
+            Log.e(TAG, "获取好友在线状态失败: ${e.message}", e)
+            return@withContext Result.failure(e)
+        }
+    }
+
+    /**
+     * 批量获取好友的在线状态
+     * @return 好友JID和在线状态的映射
+     */
+    suspend fun getFriendsPresence(): Result<Map<BareJid, String>> = withContext(Dispatchers.IO) {
+        if (connectionState.value != ConnectionState.AUTHENTICATED) {
+            return@withContext Result.failure(IllegalStateException("用户未认证"))
+        }
+        val connection = currentConnection ?: return@withContext Result.failure(IllegalStateException("连接无效"))
+
+        try {
+            val roster = Roster.getInstanceFor(connection)
+            if (!roster.isLoaded) {
+                roster.reloadAndWait()
+            }
+            
+            // 获取所有好友并处理他们的状态
+            val statusMap = mutableMapOf<BareJid, String>()
+            for (entry in roster.entries) {
+                val jid = entry.jid ?: continue
+                
+                // 获取好友的所有Presence信息
+                val presences = roster.getPresences(jid)
+                if (presences.isEmpty()) {
+                    statusMap[jid] = "离线"
+                    continue
+                }
+                
+                // 遍历所有Presence找出最高可用性
+                var bestPresence: Presence? = null
+                for (presence in presences) {
+                    if (presence.type == Presence.Type.available) {
+                        if (bestPresence == null || presence.mode.ordinal < bestPresence.mode.ordinal) {
+                            bestPresence = presence
+                        }
+                    }
+                }
+                
+                // 根据最高优先级的Presence返回状态
+                val status = when {
+                    bestPresence == null -> "离线"
+                    bestPresence.mode == Presence.Mode.chat -> "在线-空闲"
+                    bestPresence.mode == Presence.Mode.available -> "在线"
+                    bestPresence.mode == Presence.Mode.away -> "离开"
+                    bestPresence.mode == Presence.Mode.xa -> "长时间离开"
+                    bestPresence.mode == Presence.Mode.dnd -> "忙碌"
+                    else -> bestPresence.status ?: "在线"
+                }
+                
+                statusMap[jid] = status
+            }
+            
+            Log.d(TAG, "获取到 ${statusMap.size} 个好友的在线状态")
+            Result.success(statusMap)
+        } catch (e: Exception) {
+            Log.e(TAG, "批量获取好友在线状态失败", e)
             Result.failure(e)
         }
     }
