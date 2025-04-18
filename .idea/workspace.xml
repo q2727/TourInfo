@@ -9,76 +9,23 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="14895e20-a871-4d5b-a4e1-2b2aa377fc28" name="Changes" comment="好友在线状态显示">
+    <list default="true" id="14895e20-a871-4d5b-a4e1-2b2aa377fc28" name="Changes" comment="好友聊天ing，后台不再掉线">
       <change beforePath="$PROJECT_DIR$/.gradle/buildOutputCleanup/buildOutputCleanup.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/buildOutputCleanup/buildOutputCleanup.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatMessageItem$2.class" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$1$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$1$1.class" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$1$2.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$1$2.class" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$2$1$1$invoke$$inlined$items$default$1.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$2$1$1$invoke$$inlined$items$default$2.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$2$1$1$invoke$$inlined$items$default$3.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$2$1$1$invoke$$inlined$items$default$4.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$2$1$1.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$2$1$2$1$1$1.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$2$1$2$1$2$1.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$2$1$2.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$2.class" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$3.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt$ChatRoomScreen$3.class" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ChatRoomScreenKt.class" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$ChatRoomScreenKt$lambda-1$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$ChatRoomScreenKt$lambda-1$1.class" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$ChatRoomScreenKt$lambda-2$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$ChatRoomScreenKt$lambda-2$1.class" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$ChatRoomScreenKt$lambda-3$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$ChatRoomScreenKt$lambda-3$1.class" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$ChatRoomScreenKt.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$ChatRoomScreenKt.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-1$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-1$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-10$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-10$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-11$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-11$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-12$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-12$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-13$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-13$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-14$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-14$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-2$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-2$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-3$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-3$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-4$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-4$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-5$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-5$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-6$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-6$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-7$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-7$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-8$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-8$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-9$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$MessageListScreenKt$lambda-9$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$PersonDetailScreenKt$lambda-1$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$PersonDetailScreenKt$lambda-1$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$PersonDetailScreenKt$lambda-2$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$PersonDetailScreenKt$lambda-2$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$PersonDetailScreenKt$lambda-3$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$PersonDetailScreenKt$lambda-3$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$PersonDetailScreenKt$lambda-4$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$PersonDetailScreenKt$lambda-4$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$PersonDetailScreenKt$lambda-5$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$PersonDetailScreenKt$lambda-5$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$PersonDetailScreenKt.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$PersonDetailScreenKt.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$ProfileScreenKt$lambda-2$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$ProfileScreenKt$lambda-2$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$ProfileScreenKt$lambda-26$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$ProfileScreenKt$lambda-26$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$ProfileScreenKt$lambda-29$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$ProfileScreenKt$lambda-29$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$ProfileScreenKt$lambda-32$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ComposableSingletons$ProfileScreenKt$lambda-32$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/MessageListScreenKt$MessageListScreen$1$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/MessageListScreenKt$MessageListScreen$1$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/MessageListScreenKt$MessageListScreen$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/MessageListScreenKt$MessageListScreen$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/MessageListScreenKt$MessageListScreen$2$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/MessageListScreenKt$MessageListScreen$2$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/MessageListScreenKt$MessageListScreen$2.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/MessageListScreenKt$MessageListScreen$2.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/MessageListScreenKt$MessageListScreen$3.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/MessageListScreenKt$MessageListScreen$3.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/MessageListScreenKt.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/MessageListScreenKt.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/PersonDetailScreenKt$InfoRow$2.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/PersonDetailScreenKt$InfoRow$2.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/PersonDetailScreenKt$PersonDetailScreen$1$1.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/PersonDetailScreenKt$PersonDetailScreen$1.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/PersonDetailScreenKt$PersonDetailScreen$1.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/PersonDetailScreenKt$PersonDetailScreen$2$1$1$2$1.class" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/PersonDetailScreenKt$PersonDetailScreen$2.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/PersonDetailScreenKt$PersonDetailScreen$2.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/PersonDetailScreenKt$PersonDetailScreen$3.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/PersonDetailScreenKt$PersonDetailScreen$3.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/PersonDetailScreenKt.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/PersonDetailScreenKt.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/PersonInfo.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/PersonInfo.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ProfileScreenKt$ProfileScreen$3.class" beforeDir="false" afterPath="$PROJECT_DIR$/app/build/tmp/kotlin-classes/debug/com/example/travalms/ui/screens/ProfileScreenKt$ProfileScreen$3.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/AndroidManifest.xml" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/AndroidManifest.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/MainActivity.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/MainActivity.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/data/model/ChatModels.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/data/model/ChatModels.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/data/model/ContactItem.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/data/model/ContactItem.kt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/data/remote/XMPPManager.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/data/remote/XMPPManager.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/ui/auth/LoginScreen.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/ui/auth/LoginScreen.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/ui/auth/LoginViewModel.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/ui/auth/LoginViewModel.kt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/ui/message/MessageScreen.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/ui/message/MessageScreen.kt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/ui/screens/ChatRoomScreen.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/ui/screens/ChatRoomScreen.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/ui/screens/MessageListScreen.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/ui/screens/MessageListScreen.kt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/ui/screens/PersonDetailScreen.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/ui/screens/PersonDetailScreen.kt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -88,7 +35,7 @@
   <component name="ClangdSettings">
     <option name="formatViaClangd" value="false" />
   </component>
-  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[DeviceId(pluginId=PhysicalDevice, isTemplate=false, identifier=serial=351bf00c)]" />
+  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[DeviceId(pluginId=LocalEmulator, isTemplate=false, identifier=path=C:\Users\28443\.android\avd\Medium_Phone.avd)]" />
   <component name="ExternalProjectsData">
     <projectState path="$PROJECT_DIR$">
       <ProjectState />
@@ -663,7 +610,23 @@
       <option name="project" value="LOCAL" />
       <updated>1744906117634</updated>
     </task>
-    <option name="localTasksCounter" value="16" />
+    <task id="LOCAL-00016" summary="好友聊天ing">
+      <option name="closed" value="true" />
+      <created>1744975878687</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1744975878687</updated>
+    </task>
+    <task id="LOCAL-00017" summary="好友聊天ing，后台不再掉线">
+      <option name="closed" value="true" />
+      <created>1744975935220</created>
+      <option name="number" value="00017" />
+      <option name="presentableId" value="LOCAL-00017" />
+      <option name="project" value="LOCAL" />
+      <updated>1744975935220</updated>
+    </task>
+    <option name="localTasksCounter" value="18" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -699,7 +662,9 @@
     <MESSAGE value="实现公司黄页" />
     <MESSAGE value="实现好友功能" />
     <MESSAGE value="好友在线状态显示" />
-    <option name="LAST_COMMIT_MESSAGE" value="好友在线状态显示" />
+    <MESSAGE value="好友聊天ing" />
+    <MESSAGE value="好友聊天ing，后台不再掉线" />
+    <option name="LAST_COMMIT_MESSAGE" value="好友聊天ing，后台不再掉线" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -727,12 +692,12 @@
       <map>
         <entry key="com.example.travalms">
           <value>
-            <CheckInfo lastCheckTimestamp="1744871705433" />
+            <CheckInfo lastCheckTimestamp="1744975884486" />
           </value>
         </entry>
         <entry key="com.example.travalms.test">
           <value>
-            <CheckInfo lastCheckTimestamp="1744871705433" />
+            <CheckInfo lastCheckTimestamp="1744975884486" />
           </value>
         </entry>
       </map>

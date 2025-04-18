@@ -114,7 +114,7 @@ class XMPPManager private constructor() {
     val pubsubItemsFlow: SharedFlow<PubSubNotification> = _pubsubItemsFlow
     
     // 添加消息流
-    private val _messageFlow = MutableSharedFlow<ChatMessage>(replay = 100)
+    private val _messageFlow = MutableSharedFlow<ChatMessage>(replay = 10)
     val messageFlow = _messageFlow.asSharedFlow()
     
     // 添加登录结果流
@@ -1837,27 +1837,41 @@ class XMPPManager private constructor() {
         }
         
         try {
+            // 获取当前用户JID用于比较
+            val currentUserJid = currentConnection?.user?.asEntityBareJidString()
+            Log.d(TAG, "当前用户JID: $currentUserJid")
+            
             // 添加消息监听器
             currentConnection?.addStanzaListener({ stanza ->
                 if (stanza is org.jivesoftware.smack.packet.Message && stanza.type == org.jivesoftware.smack.packet.Message.Type.chat) {
-                    Log.d(TAG, "收到聊天消息: ${stanza.body} 从 ${stanza.from}")
-                    
-                    val fromJid = stanza.from.asBareJid()
+                    val fromJid = stanza.from.asBareJid().toString()
                     val body = stanza.body
+                    
+                    Log.d(TAG, "==================== 收到消息 ====================")
+                    Log.d(TAG, "收到聊天消息: $body 从 $fromJid (当前用户: $currentUserJid)")
                     
                     if (body != null) {
                         // 使用协程异步处理
                         scope.launch {
                             try {
-                                val senderName = getSenderName(fromJid)
+                                // 获取对方的实际名称
+                                val senderName = getSenderName(JidCreate.bareFrom(fromJid))
+                                Log.d(TAG, "获取到发送者名称: $senderName")
+                                
+                                // 使用XMPP消息的stanzaId作为唯一标识，如果没有则生成新的
+                                val messageId = stanza.stanzaId ?: UUID.randomUUID().toString()
+                                
                                 val newMessage = ChatMessage(
-                                    id = UUID.randomUUID().toString(),
-                                    senderId = fromJid.toString(),
-                                    senderName = senderName,
+                                    id = messageId,
+                                    senderId = fromJid, // 使用完整JID
+                                    senderName = senderName, // 使用发送者的实际名称
                                     content = body,
                                     timestamp = LocalDateTime.now(),
-                                    isRead = false
+                                    isRead = false,
+                                    recipientId = currentUserJid // 接收者是当前用户
                                 )
+                                
+                                Log.d(TAG, "创建接收消息: ID=$messageId, senderId=$fromJid, recipientId=$currentUserJid, senderName=$senderName")
                                 
                                 // 发布到Flow
                                 _messageFlow.emit(newMessage)
@@ -1895,32 +1909,53 @@ class XMPPManager private constructor() {
         }
         
         try {
-            Log.d(TAG, "准备发送消息给 $recipientJid: $messageContent")
+            // 获取当前用户的完整JID
+            val currentUserJid = connection.user.asEntityBareJidString()
+            val currentUserName = currentConnection?.user?.localpart?.toString() ?: "我"
+            
+            // 确保recipientJid格式正确
+            val fullRecipientJid = if (!recipientJid.contains('@')) {
+                "$recipientJid@$SERVER_DOMAIN"
+            } else {
+                recipientJid
+            }
+            
+            Log.d(TAG, "==================== 发送消息 ====================")
+            Log.d(TAG, "当前用户JID: $currentUserJid")
+            Log.d(TAG, "接收者JID: $fullRecipientJid")
+            Log.d(TAG, "消息内容: $messageContent")
             
             // 创建消息
             val message = org.jivesoftware.smack.packet.Message()
             message.type = org.jivesoftware.smack.packet.Message.Type.chat
-            message.to = JidCreate.entityBareFrom(recipientJid)
+            message.to = JidCreate.entityBareFrom(fullRecipientJid)
             message.body = messageContent
+            message.from = connection.user // 确保from字段正确设置
+            
+            // 生成唯一的消息ID
+            val messageId = UUID.randomUUID().toString()
+            message.stanzaId = messageId
             
             // 发送消息
             connection.sendStanza(message)
             
-            // 创建本地消息对象
+            // 创建本地消息对象 - 使用当前用户的实际名称
             val chatMessage = ChatMessage(
-                id = UUID.randomUUID().toString(),
-                senderId = connection.user.asEntityBareJid().toString(),
-                senderName = "我", // 使用固定值，因为这是当前用户发送的
+                id = messageId, // 使用相同的ID
+                senderId = currentUserJid, // 确保使用完整的JID
+                senderName = currentUserName, // 使用当前用户的实际名称，而不是硬编码的"我"
                 content = messageContent,
                 timestamp = LocalDateTime.now(),
                 isRead = true, // 自己发的消息默认已读
-                recipientId = recipientJid // 添加接收者ID
+                recipientId = fullRecipientJid // 使用完整接收者JID
             )
+            
+            Log.d(TAG, "创建本地消息: ID=$messageId, senderId=$currentUserJid, recipientId=$fullRecipientJid, senderName=$currentUserName")
             
             // 发布到Flow
             _messageFlow.emit(chatMessage)
             
-            Log.d(TAG, "消息已发送")
+            Log.d(TAG, "消息已发送，ID: $messageId")
             Result.success(chatMessage)
         } catch (e: Exception) {
             Log.e(TAG, "发送消息失败: ${e.message}", e)

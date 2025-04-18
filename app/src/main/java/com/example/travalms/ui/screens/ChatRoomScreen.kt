@@ -27,6 +27,11 @@ import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import android.util.Log
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.travalms.ui.viewmodels.ChatViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,7 +39,8 @@ fun ChatRoomScreen(
     sessionId: String,
     targetName: String,
     targetType: String,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    chatViewModel: ChatViewModel = viewModel() // 添加ViewModel
 ) {
     // 创建消息列表状态
     val messagesState = remember { mutableStateListOf<ChatMessage>() }
@@ -44,26 +50,42 @@ fun ChatRoomScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val lazyListState = rememberLazyListState()
     
+    // 获取当前用户的JID
+    val currentUserJid = remember { 
+        XMPPManager.getInstance().currentConnection?.user?.asEntityBareJidString() ?: ""
+    }
+    
     // 加载历史消息并订阅新消息
     LaunchedEffect(key1 = sessionId) {
         // 获取聊天对象的JID
         val targetJid = sessionId.takeIf { it.contains('@') } ?: "$sessionId@${XMPPManager.SERVER_DOMAIN}"
         
         Log.d("ChatRoom", "初始化聊天: targetJid=$targetJid, targetName=$targetName")
+        Log.d("ChatRoom", "当前用户JID: $currentUserJid")
         
         // 加载历史聊天记录
         coroutineScope.launch {
             try {
-                val chatHistoryResult = XMPPManager.getInstance().getChatHistory(targetJid)
-                if (chatHistoryResult.isSuccess) {
-                    val history = chatHistoryResult.getOrDefault(emptyList())
-                    Log.d("ChatRoom", "已加载 ${history.size} 条历史消息")
-                    messagesState.addAll(history)
+                val chatHistory = chatViewModel.getMessagesForSession(targetJid)
+                if (chatHistory.isNotEmpty()) {
+                    Log.d("ChatRoom", "从ViewModel加载了 ${chatHistory.size} 条消息")
+                    messagesState.addAll(chatHistory)
                 } else {
-                    val error = chatHistoryResult.exceptionOrNull()
-                    Log.e("ChatRoom", "加载历史消息失败: ${error?.message}")
-                    snackbarHostState.showSnackbar("无法加载聊天记录: ${error?.message ?: "未知错误"}")
+                    Log.d("ChatRoom", "ViewModel中没有消息，从服务器加载历史记录")
+                    val chatHistoryResult = XMPPManager.getInstance().getChatHistory(targetJid)
+                    if (chatHistoryResult.isSuccess) {
+                        val history = chatHistoryResult.getOrDefault(emptyList())
+                        Log.d("ChatRoom", "已加载 ${history.size} 条历史消息")
+                        messagesState.addAll(history)
+                    } else {
+                        val error = chatHistoryResult.exceptionOrNull()
+                        Log.e("ChatRoom", "加载历史消息失败: ${error?.message}")
+                        snackbarHostState.showSnackbar("无法加载聊天记录: ${error?.message ?: "未知错误"}")
+                    }
                 }
+
+                // 标记会话为已读
+                chatViewModel.markSessionAsRead(targetJid)
             } catch (e: Exception) {
                 Log.e("ChatRoom", "加载历史消息异常", e)
                 snackbarHostState.showSnackbar("无法加载聊天记录: ${e.message ?: "未知错误"}")
@@ -76,14 +98,30 @@ fun ChatRoomScreen(
                 XMPPManager.getInstance().messageFlow.collectLatest { newMessage ->
                     Log.d("ChatRoom", "收到消息: ${newMessage.content} 从 ${newMessage.senderId}")
                     
+                    // 增强去重逻辑：使用消息ID作为唯一标识，避免重复处理同一消息
+                    val isDuplicate = messagesState.any { existingMsg -> 
+                        existingMsg.id == newMessage.id ||
+                        (existingMsg.content == newMessage.content && 
+                         existingMsg.senderId == newMessage.senderId &&
+                         existingMsg.timestamp.isEqual(newMessage.timestamp))
+                    }
+                    
                     // 检查消息是否来自当前聊天对象或当前用户自己发送的
-                    if (newMessage.senderId == targetJid || 
-                        (newMessage.senderName == "我" && 
-                         newMessage.content !in messagesState.map { it.content })) {
+                    if (!isDuplicate && (newMessage.senderId == targetJid || 
+                        (newMessage.senderId == currentUserJid && 
+                         newMessage.recipientId == targetJid))) {
+                        Log.d("ChatRoom", "添加新消息到UI: ${newMessage.id}")
                         messagesState.add(newMessage)
                         
                         // 自动滚动到底部
                         lazyListState.animateScrollToItem(messagesState.size - 1)
+
+                        // 如果是接收到的消息，标记为已读
+                        if (newMessage.senderId == targetJid) {
+                            chatViewModel.markSessionAsRead(targetJid)
+                        }
+                    } else if (isDuplicate) {
+                        Log.d("ChatRoom", "忽略重复消息: ${newMessage.id}")
                     }
                 }
             } catch (e: Exception) {
@@ -102,111 +140,105 @@ fun ChatRoomScreen(
     
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text(targetName, fontWeight = FontWeight.Bold) },
+            TopAppBar(
+                title = { Text(targetName) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "返回"
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = PrimaryColor,
                     titleContentColor = Color.White,
                     navigationIconContentColor = Color.White
                 )
             )
         },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // 聊天消息列表
+            // 消息列表
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                reverseLayout = false,
+                    .padding(horizontal = 8.dp),
                 state = lazyListState
             ) {
                 items(messagesState) { message ->
-                    ChatMessageItem(
+                    // 添加更明确的调试日志来确认修复
+                    Log.d("ChatRoom", "** 判断消息位置 ** " +
+                          "消息内容: ${message.content}, " +
+                          "发送者: ${message.senderId}, " + 
+                          "当前用户: $currentUserJid, " +
+                          "显示在: ${if (message.senderId == currentUserJid) "右侧(自己)" else "左侧(对方)"}")
+                          
+                    MessageItem(
                         message = message,
-                        isFromCurrentUser = message.senderName == "我",
+                        isFromCurrentUser = message.senderId == currentUserJid, // 正确的逻辑：自己发的消息senderId应等于当前用户JID
                         timeFormatter = timeFormatter
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
             
-            // 底部输入框
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shadowElevation = 4.dp,
-                color = Color.White
+            // 输入框区域
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // 使用Material3的OutlinedTextField替代TextField
-                    OutlinedTextField(
-                        value = inputText,
-                        onValueChange = { inputText = it },
-                        placeholder = { Text("输入消息...") },
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 8.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = Color.Transparent,
-                            focusedBorderColor = Color.Transparent,
-                            unfocusedContainerColor = Color.LightGray.copy(alpha = 0.2f),
-                            focusedContainerColor = Color.LightGray.copy(alpha = 0.2f)
-                        ),
-                        shape = RoundedCornerShape(24.dp),
-                        singleLine = true
-                    )
-                    
-                    IconButton(
-                        onClick = {
-                            if (inputText.isNotBlank()) {
-                                // 获取聊天对象的JID
-                                val targetJid = sessionId.takeIf { it.contains('@') } ?: "$sessionId@${XMPPManager.SERVER_DOMAIN}"
-                                
-                                // 发送消息
-                                coroutineScope.launch {
-                                    try {
-                                        val result = XMPPManager.getInstance().sendMessage(targetJid, inputText)
-                                        if (result.isSuccess) {
-                                            // 消息已由messageFlow自动添加
-                                            inputText = ""
-                                        } else {
-                                            val error = result.exceptionOrNull()
-                                            Log.e("ChatRoom", "发送消息失败: ${error?.message}")
-                                            snackbarHostState.showSnackbar("发送失败: ${error?.message ?: "未知错误"}")
-                                        }
-                                    } catch (e: Exception) {
-                                        Log.e("ChatRoom", "发送消息异常", e)
-                                        snackbarHostState.showSnackbar("发送失败: ${e.message ?: "未知错误"}")
-                                    }
+                // 文本输入框
+                OutlinedTextField(
+                    value = inputText,
+                    onValueChange = { inputText = it },
+                    placeholder = { Text("输入消息") },
+                    modifier = Modifier.weight(1f),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryColor,
+                        unfocusedBorderColor = Color.LightGray
+                    ),
+                    maxLines = 3
+                )
+                
+                Spacer(modifier = Modifier.width(8.dp))
+                
+                // 发送按钮
+                IconButton(
+                    onClick = {
+                        if (inputText.isNotBlank()) {
+                            // 获取聊天对象的JID
+                            val targetJid = sessionId.takeIf { it.contains('@') } ?: "$sessionId@${XMPPManager.SERVER_DOMAIN}"
+                            
+                            // 发送消息
+                            coroutineScope.launch {
+                                try {
+                                    // 使用ViewModel发送消息
+                                    chatViewModel.sendMessage(targetJid, inputText)
+                                    inputText = "" // 清空输入框
+                                } catch (e: Exception) {
+                                    Log.e("ChatRoom", "发送消息异常", e)
+                                    snackbarHostState.showSnackbar("发送失败: ${e.message ?: "未知错误"}")
                                 }
                             }
-                        },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .background(PrimaryColor, CircleShape)
-                    ) {
-                        Icon(
-                            Icons.Filled.Send,
-                            contentDescription = "发送",
-                            tint = Color.White
-                        )
-                    }
+                        }
+                    },
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(PrimaryColor, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Send,
+                        contentDescription = "发送",
+                        tint = Color.White
+                    )
                 }
             }
         }
@@ -214,88 +246,125 @@ fun ChatRoomScreen(
 }
 
 @Composable
-fun ChatMessageItem(
+fun MessageItem(
     message: ChatMessage,
     isFromCurrentUser: Boolean,
     timeFormatter: DateTimeFormatter
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = if (isFromCurrentUser) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.Top
-    ) {
-        if (!isFromCurrentUser) {
-            // 头像
-            Box(
+    // 调试日志，帮助追踪消息显示位置问题
+    LaunchedEffect(message.id) {
+        Log.d("MessageItem", 
+            "显示消息: ID=${message.id}, 内容=${message.content}, " +
+            "发送者=${message.senderId}, isFromCurrentUser=$isFromCurrentUser"
+        )
+    }
+
+    // 是否显示技术细节(长按消息时)
+    var showDetails by remember { mutableStateOf(false) }
+
+    Column {
+        // 如果显示详情，添加一个调试信息框
+        if (showDetails) {
+            Card(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(Color.Gray),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = message.senderName.first().toString(),
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
+                    .fillMaxWidth()
+                    .padding(4.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFF0F0F0)
                 )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-        }
-        
-        Column(
-            horizontalAlignment = if (isFromCurrentUser) Alignment.End else Alignment.Start
-        ) {
-            if (!isFromCurrentUser) {
-                Text(
-                    text = message.senderName,
-                    fontSize = 12.sp,
-                    color = Color.Gray,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
-                )
-            }
-            
-            Row(
-                verticalAlignment = Alignment.Bottom
             ) {
-                if (isFromCurrentUser) {
-                    Text(
-                        text = message.timestamp.format(timeFormatter),
-                        fontSize = 10.sp,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                }
-                
-                Box(
-                    modifier = Modifier
-                        .clip(
-                            RoundedCornerShape(
-                                topStart = 16.dp,
-                                topEnd = 16.dp,
-                                bottomStart = if (isFromCurrentUser) 16.dp else 4.dp,
-                                bottomEnd = if (isFromCurrentUser) 4.dp else 16.dp
-                            )
-                        )
-                        .background(
-                            if (isFromCurrentUser) PrimaryColor else Color.LightGray.copy(alpha = 0.3f)
-                        )
-                        .padding(12.dp)
+                Column(
+                    modifier = Modifier.padding(8.dp)
                 ) {
+                    Text("消息ID: ${message.id}", fontSize = 10.sp)
+                    Text("发送者: ${message.senderId}", fontSize = 10.sp)
+                    Text("接收者: ${message.recipientId ?: "未知"}", fontSize = 10.sp)
+                    Text("isFromCurrentUser: $isFromCurrentUser", fontSize = 10.sp)
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .clickable(
+                    indication = null, // 移除点击效果
+                    interactionSource = remember { MutableInteractionSource() },
+                    onClick = { showDetails = !showDetails } // 切换显示详情
+                ),
+            horizontalArrangement = if (isFromCurrentUser) Arrangement.End else Arrangement.Start
+        ) {
+            Column(
+                horizontalAlignment = if (isFromCurrentUser) Alignment.End else Alignment.Start
+            ) {
+                // 发送者名称
+                if (!isFromCurrentUser && message.senderName != "我") {
                     Text(
-                        text = message.content,
-                        color = if (isFromCurrentUser) Color.White else Color.Black
+                        text = message.senderName,
+                        fontSize = 12.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(start = 8.dp, bottom = 2.dp)
                     )
                 }
                 
-                if (!isFromCurrentUser) {
-                    Text(
-                        text = message.timestamp.format(timeFormatter),
-                        fontSize = 10.sp,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
+                // 消息气泡
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = if (isFromCurrentUser) Arrangement.End else Arrangement.Start,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (isFromCurrentUser) {
+                        // 时间戳
+                        Text(
+                            text = timeFormatter.format(message.timestamp),
+                            fontSize = 10.sp,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
+                    }
+                    
+                    // 消息内容
+                    Box(
+                        modifier = Modifier
+                            .widthIn(max = 280.dp)
+                            .clip(
+                                RoundedCornerShape(
+                                    topStart = 12.dp,
+                                    topEnd = 12.dp,
+                                    bottomStart = if (isFromCurrentUser) 12.dp else 4.dp,
+                                    bottomEnd = if (isFromCurrentUser) 4.dp else 12.dp
+                                )
+                            )
+                            .background(if (isFromCurrentUser) PrimaryColor else Color.White)
+                            .border(
+                                width = 1.dp,
+                                color = if (isFromCurrentUser) PrimaryColor else Color.LightGray,
+                                shape = RoundedCornerShape(
+                                    topStart = 12.dp,
+                                    topEnd = 12.dp,
+                                    bottomStart = if (isFromCurrentUser) 12.dp else 4.dp,
+                                    bottomEnd = if (isFromCurrentUser) 4.dp else 12.dp
+                                )
+                            )
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = message.content,
+                            color = if (isFromCurrentUser) Color.White else Color.Black,
+                            fontWeight = FontWeight.Normal
+                        )
+                    }
+                    
+                    if (!isFromCurrentUser) {
+                        // 时间戳
+                        Text(
+                            text = timeFormatter.format(message.timestamp),
+                            fontSize = 10.sp,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    }
                 }
             }
         }

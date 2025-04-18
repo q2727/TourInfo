@@ -40,6 +40,11 @@ import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import com.example.travalms.ui.screens.BottomNavigation
 import com.example.travalms.ui.screens.BottomNavigationItem
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.travalms.data.model.ChatMessage
+import com.example.travalms.ui.viewmodels.ChatViewModel
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 // 添加自定义BottomNavigation导入，与HomeScreen保持一致
 
@@ -55,7 +60,8 @@ fun MessageScreen(
     onHomeClick: () -> Unit,
     onPublishClick: () -> Unit,
     onTailListClick: () -> Unit,
-    onProfileClick: () -> Unit
+    onProfileClick: () -> Unit,
+    chatViewModel: ChatViewModel = viewModel() // 添加ViewModel
 ) {
     // 状态管理
     var selectedTab by remember { mutableStateOf(1) } // 默认选中"好友"选项卡
@@ -295,6 +301,21 @@ fun MessageScreen(
         }
     }
 
+    // 获取消息会话
+    val recentSessions by chatViewModel.recentSessions.collectAsState()
+    
+    // 将会话转换为ContactItem以便显示
+    val messages = recentSessions.map { session ->
+        ContactItem(
+            id = session.targetId.hashCode(),
+            name = session.targetName,
+            status = formatLastMessage(session.lastMessage),
+            jid = null,
+            lastMessage = session.lastMessage,
+            unreadCount = session.unreadCount
+        )
+    }
+
     // 分类的联系人数据 - 确保每个字母都有对应的联系人
     val friends = remember {
         listOf(
@@ -356,37 +377,6 @@ fun MessageScreen(
             ContactItem(id = 124, name = "西安历史遗迹 (Xi'an Heritage)", status = "2人在线"),
             ContactItem(id = 125, name = "扬州慢生活 (Yangzhou Lifestyle)", status = "8人在线"),
             ContactItem(id = 126, name = "珠海海岛游 (Zhuhai Islands)", status = "5人在线")
-        )
-    }
-
-    val messages = remember {
-        listOf(
-            ContactItem(id = 301, name = "Alice Johnson", status = "刚刚"),
-            ContactItem(id = 302, name = "Bright Solutions", status = "5分钟前"),
-            ContactItem(id = 303, name = "Cloud Technologies", status = "10分钟前"),
-            ContactItem(id = 304, name = "David Lee", status = "15分钟前"),
-            ContactItem(id = 305, name = "Echo Innovations", status = "30分钟前"),
-            ContactItem(id = 306, name = "Future Networks", status = "1小时前"),
-            ContactItem(id = 307, name = "Grace Kim", status = "2小时前"),
-            ContactItem(id = 308, name = "Harmony Design", status = "3小时前"),
-            ContactItem(id = 309, name = "Insight Analytics", status = "昨天"),
-            ContactItem(id = 310, name = "Junction Partners", status = "昨天"),
-            ContactItem(id = 311, name = "Knowledge Base", status = "前天"),
-            ContactItem(id = 312, name = "Logic AI Solutions", status = "前天"),
-            ContactItem(id = 313, name = "Mobile App Developers", status = "3天前"),
-            ContactItem(id = 314, name = "Next Generation", status = "4天前"),
-            ContactItem(id = 315, name = "Optimum Security", status = "5天前"),
-            ContactItem(id = 316, name = "Premier Hardware", status = "6天前"),
-            ContactItem(id = 317, name = "Quality Testing", status = "一周前"),
-            ContactItem(id = 318, name = "Reliable Infrastructure", status = "一周前"),
-            ContactItem(id = 319, name = "Smart IoT Solutions", status = "一周前"),
-            ContactItem(id = 320, name = "Tech Support", status = "2023-06-15"),
-            ContactItem(id = 321, name = "Universal Web Design", status = "2023-06-10"),
-            ContactItem(id = 322, name = "Virtual Reality Labs", status = "2023-06-05"),
-            ContactItem(id = 323, name = "Web Hosting", status = "2023-06-01"),
-            ContactItem(id = 324, name = "Xcel Digital", status = "2023-05-25"),
-            ContactItem(id = 325, name = "Yield Optimization", status = "2023-05-20"),
-            ContactItem(id = 326, name = "Zenith IT Consulting", status = "2023-05-15")
         )
     }
 
@@ -532,6 +522,65 @@ fun MessageScreen(
                 loadDirectoryUsers()
             } else {
                 Log.d("MessageScreen", "已有 ${companyDirectoryUsers.size} 个用户，无需重新加载")
+            }
+        }
+    }
+
+    // 在选择消息时将会话标记为已读
+    fun onContactSelected(contact: ContactItem) {
+        when (selectedTab) {
+            0 -> {
+                // 全部消息选项卡 - 标记为已读
+                contact.lastMessage?.let { 
+                    if (it.senderId.contains("@")) {
+                        chatViewModel.markSessionAsRead(it.senderId)
+                    } else if (it.recipientId != null) {
+                        chatViewModel.markSessionAsRead(it.recipientId)
+                    }
+                }
+                
+                val targetId = contact.lastMessage?.let {
+                    if (it.senderId == getCurrentUserJid()) it.recipientId else it.senderId
+                } ?: contact.id.toString()
+                
+                // 导航到聊天界面
+                navController.navigate(
+                    AppRoutes.CHAT_ROOM
+                        .replace("{sessionId}", targetId)
+                        .replace("{targetName}", contact.name)
+                        .replace("{targetType}", "message")
+                )
+            }
+            1 -> {
+                // 好友选项卡
+                if (contact.jid != null) {
+                    navController.navigate(
+                        AppRoutes.CHAT_ROOM
+                            .replace("{sessionId}", contact.jid.toString())
+                            .replace("{targetName}", contact.name)
+                            .replace("{targetType}", "message")
+                    )
+                }
+            }
+            2 -> {
+                // 群聊选项卡
+                val targetType = "group"
+                navController.navigate(
+                    AppRoutes.CHAT_ROOM
+                        .replace("{sessionId}", contact.id.toString())
+                        .replace("{targetName}", contact.name)
+                        .replace("{targetType}", targetType)
+                )
+            }
+            3 -> {
+                // 公司黄页选项卡
+                val targetType = "company"
+                navController.navigate(
+                    AppRoutes.CHAT_ROOM
+                        .replace("{sessionId}", contact.id.toString())
+                        .replace("{targetName}", contact.name)
+                        .replace("{targetType}", targetType)
+                )
             }
         }
     }
@@ -862,28 +911,27 @@ fun MessageScreen(
                                 onClick = {
                                     when (selectedTab) {
                                         0, 2 -> {
-                                            val targetType = when (selectedTab) {
-                                                0 -> "message"
-                                                2 -> "group"
-                                                else -> "message"
+                                            onContactSelected(contact)
+                                        }
+                                        1 -> {
+                                            // 如果有JID，导航到聊天界面
+                                            if (contact.jid != null) {
+                                                navController.navigate(
+                                                    AppRoutes.CHAT_ROOM
+                                                        .replace("{sessionId}", contact.jid.toString())
+                                                        .replace("{targetName}", contact.name)
+                                                        .replace("{targetType}", "message")
+                                                )
                                             }
+                                        }
+                                        3 -> {
+                                            // 公司黄页选项卡
+                                            val targetType = "company"
                                             navController.navigate(
                                                 AppRoutes.CHAT_ROOM
                                                     .replace("{sessionId}", contact.id.toString())
                                                     .replace("{targetName}", contact.name)
                                                     .replace("{targetType}", targetType)
-                                            )
-                                        }
-                                        1, 3 -> {
-                                            // 修改好友和公司黄页的导航，都使用JID跳转到个人详情页
-                                            val personId = if (contact.jid != null) {
-                                                contact.jid.toString() // 使用用户的JID作为personId
-                                            } else {
-                                                contact.id.toString() // 如果没有JID，使用id
-                                            }
-                                            navController.navigate(
-                                                AppRoutes.PERSON_DETAIL
-                                                    .replace("{personId}", personId)
                                             )
                                         }
                                     }
@@ -1138,4 +1186,36 @@ fun ContactListItem(
             }
         }
     }
+}
+
+// 添加工具函数
+private fun formatLastMessage(message: ChatMessage?): String {
+    if (message == null) return ""
+    return "${message.content} · ${formatMessageTime(message.timestamp)}"
+}
+
+private fun formatMessageTime(time: LocalDateTime): String {
+    val now = LocalDateTime.now()
+    return when {
+        time.toLocalDate().isEqual(now.toLocalDate()) -> {
+            // 今天，显示时间
+            time.format(DateTimeFormatter.ofPattern("HH:mm"))
+        }
+        time.toLocalDate().isEqual(now.minusDays(1).toLocalDate()) -> {
+            // 昨天
+            "昨天"
+        }
+        time.year == now.year -> {
+            // 今年，显示月日
+            time.format(DateTimeFormatter.ofPattern("MM-dd"))
+        }
+        else -> {
+            // 不是今年，显示年月日
+            time.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        }
+    }
+}
+
+private fun getCurrentUserJid(): String {
+    return XMPPManager.getInstance().currentConnection?.user?.asEntityBareJidString() ?: ""
 }

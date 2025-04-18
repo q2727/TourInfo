@@ -1,6 +1,7 @@
 package com.example.travalms.data.model
 
 import org.jxmpp.jid.BareJid
+import com.example.travalms.data.model.ChatMessage
 
 /**
  * 联系人数据模型
@@ -12,5 +13,7 @@ data class ContactItem(
     // Consider using a String URL or URI for avatar instead of ResId for flexibility
     val avatarUrl: String? = null, // Example using URL
     // val avatarResId: Int, // Original, less flexible
-    val jid: BareJid? = null // Add optional JID field
+    val jid: BareJid? = null, // Add optional JID field
+    val lastMessage: ChatMessage? = null, // 最后一条消息
+    val unreadCount: Int = 0 // 未读消息数量
 ) 
