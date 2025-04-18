@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -19,9 +20,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.travalms.data.model.ChatMessage
+import com.example.travalms.data.remote.XMPPManager
 import com.example.travalms.ui.theme.PrimaryColor
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+import android.util.Log
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,46 +36,69 @@ fun ChatRoomScreen(
     targetType: String,
     onBackClick: () -> Unit
 ) {
-    // 在实际应用中应该从数据源获取聊天消息
-    val messages = remember {
-        mutableStateListOf(
-            ChatMessage(
-                id = "1",
-                senderId = "user1",
-                senderName = "我",
-                content = "你好，请问这个旅游团什么时候出发？",
-                timestamp = LocalDateTime.now().minusHours(2),
-                isRead = true
-            ),
-            ChatMessage(
-                id = "2",
-                senderId = "company1",
-                senderName = targetName,
-                content = "您好，这个团预计下周二出发，目前还有3个名额。",
-                timestamp = LocalDateTime.now().minusHours(1),
-                isRead = true
-            ),
-            ChatMessage(
-                id = "3",
-                senderId = "user1",
-                senderName = "我",
-                content = "行程是几天？住宿条件怎么样？",
-                timestamp = LocalDateTime.now().minusMinutes(30),
-                isRead = true
-            ),
-            ChatMessage(
-                id = "4",
-                senderId = "company1",
-                senderName = targetName,
-                content = "行程是5天4晚，住宿都是当地四星级酒店，标准双人间。如果您需要详细行程单，我可以发给您。",
-                timestamp = LocalDateTime.now().minusMinutes(20),
-                isRead = true
-            )
-        )
-    }
-    
+    // 创建消息列表状态
+    val messagesState = remember { mutableStateListOf<ChatMessage>() }
     var inputText by remember { mutableStateOf("") }
     val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+    val coroutineScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val lazyListState = rememberLazyListState()
+    
+    // 加载历史消息并订阅新消息
+    LaunchedEffect(key1 = sessionId) {
+        // 获取聊天对象的JID
+        val targetJid = sessionId.takeIf { it.contains('@') } ?: "$sessionId@${XMPPManager.SERVER_DOMAIN}"
+        
+        Log.d("ChatRoom", "初始化聊天: targetJid=$targetJid, targetName=$targetName")
+        
+        // 加载历史聊天记录
+        coroutineScope.launch {
+            try {
+                val chatHistoryResult = XMPPManager.getInstance().getChatHistory(targetJid)
+                if (chatHistoryResult.isSuccess) {
+                    val history = chatHistoryResult.getOrDefault(emptyList())
+                    Log.d("ChatRoom", "已加载 ${history.size} 条历史消息")
+                    messagesState.addAll(history)
+                } else {
+                    val error = chatHistoryResult.exceptionOrNull()
+                    Log.e("ChatRoom", "加载历史消息失败: ${error?.message}")
+                    snackbarHostState.showSnackbar("无法加载聊天记录: ${error?.message ?: "未知错误"}")
+                }
+            } catch (e: Exception) {
+                Log.e("ChatRoom", "加载历史消息异常", e)
+                snackbarHostState.showSnackbar("无法加载聊天记录: ${e.message ?: "未知错误"}")
+            }
+        }
+        
+        // 监听新消息
+        coroutineScope.launch {
+            try {
+                XMPPManager.getInstance().messageFlow.collectLatest { newMessage ->
+                    Log.d("ChatRoom", "收到消息: ${newMessage.content} 从 ${newMessage.senderId}")
+                    
+                    // 检查消息是否来自当前聊天对象或当前用户自己发送的
+                    if (newMessage.senderId == targetJid || 
+                        (newMessage.senderName == "我" && 
+                         newMessage.content !in messagesState.map { it.content })) {
+                        messagesState.add(newMessage)
+                        
+                        // 自动滚动到底部
+                        lazyListState.animateScrollToItem(messagesState.size - 1)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("ChatRoom", "收集消息异常", e)
+                snackbarHostState.showSnackbar("接收消息出错: ${e.message ?: "未知错误"}")
+            }
+        }
+    }
+    
+    // 当有新消息时自动滚动到底部
+    LaunchedEffect(messagesState.size) {
+        if (messagesState.isNotEmpty()) {
+            lazyListState.animateScrollToItem(messagesState.size - 1)
+        }
+    }
     
     Scaffold(
         topBar = {
@@ -87,7 +115,8 @@ fun ChatRoomScreen(
                     navigationIconContentColor = Color.White
                 )
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -100,12 +129,13 @@ fun ChatRoomScreen(
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
-                reverseLayout = false
+                reverseLayout = false,
+                state = lazyListState
             ) {
-                items(messages) { message ->
+                items(messagesState) { message ->
                     ChatMessageItem(
                         message = message,
-                        isFromCurrentUser = message.senderId == "user1",
+                        isFromCurrentUser = message.senderName == "我",
                         timeFormatter = timeFormatter
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -145,17 +175,26 @@ fun ChatRoomScreen(
                     IconButton(
                         onClick = {
                             if (inputText.isNotBlank()) {
-                                messages.add(
-                                    ChatMessage(
-                                        id = "${messages.size + 1}",
-                                        senderId = "user1",
-                                        senderName = "我",
-                                        content = inputText,
-                                        timestamp = LocalDateTime.now(),
-                                        isRead = true
-                                    )
-                                )
-                                inputText = ""
+                                // 获取聊天对象的JID
+                                val targetJid = sessionId.takeIf { it.contains('@') } ?: "$sessionId@${XMPPManager.SERVER_DOMAIN}"
+                                
+                                // 发送消息
+                                coroutineScope.launch {
+                                    try {
+                                        val result = XMPPManager.getInstance().sendMessage(targetJid, inputText)
+                                        if (result.isSuccess) {
+                                            // 消息已由messageFlow自动添加
+                                            inputText = ""
+                                        } else {
+                                            val error = result.exceptionOrNull()
+                                            Log.e("ChatRoom", "发送消息失败: ${error?.message}")
+                                            snackbarHostState.showSnackbar("发送失败: ${error?.message ?: "未知错误"}")
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e("ChatRoom", "发送消息异常", e)
+                                        snackbarHostState.showSnackbar("发送失败: ${e.message ?: "未知错误"}")
+                                    }
+                                }
                             }
                         },
                         modifier = Modifier
@@ -258,24 +297,6 @@ fun ChatMessageItem(
                         modifier = Modifier.padding(start = 8.dp)
                     )
                 }
-            }
-        }
-        
-        if (isFromCurrentUser) {
-            Spacer(modifier = Modifier.width(8.dp))
-            // 头像
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(Color.Gray),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "我",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
             }
         }
     }

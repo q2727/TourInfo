@@ -89,7 +89,7 @@ fun MessageListScreen(
             )
         )
     }
-    
+
     // 添加订阅的推送消息
     val notifications = remember {
         listOf(
@@ -119,7 +119,7 @@ fun MessageListScreen(
             )
         )
     }
-    
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -152,7 +152,7 @@ fun MessageListScreen(
                     selectedContentColor = PrimaryColor,
                     unselectedContentColor = Color.Gray
                 )
-                
+
                 BottomNavigationItem(
                     icon = { Icon(Icons.Filled.Add, contentDescription = "发布") },
                     label = { Text("发布", fontSize = 12.sp) },
@@ -161,7 +161,7 @@ fun MessageListScreen(
                     selectedContentColor = PrimaryColor,
                     unselectedContentColor = Color.Gray
                 )
-                
+
                 BottomNavigationItem(
                     icon = { Icon(Icons.Filled.Favorite, contentDescription = "尾单") },
                     label = { Text("尾单", fontSize = 12.sp) },
@@ -170,7 +170,7 @@ fun MessageListScreen(
                     selectedContentColor = PrimaryColor,
                     unselectedContentColor = Color.Gray
                 )
-                
+
                 BottomNavigationItem(
                     icon = { Icon(Icons.Filled.Email, contentDescription = "消息") },
                     label = { Text("消息", fontSize = 12.sp) },
@@ -179,7 +179,7 @@ fun MessageListScreen(
                     selectedContentColor = PrimaryColor,
                     unselectedContentColor = Color.Gray
                 )
-                
+
                 BottomNavigationItem(
                     icon = { Icon(Icons.Filled.Person, contentDescription = "我的") },
                     label = { Text("我的", fontSize = 12.sp) },
@@ -205,7 +205,7 @@ fun MessageListScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
                 )
             }
-            
+
             items(chatSessions) { session ->
                 ChatSessionItem(
                     session = session,
@@ -213,7 +213,7 @@ fun MessageListScreen(
                 )
                 Divider(color = Color.LightGray.copy(alpha = 0.5f))
             }
-            
+
             item {
                 androidx.compose.material3.Text(
                     text = "推送",
@@ -222,7 +222,7 @@ fun MessageListScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
                 )
             }
-            
+
             items(notifications) { notification ->
                 NotificationItem(
                     notification = notification,
@@ -252,7 +252,7 @@ fun ChatSessionItem(
             "company" -> PrimaryColor.copy(alpha = 0.7f) // 旅行社也使用系统主题色
             else -> PrimaryColor.copy(alpha = 0.7f)      // 默认也使用系统主题色
         }
-        
+
         Box(
             modifier = Modifier
                 .size(48.dp)
@@ -266,9 +266,9 @@ fun ChatSessionItem(
                 fontWeight = FontWeight.Bold
             )
         }
-        
+
         Spacer(modifier = Modifier.width(16.dp))
-        
+
         Column(modifier = Modifier.weight(1f)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -280,7 +280,7 @@ fun ChatSessionItem(
                     fontWeight = if (session.unreadCount > 0) FontWeight.Bold else FontWeight.Normal,
                     fontSize = 16.sp
                 )
-                
+
                 session.lastMessage?.let { lastMessage ->
                     androidx.compose.material3.Text(
                         text = formatTime(lastMessage.timestamp),
@@ -289,9 +289,9 @@ fun ChatSessionItem(
                     )
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(4.dp))
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -306,7 +306,7 @@ fun ChatSessionItem(
                         modifier = Modifier.weight(1f)
                     )
                 }
-                
+
                 if (session.unreadCount > 0) {
                     Box(
                         modifier = Modifier
@@ -353,9 +353,9 @@ fun NotificationItem(
                 tint = PrimaryColor
             )
         }
-        
+
         Spacer(modifier = Modifier.width(16.dp))
-        
+
         Column(modifier = Modifier.weight(1f)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -367,16 +367,16 @@ fun NotificationItem(
                     fontWeight = if (!notification.isRead) FontWeight.Bold else FontWeight.Normal,
                     fontSize = 16.sp
                 )
-                
+
                 androidx.compose.material3.Text(
                     text = formatTime(notification.timestamp),
                     fontSize = 12.sp,
                     color = Color.Gray
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(4.dp))
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -389,7 +389,7 @@ fun NotificationItem(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                
+
                 if (!notification.isRead) {
                     Box(
                         modifier = Modifier
@@ -408,7 +408,7 @@ fun NotificationItem(
 fun formatTime(timestamp: LocalDateTime): String {
     val now = LocalDateTime.now()
     val formatter = DateTimeFormatter.ofPattern("HH:mm")
-    
+
     return when {
         ChronoUnit.DAYS.between(timestamp, now) == 0L -> {
             // 今天

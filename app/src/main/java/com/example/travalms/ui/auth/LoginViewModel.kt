@@ -1,8 +1,10 @@
 package com.example.travalms.ui.auth
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.travalms.data.remote.XMPPManager
+import com.example.travalms.data.remote.XMPPService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,10 +23,21 @@ class LoginViewModel : ViewModel() {
 
     // 使用单例模式
     private val xmppManager = XMPPManager.getInstance()
+    
+    // 保存上下文引用
+    private var applicationContext: Context? = null
 
     // 使用 StateFlow 暴露 UI 状态
     private val _uiState = MutableStateFlow<LoginUiState>(LoginUiState.Idle)
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
+
+    /**
+     * 设置应用上下文
+     * 通常在构造ViewModel时从主Activity或应用类获得
+     */
+    fun setContext(context: Context) {
+        this.applicationContext = context.applicationContext
+    }
 
     /**
      * 执行登录操作
@@ -38,6 +51,14 @@ class LoginViewModel : ViewModel() {
         viewModelScope.launch {
             val result = xmppManager.login(username, password)
             if (result.isSuccess) {
+                // 保存登录凭据，用于后续自动重连
+                applicationContext?.let { context ->
+                    xmppManager.saveCredentials(context, username, password)
+                    
+                    // 确保XMPPService正在运行
+                    XMPPService.startService(context)
+                }
+                
                 _uiState.value = LoginUiState.Success // 修改为使用不带参数的Success
             } else {
                 val exception = result.exceptionOrNull()
@@ -55,5 +76,26 @@ class LoginViewModel : ViewModel() {
          if (_uiState.value != LoginUiState.Loading) { // 不要在加载时重置
              _uiState.value = LoginUiState.Idle
          }
+    }
+    
+    /**
+     * 退出登录
+     */
+    fun logout() {
+        viewModelScope.launch {
+            // 断开XMPP连接
+            xmppManager.disconnect()
+            
+            // 清除保存的凭据
+            applicationContext?.let { context ->
+                xmppManager.clearCredentials(context)
+                
+                // 停止XMPP服务
+                XMPPService.stopService(context)
+            }
+            
+            // 重置状态
+            _uiState.value = LoginUiState.Idle
+        }
     }
 } 

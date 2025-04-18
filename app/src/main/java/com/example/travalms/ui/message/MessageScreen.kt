@@ -561,7 +561,7 @@ fun MessageScreen(
                 BottomNavigationItem(
                     icon = { Icon(Icons.Filled.Home, contentDescription = "产品") },
                     label = { Text("产品", fontSize = 12.sp) },
-                    selected = true,
+                    selected = false,
                     onClick = onHomeClick,
                     selectedContentColor = PrimaryColor,
                     unselectedContentColor = Color.Gray
@@ -588,7 +588,7 @@ fun MessageScreen(
                 BottomNavigationItem(
                     icon = { Icon(Icons.Filled.Email, contentDescription = "消息") },
                     label = { Text("消息", fontSize = 12.sp) },
-                    selected = false,
+                    selected = true,
                     onClick = {},
                     selectedContentColor = PrimaryColor,
                     unselectedContentColor = Color.Gray
@@ -874,16 +874,16 @@ fun MessageScreen(
                                                     .replace("{targetType}", targetType)
                                             )
                                         }
-                                        1 -> {
+                                        1, 3 -> {
+                                            // 修改好友和公司黄页的导航，都使用JID跳转到个人详情页
+                                            val personId = if (contact.jid != null) {
+                                                contact.jid.toString() // 使用用户的JID作为personId
+                                            } else {
+                                                contact.id.toString() // 如果没有JID，使用id
+                                            }
                                             navController.navigate(
                                                 AppRoutes.PERSON_DETAIL
-                                                    .replace("{personId}", contact.id.toString())
-                                            )
-                                        }
-                                        3 -> {
-                                            navController.navigate(
-                                                AppRoutes.COMPANY_DETAIL
-                                                    .replace("{companyId}", contact.id.toString())
+                                                    .replace("{personId}", personId)
                                             )
                                         }
                                     }
@@ -1022,6 +1022,10 @@ fun ContactListItem(
     onAddFriend: () -> Unit = {},
     onClick: () -> Unit
 ) {
+    // 获取当前选中的选项卡
+    // 在MessageScreen中作为参数传入
+    val isGroupTab = friend.status.contains("人在线") // 用于判断是否为群聊项
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1046,24 +1050,7 @@ fun ContactListItem(
                 fontWeight = FontWeight.Bold
             )
             
-            // 状态指示器 - 好友不在公司黄页标签时显示
-            if (!isCompanyTab) {
-                val statusColor = when {
-                    friend.status.contains("在线") && !friend.status.contains("离线") -> Color.Green
-                    friend.status.contains("忙碌") -> Color(0xFFFFA500) // 橙色表示忙碌
-                    friend.status.contains("离开") -> Color(0xFFFFFF00) // 黄色表示离开
-                    else -> Color.Gray // 默认灰色表示离线
-                }
-                
-                Box(
-                    modifier = Modifier
-                        .size(14.dp)
-                        .clip(CircleShape)
-                        .background(statusColor)
-                        .border(1.dp, Color.White, CircleShape)
-                        .align(Alignment.BottomEnd)
-                )
-            }
+            // 移除头像上的状态指示器
         }
 
         // 名称和状态
@@ -1084,8 +1071,8 @@ fun ContactListItem(
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 状态指示点 - 好友不在公司黄页标签时显示
-                if (!isCompanyTab) {
+                // 状态指示点 - 仅在好友列表显示，群聊不显示
+                if (!isCompanyTab && !isGroupTab) {
                     val statusColor = when {
                         friend.status.contains("在线") && !friend.status.contains("离线") -> Color.Green
                         friend.status.contains("忙碌") -> Color(0xFFFFA500) // 橙色表示忙碌

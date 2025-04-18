@@ -68,6 +68,11 @@ fun LoginScreen(
     // 从ViewModel收集UI状态
     val uiState by loginViewModel.uiState.collectAsState()
 
+    // 设置上下文
+    LaunchedEffect(key1 = context) {
+        loginViewModel.setContext(context)
+    }
+
     // 使用LaunchedEffect处理一次性事件（如Toast显示和导航）
     LaunchedEffect(key1 = uiState) {
         when (val state = uiState) {
