@@ -35,6 +35,34 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _recentSessions = MutableStateFlow<List<ChatSession>>(emptyList())
     val recentSessions: StateFlow<List<ChatSession>> = _recentSessions.asStateFlow()
 
+    // 存储联系人状态映射
+    private val _contactsStatusMap = MutableStateFlow<Map<String, String>>(emptyMap())
+    val contactsStatusMap: StateFlow<Map<String, String>> = _contactsStatusMap.asStateFlow()
+
+    // 保存消息屏幕当前选中的选项卡
+    private val _selectedMessageTab = MutableStateFlow(0) // 默认选中"全部消息"选项卡
+    val selectedMessageTab: StateFlow<Int> = _selectedMessageTab.asStateFlow()
+
+    // 添加用于更新消息联系人状态的方法
+    fun updateContactsStatus(updatedContacts: List<com.example.travalms.data.model.ContactItem>) {
+        // 提取JID和状态映射
+        val statusMap = updatedContacts
+            .filter { it.jid != null }
+            .associate { contact ->
+                contact.jid.toString() to contact.status 
+            }
+        
+        // 更新状态映射
+        if (statusMap.isNotEmpty()) {
+            _contactsStatusMap.update { currentMap ->
+                currentMap.toMutableMap().apply {
+                    putAll(statusMap)
+                }
+            }
+            Log.d(TAG, "更新了 ${statusMap.size} 个联系人的状态")
+        }
+    }
+
     // 初始化，开始监听新消息和加载会话
     init {
         // 订阅消息流
@@ -45,6 +73,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "监听消息流出错", e)
+            }
+        }
+        
+        // 订阅 Presence 更新流
+        viewModelScope.launch {
+            try {
+                XMPPManager.getInstance().presenceUpdateFlow.collect { (jidString, status) ->
+                    Log.d(TAG, "收到 Presence 更新: $jidString -> $status")
+                    updateSingleContactStatus(jidString, status)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "监听 Presence 更新流出错", e)
             }
         }
         
@@ -206,5 +246,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 Log.e(TAG, "清除会话历史失败", e)
             }
         }
+    }
+
+    // 更新选中的选项卡
+    fun updateSelectedMessageTab(tabIndex: Int) {
+        _selectedMessageTab.value = tabIndex
+        Log.d(TAG, "更新选中消息标签页: $tabIndex")
+    }
+
+    // 添加用于更新单个联系人状态的方法
+    fun updateSingleContactStatus(jidString: String, status: String) {
+        _contactsStatusMap.update { currentMap ->
+            currentMap.toMutableMap().apply {
+                this[jidString] = status
+            }
+        }
+        Log.d(TAG, "已更新单个联系人状态: $jidString -> $status")
     }
 } 

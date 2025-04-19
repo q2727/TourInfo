@@ -3,6 +3,7 @@ package com.example.travalms.data.remote
 import android.content.Context
 import android.util.Log
 import com.example.travalms.data.model.ChatMessage
+import com.example.travalms.data.model.ContactItem
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.jivesoftware.smack.*
@@ -121,6 +122,13 @@ class XMPPManager private constructor() {
     private val _loginResultFlow = MutableSharedFlow<Result<Unit>>(replay = 1)
     val loginResultFlow: SharedFlow<Result<Unit>> = _loginResultFlow
 
+    // 添加 Presence 更新流
+    private val _presenceUpdateFlow = MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 64) // JID String to Status String
+    val presenceUpdateFlow: SharedFlow<Pair<String, String>> = _presenceUpdateFlow.asSharedFlow()
+
+    // 内部维护的在线状态映射
+    private val presenceMap = Collections.synchronizedMap(mutableMapOf<String, String>())
+
     // 添加协程作用域
     private val scope = CoroutineScope(Dispatchers.IO)
 
@@ -167,6 +175,12 @@ class XMPPManager private constructor() {
             initPubSubManager()
             // 配置保活
             setupPingMechanism()
+            // 设置Roster监听器
+            setupRosterListener()
+            // 请求所有联系人的在线状态
+            requestAllContactsPresence()
+            // 设置Presence直接监听器
+            setupPresenceListener()
             // 发送可用状态
             sendInitialPresence()
         }
@@ -1751,61 +1765,95 @@ class XMPPManager private constructor() {
 
     /**
      * 批量获取好友的在线状态
-     * @return 好友JID和在线状态的映射
+     * @return 成功返回包含好友JID和状态的映射，失败返回异常
      */
     suspend fun getFriendsPresence(): Result<Map<BareJid, String>> = withContext(Dispatchers.IO) {
-        if (connectionState.value != ConnectionState.AUTHENTICATED) {
-            return@withContext Result.failure(IllegalStateException("用户未认证"))
-        }
-        val connection = currentConnection ?: return@withContext Result.failure(IllegalStateException("连接无效"))
-
         try {
-            val roster = Roster.getInstanceFor(connection)
+            checkConnection()
+            Log.d(TAG, "getFriendsPresence: 返回内部维护的状态映射")
+            
+            val rosterManager = Roster.getInstanceFor(currentConnection)
+            if (!rosterManager.isLoaded) {
+                Log.d(TAG, "花名册未加载，正在重新加载...")
+                rosterManager.reloadAndWait()
+            }
+            
+            // 创建结果映射
+            val resultMap = mutableMapOf<BareJid, String>()
+            val entries = rosterManager.entries
+            
+            // 如果presenceMap为空，先进行一次状态请求
+            if (this@XMPPManager.presenceMap.isEmpty()) {
+                Log.d(TAG, "状态映射为空，请求一次所有联系人状态")
+                requestAllContactsPresence()
+                // 给一点时间让服务器响应
+                delay(500)
+            }
+            
+            Log.d(TAG, "从内部映射中获取状态，映射大小: ${this@XMPPManager.presenceMap.size}")
+            
+            // 遍历所有roster条目，从presenceMap获取状态
+            for (entry in entries) {
+                val jid = entry.jid.asBareJid()
+                val jidStr = jid.toString()
+                
+                // 从内部状态映射获取状态
+                val status = this@XMPPManager.presenceMap[jidStr] ?: "离线"
+                resultMap[jid] = status
+            }
+            
+            Log.d(TAG, "已返回内部状态映射: 共 ${resultMap.size} 个, " +
+                    "在线: ${resultMap.values.count { it.contains("在线") }}, " +
+                    "离线: ${resultMap.values.count { it == "离线" }}")
+            
+            Result.success(resultMap)
+        } catch (e: Exception) {
+            Log.e(TAG, "获取好友在线状态失败", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * 请求所有联系人的在线状态
+     */
+    fun requestAllContactsPresence() {
+        try {
+            if (!isConnected()) {
+                Log.e(TAG, "无法请求在线状态: 连接无效")
+                return
+            }
+            
+            val roster = Roster.getInstanceFor(currentConnection)
+            
+            // 确保roster已加载
             if (!roster.isLoaded) {
                 roster.reloadAndWait()
             }
-
-            // 获取所有好友并处理他们的状态
-            val statusMap = mutableMapOf<BareJid, String>()
-            for (entry in roster.entries) {
-                val jid = entry.jid ?: continue
-
-                // 获取好友的所有Presence信息
-                val presences = roster.getPresences(jid)
-                if (presences.isEmpty()) {
-                    statusMap[jid] = "离线"
-                    continue
+            
+            Log.d(TAG, "正在请求 ${roster.entries.size} 个联系人的在线状态...")
+            
+            // 对每个联系人发送presence probe和subscribe
+            roster.entries.forEach { entry ->
+                try {
+                    // 1. 发送probe请求 - 用于立即获取在线状态
+                    val probe = Presence(Presence.Type.available)
+                    probe.to = entry.jid
+                    currentConnection?.sendStanza(probe)
+                    
+                    // 2. 发送subscribe请求 - 确保获得持续的状态更新
+                    val subscribe = Presence(Presence.Type.subscribe)
+                    subscribe.to = entry.jid
+                    currentConnection?.sendStanza(subscribe)
+                    
+                    Log.d(TAG, "已向 ${entry.jid} 发送在线状态请求")
+                } catch (e: Exception) {
+                    Log.e(TAG, "向 ${entry.jid} 发送状态请求失败", e)
                 }
-
-                // 遍历所有Presence找出最高可用性
-                var bestPresence: Presence? = null
-                for (presence in presences) {
-                    if (presence.type == Presence.Type.available) {
-                        if (bestPresence == null || presence.mode.ordinal < bestPresence.mode.ordinal) {
-                            bestPresence = presence
-                        }
-                    }
-                }
-
-                // 根据最高优先级的Presence返回状态
-                val status = when {
-                    bestPresence == null -> "离线"
-                    bestPresence.mode == Presence.Mode.chat -> "在线-空闲"
-                    bestPresence.mode == Presence.Mode.available -> "在线"
-                    bestPresence.mode == Presence.Mode.away -> "离开"
-                    bestPresence.mode == Presence.Mode.xa -> "长时间离开"
-                    bestPresence.mode == Presence.Mode.dnd -> "忙碌"
-                    else -> bestPresence.status ?: "在线"
-                }
-
-                statusMap[jid] = status
             }
-
-            Log.d(TAG, "获取到 ${statusMap.size} 个好友的在线状态")
-            Result.success(statusMap)
+            
+            Log.d(TAG, "已完成所有联系人状态请求")
         } catch (e: Exception) {
-            Log.e(TAG, "批量获取好友在线状态失败", e)
-            Result.failure(e)
+            Log.e(TAG, "请求联系人状态失败", e)
         }
     }
 
@@ -2111,6 +2159,182 @@ class XMPPManager private constructor() {
             Log.e(TAG, "获取最近联系人失败", e)
             return@withContext Result.failure(e)
         }
+    }
+
+    /**
+     * 检查当前连接状态，如果未认证或连接无效则抛出异常
+     * 此方法在需要确保连接有效的情况下使用
+     */
+    private fun checkConnection() {
+        if (connectionState.value != ConnectionState.AUTHENTICATED) {
+            throw IllegalStateException("用户未认证")
+        }
+        
+        if (currentConnection == null) {
+            throw IllegalStateException("连接无效")
+        }
+    }
+
+    /**
+     * 初始化Roster（联系人列表）并配置监听器
+     */
+    private fun setupRosterListener() {
+        if (currentConnection == null) {
+            Log.e(TAG, "无法设置Roster监听器：连接无效")
+            return
+        }
+        
+        try {
+            val roster = Roster.getInstanceFor(currentConnection)
+            
+            // 配置Roster选项
+            roster.subscriptionMode = Roster.SubscriptionMode.accept_all
+            
+            // 添加Presence监听器，监听联系人状态变化
+            roster.addPresenceEventListener(object : org.jivesoftware.smack.roster.PresenceEventListener {
+                override fun presenceAvailable(jid: FullJid?, presence: Presence?) {
+                    val bareJid = jid?.asBareJid()
+                    Log.d(TAG, "Presence可用事件: jid=$bareJid, presence=$presence")
+                    if (presence != null) {
+                        val status = when (presence.mode) {
+                            Presence.Mode.away -> "离开"
+                            Presence.Mode.xa -> "长时间离开"
+                            Presence.Mode.dnd -> "忙碌"
+                            Presence.Mode.chat -> "想聊天"
+                            else -> "在线"
+                        }
+                        updatePresenceInViewModel(bareJid, status)
+                    }
+                }
+
+                override fun presenceUnavailable(jid: FullJid?, presence: Presence?) {
+                    val bareJid = jid?.asBareJid()
+                    Log.d(TAG, "Presence不可用事件: jid=$bareJid, presence=$presence")
+                    updatePresenceInViewModel(bareJid, "离线")
+                }
+
+                // 修正签名以匹配接口
+                override fun presenceError(jid: Jid?, errorPresence: Presence?) {
+                    Log.e(TAG, "Presence错误事件: jid=$jid, errorPresence=$errorPresence")
+                }
+
+                override fun presenceSubscribed(jid: BareJid?, subscribedPresence: Presence?) {
+                    Log.d(TAG, "Presence订阅事件: jid=$jid")
+                }
+
+                override fun presenceUnsubscribed(jid: BareJid?, unsubscribedPresence: Presence?) {
+                    Log.d(TAG, "Presence取消订阅事件: jid=$jid")
+                }
+            })
+            
+            // 设置Roster加载监听器 - 修正类型
+            roster.addRosterLoadedListener(object : org.jivesoftware.smack.roster.RosterLoadedListener {
+                override fun onRosterLoaded(roster: Roster?) {
+                    Log.d(TAG, "Roster加载完成，共 ${roster?.entries?.size ?: 0} 个条目")
+                }
+
+                override fun onRosterLoadingFailed(exception: Exception?) {
+                    Log.e(TAG, "Roster加载失败", exception)
+                }
+            })
+            
+            // 加载Roster
+            if (!roster.isLoaded) {
+                Log.d(TAG, "开始加载Roster...")
+                roster.reloadAndWait()
+            }
+            
+            Log.d(TAG, "Roster监听器设置完成")
+        } catch (e: Exception) {
+            Log.e(TAG, "设置Roster监听器失败", e)
+        }
+    }
+
+    /**
+     * 更新单个联系人的在线状态到ViewModel (改为通过Flow广播)
+     * @param jid 联系人的BareJid
+     * @param status 新的状态字符串 ("在线", "离线", "离开" 等)
+     */
+    private fun updatePresenceInViewModel(jid: BareJid?, status: String) {
+        if (jid == null) return
+        val jidString = jid.toString()
+        // 使用IO作用域更新ViewModel的状态流
+        scope.launch {
+            try {
+                Log.d(TAG, "广播 Presence 更新: $jidString -> $status")
+                _presenceUpdateFlow.emit(jidString to status)
+            } catch (e: Exception) {
+                 Log.e(TAG, "广播 Presence 更新失败 for $jidString: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 设置直接的Presence监听器，绕过Roster直接监听所有Presence包
+     */
+    private fun setupPresenceListener() {
+        val connection = currentConnection ?: return
+        
+        // 添加Presence StanzaListener
+        connection.addSyncStanzaListener({ stanza ->
+            if (stanza is Presence) {
+                try {
+                    val from = stanza.from?.asBareJid()?.toString() ?: return@addSyncStanzaListener
+                    val currentUserJid = connection.user?.asBareJid()?.toString() ?: return@addSyncStanzaListener
+                    
+                    // 忽略自己发送的Presence
+                    if (from == currentUserJid) return@addSyncStanzaListener
+                    
+                    // 确定状态
+                    val status = when {
+                        stanza.type == Presence.Type.unavailable -> "离线"
+                        stanza.mode == Presence.Mode.away -> "离开"
+                        stanza.mode == Presence.Mode.xa -> "长时间离开"
+                        stanza.mode == Presence.Mode.dnd -> "忙碌"
+                        stanza.mode == Presence.Mode.chat -> "想聊天"
+                        else -> { // 默认在线状态
+                            if (!stanza.status.isNullOrBlank()) {
+                                "在线 - ${stanza.status}"
+                            } else {
+                                "在线"
+                            }
+                        }
+                    }
+                    
+                    // 更新内部映射
+                    val oldStatus = presenceMap[from]
+                    if (oldStatus != status) {
+                        presenceMap[from] = status
+                        
+                        // 广播更新
+                        scope.launch {
+                            _presenceUpdateFlow.emit(from to status)
+                            Log.d(TAG, "Presence更新: $from -> $status (来自直接监听)")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "处理Presence包出错", e)
+                }
+            }
+        }, { stanza -> stanza is Presence })
+        
+        Log.d(TAG, "已设置Presence直接监听器")
+        
+        // 登录后主动请求一次所有联系人的状态
+        scope.launch {
+            delay(2000) // 给系统一些时间处理初始化
+            requestAllContactsPresence()
+        }
+    }
+
+    /**
+     * 检查连接是否有效
+     * @return 如果连接有效且已认证则返回true
+     */
+    private fun isConnected(): Boolean {
+        return currentConnection != null && 
+               currentConnection?.isConnected == true && 
+               currentConnection?.isAuthenticated == true
     }
 }
 

@@ -46,8 +46,15 @@ import com.example.travalms.data.model.ChatMessage
 import com.example.travalms.ui.viewmodels.ChatViewModel
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-
-// 添加自定义BottomNavigation导入，与HomeScreen保持一致
+import androidx.compose.material.SwipeToDismiss
+import androidx.compose.material.DismissDirection
+import androidx.compose.material.DismissValue
+import androidx.compose.material.FractionalThreshold
+import androidx.compose.material.rememberDismissState
+import androidx.compose.material.Card
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.scale
+import com.example.travalms.utils.PinyinUtils
 
 /**
  * 消息列表屏幕
@@ -65,7 +72,8 @@ fun MessageScreen(
     chatViewModel: ChatViewModel = viewModel() // 添加ViewModel
 ) {
     // 状态管理
-    var selectedTab by remember { mutableStateOf(1) } // 默认选中"好友"选项卡
+    val selectedTabState by chatViewModel.selectedMessageTab.collectAsState()
+    var selectedTab by remember { mutableStateOf(selectedTabState) } // 使用ViewModel状态初始化
     var searchText by remember { mutableStateOf("") }
 
     // State for Add Friend Dialog
@@ -95,28 +103,80 @@ fun MessageScreen(
     var realFriendsList by remember { mutableStateOf<List<ContactItem>>(emptyList()) }
     var friendsLoadingState by remember { mutableStateOf<String?>(null) }
     
-    // 刷新好友在线状态的函数 - 移动到这里，在调用之前定义
+    // 获取消息会话 - 确保在刷新状态函数前获取
+    val recentSessions by chatViewModel.recentSessions.collectAsState()
+    
+    // 获取联系人状态映射
+    val contactsStatusMap by chatViewModel.contactsStatusMap.collectAsState()
+    
+    // 获取当前用户JID
+    val currentUserJid = getCurrentUserJid()
+    val currentUserLocalPart = remember(currentUserJid) {
+        if (currentUserJid.contains("@")) {
+            currentUserJid.substringBefore("@")
+        } else {
+            currentUserJid
+        }
+    }
+
+    // 将会话转换为ContactItem以便显示 - 添加过滤逻辑
+    val messages = recentSessions
+        .filter { session ->
+            // 1. 过滤掉空会话
+            if (session.targetId.isEmpty() || session.targetName.isEmpty()) {
+                false
+            } 
+            // 2. 过滤掉与自己的聊天 - 修复：使用精确匹配而非contains
+            else if (session.targetId == currentUserJid || 
+                    (session.targetId.contains("@") && session.targetId.substringBefore("@") == currentUserLocalPart)) {
+                Log.d("MessageScreen", "过滤掉与自己的聊天: ${session.targetId}")
+                false
+            }
+            // 3. 保留其他有效会话
+            else {
+                true
+            }
+        }
+        .map { session ->
+            // 获取此联系人的在线状态
+            val jid = session.targetId.toBareJidOrNull()
+            val statusFromMap = if (jid != null && contactsStatusMap.containsKey(jid.toString())) {
+                contactsStatusMap[jid.toString()]
+            } else {
+                null
+            }
+            
+            // 决定显示的状态文本：如果有消息，显示消息内容；否则显示状态
+            val displayStatus = if (session.lastMessage != null) {
+                formatLastMessage(session.lastMessage)
+            } else {
+                statusFromMap ?: "离线"
+            }
+            
+            ContactItem(
+                id = session.targetId.hashCode(),
+                name = session.targetName,
+                status = displayStatus,
+                jid = jid,  // 存储原始的targetId(JID)
+                lastMessage = session.lastMessage,
+                unreadCount = session.unreadCount,
+                originalId = session.targetId  // 增加一个字段保存原始ID
+            )
+        }
+    
+    // 刷新好友在线状态的函数 - 放在messages变量定义之后，避免引用错误
     fun refreshFriendsStatus() {
         scope.launch {
             try {
-                val presenceResult = XMPPManager.getInstance().getFriendsPresence()
-                if (presenceResult.isSuccess) {
-                    val statusMap = presenceResult.getOrDefault(emptyMap())
-                    Log.d("MessageScreen", "刷新好友状态: 获取到 ${statusMap.size} 个好友的在线状态")
-                    
-                    // 更新好友列表状态
-                    if (statusMap.isNotEmpty() && realFriendsList.isNotEmpty()) {
-                        realFriendsList = realFriendsList.map { contact ->
-                            if (contact.jid != null && statusMap.containsKey(contact.jid)) {
-                                contact.copy(status = statusMap[contact.jid] ?: contact.status)
-                            } else {
-                                contact
-                            }
-                        }
-                    }
-                } else {
-                    Log.e("MessageScreen", "刷新好友状态失败: ${presenceResult.exceptionOrNull()?.message}")
-                }
+                Log.d("MessageScreen", "开始刷新好友在线状态")
+                // 使用XMPPManager的requestAllContactsPresence()主动请求状态更新
+                XMPPManager.getInstance().requestAllContactsPresence()
+                
+                // 不再调用getFriendsPresence()方法，而是让服务器推送到XMPPManager
+                // 服务器会通过XMPPManager的presence监听器接收状态并广播给ChatViewModel
+                // 视图界面会自动通过ChatViewModel的contactsStatusMap获取最新状态
+                
+                Log.d("MessageScreen", "已请求好友状态更新")
             } catch (e: Exception) {
                 Log.e("MessageScreen", "刷新好友状态异常", e)
             }
@@ -124,15 +184,14 @@ fun MessageScreen(
     }
     
     // 添加周期性刷新在线状态逻辑
-    LaunchedEffect(selectedTab) {
-        // 只有当选择了好友标签页时启动刷新
-        if (selectedTab == 1) {
-            while (isActive) {
-                if (realFriendsList.isNotEmpty()) {
-                    refreshFriendsStatus()
-                }
-                delay(30000) // 每30秒更新一次
-            }
+    LaunchedEffect(Unit) {
+        // 立即刷新一次状态
+        refreshFriendsStatus()
+        
+        // 启动独立的状态更新协程，不依赖于选项卡状态
+        while (isActive) {
+            delay(5000) // 每5秒刷新一次
+            refreshFriendsStatus()
         }
     }
 
@@ -188,10 +247,14 @@ fun MessageScreen(
                             ContactItem(
                                 id = jid.hashCode() + index,
                                 name = name,
-                                status = jid.toString(), // Store JID in status
-                                jid = jid
+                                status = "离线", // 设置默认状态为离线
+                                jid = jid,  // 确保JID字段正确设置
+                                originalId = jid.toString() // 添加原始ID字段存储完整JID字符串
                             )
-                        }.sortedBy { it.name }
+                        }.sortedBy { item ->
+                            // 按照拼音首字母排序
+                            extractFirstLetter(item.name) ?: "?"
+                        }
                         Log.d("MessageScreen", "[E] 用户映射完成，共 ${mappedUsers.size} 个 ContactItem")
 
                         // 再次确保协程仍然活跃
@@ -256,7 +319,20 @@ fun MessageScreen(
                     // 获取好友在线状态
                     val presenceResult = XMPPManager.getInstance().getFriendsPresence()
                     val statusMap = if (presenceResult.isSuccess) {
-                        presenceResult.getOrDefault(emptyMap())
+                        val resultMap = presenceResult.getOrDefault(emptyMap())
+                        // 打印所有状态值，用于调试
+                        Log.d("MessageScreen", "好友在线状态详情: ${resultMap.entries.joinToString { "${it.key}=${it.value}" }}")
+                        // 也更新ViewModel中的状态映射
+                        chatViewModel.updateContactsStatus(resultMap.map { (jid, status) ->
+                            ContactItem(
+                                id = jid.hashCode(),
+                                name = jid.toString(),
+                                status = status,
+                                jid = jid,
+                                originalId = jid.toString()
+                            )
+                        })
+                        resultMap
                     } else {
                         Log.e("MessageScreen", "获取好友在线状态失败: ${presenceResult.exceptionOrNull()?.message}")
                         emptyMap()
@@ -269,8 +345,11 @@ fun MessageScreen(
                         
                         // 获取此好友的在线状态
                         val status = if (jid != null && statusMap.containsKey(jid)) {
-                            statusMap[jid] ?: "未知状态"
+                            val rawStatus = statusMap[jid]
+                            Log.d("MessageScreen", "获取到好友[$name]的原始状态: $rawStatus")
+                            rawStatus ?: "未知状态"
                         } else {
+                            Log.d("MessageScreen", "好友[$name]在状态Map中未找到，设置为离线")
                             "离线" // 默认为离线
                         }
 
@@ -280,7 +359,10 @@ fun MessageScreen(
                             status = status,
                             jid = jid
                         )
-                    }.sortedBy { item -> item.name }
+                    }.sortedBy { item -> 
+                        // 按照拼音首字母排序
+                        extractFirstLetter(item.name) ?: "?"
+                    }
 
                     realFriendsList = friendItems
                     Log.d("MessageScreen", "好友列表加载完成，共 ${realFriendsList.size} 个好友")
@@ -300,22 +382,6 @@ fun MessageScreen(
                 friendsLoadingState = "加载好友列表时发生错误: ${e.message}"
             }
         }
-    }
-
-    // 获取消息会话
-    val recentSessions by chatViewModel.recentSessions.collectAsState()
-    
-    // 将会话转换为ContactItem以便显示
-    val messages = recentSessions.map { session ->
-        ContactItem(
-            id = session.targetId.hashCode(),
-            name = session.targetName,
-            status = formatLastMessage(session.lastMessage),
-            jid = session.targetId.toBareJidOrNull(),  // 存储原始的targetId(JID)
-            lastMessage = session.lastMessage,
-            unreadCount = session.unreadCount,
-            originalId = session.targetId  // 增加一个字段保存原始ID
-        )
     }
 
     // 分类的联系人数据 - 确保每个字母都有对应的联系人
@@ -405,16 +471,7 @@ fun MessageScreen(
 
     // 获取当前的所有索引字母 - 从联系人列表中提取
     val contactLetters = currentList.mapNotNull { contact ->
-        // 对于中文名称，提取括号中的拼音首字母
-        val name = contact.name
-        if (name.contains('(') && name.contains(')')) {
-            // 提取括号中的第一个字母
-            val pinyinPart = name.substringAfter('(').substringBefore(')')
-            pinyinPart.firstOrNull()?.uppercaseChar()?.toString()
-        } else {
-            // 对于英文名，直接取首字母
-            name.firstOrNull()?.uppercaseChar()?.toString()
-        }
+        extractFirstLetter(contact.name)
     }.distinct().sorted()
 
     // 确保所有字母都显示
@@ -424,16 +481,8 @@ fun MessageScreen(
     val letterToIndexMap = remember(currentList) {
         val map = mutableMapOf<String, Int>()
         currentList.forEachIndexed { index, contact ->
-            val name = contact.name
-            val firstLetter = if (name.contains('(') && name.contains(')')) {
-                // 中文名，提取拼音首字母
-                val pinyinPart = name.substringAfter('(').substringBefore(')')
-                pinyinPart.firstOrNull()?.uppercaseChar()?.toString()
-            } else {
-                // 英文名，直接取首字母
-                name.firstOrNull()?.uppercaseChar()?.toString()
-            }
-
+            val firstLetter = extractFirstLetter(contact.name)
+            
             if (firstLetter != null && !map.containsKey(firstLetter)) {
                 map[firstLetter] = index
             }
@@ -483,6 +532,67 @@ fun MessageScreen(
         else -> "消息"
     }
 
+    // 在选择联系人时导航到聊天室
+    fun onContactSelected(contact: ContactItem) {
+        when (selectedTab) {
+            0 -> {
+                // 全部消息选项卡导航到聊天室
+                val sessionId = contact.originalId ?: contact.id.toString()
+                navController.navigate(
+                    AppRoutes.CHAT_ROOM
+                        .replace("{sessionId}", sessionId)
+                        .replace("{targetName}", contact.name)
+                        .replace("{targetType}", "message")
+                )
+            }
+            1 -> {
+                // 如果有JID，导航到聊天界面
+                if (contact.jid != null) {
+                    navController.navigate(
+                        AppRoutes.CHAT_ROOM
+                            .replace("{sessionId}", contact.jid.toString())
+                            .replace("{targetName}", contact.name)
+                            .replace("{targetType}", "message")
+                    )
+                }
+            }
+            2 -> {
+                // 群聊选项卡
+                val targetId = contact.jid?.toString() ?: contact.id.toString()
+                navController.navigate(
+                    AppRoutes.CHAT_ROOM
+                        .replace("{sessionId}", targetId)
+                        .replace("{targetName}", contact.name)
+                        .replace("{targetType}", "group")
+                )
+            }
+            3 -> {
+                // 公司黄页选项卡 - 使用JID而不是ID
+                val targetType = "message" // 修改为message类型以确保一致性
+                
+                // 从status中获取JID（在ContactItem映射时我们将JID存储在status中）
+                val sessionId = if (contact.jid != null) {
+                    contact.jid.toString()
+                } else if (contact.status.contains("@")) {
+                    // 备选方案：如果JID字段为空但status包含完整JID
+                    contact.status
+                } else {
+                    // 回退到ID（不应该发生）
+                    contact.id.toString()
+                }
+                
+                Log.d("MessageScreen", "从公司黄页导航: 使用sessionId=$sessionId, targetName=${contact.name}")
+                
+                navController.navigate(
+                    AppRoutes.CHAT_ROOM
+                        .replace("{sessionId}", sessionId)
+                        .replace("{targetName}", contact.name)
+                        .replace("{targetType}", targetType)
+                )
+            }
+        }
+    }
+
     // Fetch friends and directory users when tab is selected
     LaunchedEffect(selectedTab) {
         if (selectedTab == 1) {
@@ -528,49 +638,34 @@ fun MessageScreen(
         }
     }
 
-    // 在选择消息时将会话标记为已读
-    fun onContactSelected(contact: ContactItem) {
+    // 当选项卡变化时更新ViewModel
+    LaunchedEffect(selectedTab) {
+        if (selectedTab != selectedTabState) {
+            chatViewModel.updateSelectedMessageTab(selectedTab)
+        }
+    }
+
+    // 当ViewModel状态变化时更新UI
+    LaunchedEffect(selectedTabState) {
+        if (selectedTab != selectedTabState) {
+            selectedTab = selectedTabState
+        }
+    }
+
+    // 在界面初始时确保同步选项卡状态
+    LaunchedEffect(Unit) {
+        // 从ViewModel获取保存的选项卡状态，这确保了应用返回后选项卡状态可以恢复
+        selectedTab = selectedTabState
+        
+        // 根据选项卡状态加载相应数据
         when (selectedTab) {
-            0 -> {
-                // 全部消息选项卡导航到聊天室
-                val sessionId = contact.originalId ?: contact.id.toString()
-                navController.navigate(
-                    AppRoutes.CHAT_ROOM
-                        .replace("{sessionId}", sessionId)
-                        .replace("{targetName}", contact.name)
-                        .replace("{targetType}", "message")
-                )
+            1 -> if (realFriendsList.isEmpty()) {
+                delay(300)
+                loadFriendsList()
             }
-            1 -> {
-                // 如果有JID，导航到聊天界面
-                if (contact.jid != null) {
-                    navController.navigate(
-                        AppRoutes.CHAT_ROOM
-                            .replace("{sessionId}", contact.jid.toString())
-                            .replace("{targetName}", contact.name)
-                            .replace("{targetType}", "message")
-                    )
-                }
-            }
-            2 -> {
-                // 群聊选项卡
-                val targetId = contact.jid?.toString() ?: contact.id.toString()
-                navController.navigate(
-                    AppRoutes.CHAT_ROOM
-                        .replace("{sessionId}", targetId)
-                        .replace("{targetName}", contact.name)
-                        .replace("{targetType}", "group")
-                )
-            }
-            3 -> {
-                // 公司黄页选项卡
-                val targetType = "company"
-                navController.navigate(
-                    AppRoutes.CHAT_ROOM
-                        .replace("{sessionId}", contact.id.toString())
-                        .replace("{targetName}", contact.name)
-                        .replace("{targetType}", targetType)
-                )
+            3 -> if (companyDirectoryUsers.isEmpty()) {
+                delay(300)
+                loadDirectoryUsers()
             }
         }
     }
@@ -869,81 +964,107 @@ fun MessageScreen(
                         }
 
                         items(filteredList, key = { it.id }) { contact ->
-                            ContactListItem(
-                                friend = contact,
-                                isCompanyTab = selectedTab == 3,
-                                isAdded = if (selectedTab == 3 && contact.jid != null) {
-                                    friendsJidSet.contains(contact.jid)
-                                } else {
-                                    false
-                                },
-                                onAddFriend = {
-                                    if (contact.jid != null) {
-                                        scope.launch {
-                                            snackbarHostState.showSnackbar("正在发送请求给 ${contact.name}...")
-                                            val result = XMPPManager.getInstance().sendFriendRequest(contact.jid.toString())
-                                            if (result.isSuccess) {
-                                                snackbarHostState.showSnackbar("好友请求已发送")
-                                                val refreshResult = XMPPManager.getInstance().getFriendsJids()
-                                                if (refreshResult.isSuccess) {
-                                                    friendsJidSet = refreshResult.getOrDefault(emptySet())
-                                                }
-                                            } else {
-                                                snackbarHostState.showSnackbar("发送请求失败: ${result.exceptionOrNull()?.message ?: "未知错误"}")
+                            // 使用左滑删除组件包装ContactListItem
+                            if (selectedTab == 0) { // 只在消息列表中启用左滑删除
+                                var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+                                
+                                // 删除确认对话框
+                                if (showDeleteConfirmDialog) {
+                                    AlertDialog(
+                                        onDismissRequest = { showDeleteConfirmDialog = false },
+                                        title = { Text("确认删除") },
+                                        text = { Text("确定要删除与 ${contact.name} 的聊天记录吗？\n此操作无法撤销。") },
+                                        confirmButton = {
+                                            Button(
+                                                onClick = {
+                                                    val sessionId = contact.originalId ?: contact.jid?.toString() ?: return@Button
+                                                    chatViewModel.clearSessionHistory(sessionId)
+                                                    scope.launch {
+                                                        snackbarHostState.showSnackbar("已删除与 ${contact.name} 的聊天记录")
+                                                    }
+                                                    showDeleteConfirmDialog = false
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                                            ) {
+                                                Text("删除")
+                                            }
+                                        },
+                                        dismissButton = {
+                                            TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                                                Text("取消")
                                             }
                                         }
-                                    } else {
-                                        scope.launch {
-                                            snackbarHostState.showSnackbar("无法添加好友: JID 无效")
-                                        }
-                                    }
-                                },
-                                onClick = {
-                                    when (selectedTab) {
-                                        0 -> {
-                                            // 全部消息选项卡导航到聊天室
-                                            val sessionId = contact.originalId ?: contact.id.toString()
-                                            navController.navigate(
-                                                AppRoutes.CHAT_ROOM
-                                                    .replace("{sessionId}", sessionId)
-                                                    .replace("{targetName}", contact.name)
-                                                    .replace("{targetType}", "message")
-                                            )
-                                        }
-                                        1 -> {
-                                            // 如果有JID，导航到聊天界面
-                                            if (contact.jid != null) {
-                                                navController.navigate(
-                                                    AppRoutes.CHAT_ROOM
-                                                        .replace("{sessionId}", contact.jid.toString())
-                                                        .replace("{targetName}", contact.name)
-                                                        .replace("{targetType}", "message")
-                                                )
-                                            }
-                                        }
-                                        2 -> {
-                                            // 群聊选项卡
-                                            val targetId = contact.jid?.toString() ?: contact.id.toString()
-                                            navController.navigate(
-                                                AppRoutes.CHAT_ROOM
-                                                    .replace("{sessionId}", targetId)
-                                                    .replace("{targetName}", contact.name)
-                                                    .replace("{targetType}", "group")
-                                            )
-                                        }
-                                        3 -> {
-                                            // 公司黄页选项卡
-                                            val targetType = "company"
-                                            navController.navigate(
-                                                AppRoutes.CHAT_ROOM
-                                                    .replace("{sessionId}", contact.id.toString())
-                                                    .replace("{targetName}", contact.name)
-                                                    .replace("{targetType}", targetType)
-                                            )
-                                        }
-                                    }
+                                    )
                                 }
-                            )
+                                
+                                SwipeToDeleteContactItem(
+                                    contact = contact,
+                                    onDelete = {
+                                        // 显示确认对话框
+                                        showDeleteConfirmDialog = true
+                                    },
+                                    isCompanyTab = selectedTab == 3,
+                                    isAdded = if (selectedTab == 3 && contact.jid != null) {
+                                        friendsJidSet.contains(contact.jid)
+                                    } else {
+                                        false
+                                    },
+                                    onAddFriend = {
+                                        if (contact.jid != null) {
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar("正在发送请求给 ${contact.name}...")
+                                                val result = XMPPManager.getInstance().sendFriendRequest(contact.jid.toString())
+                                                if (result.isSuccess) {
+                                                    snackbarHostState.showSnackbar("好友请求已发送")
+                                                    val refreshResult = XMPPManager.getInstance().getFriendsJids()
+                                                    if (refreshResult.isSuccess) {
+                                                        friendsJidSet = refreshResult.getOrDefault(emptySet())
+                                                    }
+                                                } else {
+                                                    snackbarHostState.showSnackbar("发送请求失败: ${result.exceptionOrNull()?.message ?: "未知错误"}")
+                                                }
+                                            }
+                                        } else {
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar("无法添加好友: JID 无效")
+                                            }
+                                        }
+                                    },
+                                    onClick = { onContactSelected(contact) }
+                                )
+                            } else {
+                                ContactListItem(
+                                    friend = contact,
+                                    isCompanyTab = selectedTab == 3,
+                                    isAdded = if (selectedTab == 3 && contact.jid != null) {
+                                        friendsJidSet.contains(contact.jid)
+                                    } else {
+                                        false
+                                    },
+                                    onAddFriend = {
+                                        if (contact.jid != null) {
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar("正在发送请求给 ${contact.name}...")
+                                                val result = XMPPManager.getInstance().sendFriendRequest(contact.jid.toString())
+                                                if (result.isSuccess) {
+                                                    snackbarHostState.showSnackbar("好友请求已发送")
+                                                    val refreshResult = XMPPManager.getInstance().getFriendsJids()
+                                                    if (refreshResult.isSuccess) {
+                                                        friendsJidSet = refreshResult.getOrDefault(emptySet())
+                                                    }
+                                                } else {
+                                                    snackbarHostState.showSnackbar("发送请求失败: ${result.exceptionOrNull()?.message ?: "未知错误"}")
+                                                }
+                                            }
+                                        } else {
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar("无法添加好友: JID 无效")
+                                            }
+                                        }
+                                    },
+                                    onClick = { onContactSelected(contact) }
+                                )
+                            }
                             Divider(color = Color(0xFFEEEEEE), thickness = 1.dp)
                         }
                     }
@@ -1126,29 +1247,46 @@ fun ContactListItem(
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 状态指示点 - 仅在好友列表显示，群聊不显示
-                if (!isCompanyTab && !isGroupTab) {
-                    val statusColor = when {
-                        friend.status.contains("在线") && !friend.status.contains("离线") -> Color.Green
-                        friend.status.contains("忙碌") -> Color(0xFFFFA500) // 橙色表示忙碌
-                        friend.status.contains("离开") -> Color(0xFFFFFF00) // 黄色表示离开
-                        else -> Color.Gray // 默认灰色表示离线
-                    }
-                    
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(statusColor)
-                    )
-                    
-                    Spacer(modifier = Modifier.width(4.dp))
+                // 状态指示点 - 显示在所有类型的列表中
+                val statusColor = when {
+                    friend.status.equals("在线", ignoreCase = true) -> Color.Green
+                    friend.status.equals("available", ignoreCase = true) -> Color.Green
+                    friend.status.startsWith("在线") -> Color.Green
+                    friend.status.contains("available") -> Color.Green
+                    friend.status.contains("忙碌") || friend.status.contains("busy") -> Color(0xFFFFA500) // 橙色表示忙碌
+                    friend.status.contains("离开") || friend.status.contains("away") -> Color(0xFFFFFF00) // 黄色表示离开
+                    friend.status.contains("dnd") -> Color(0xFFFFA500) // 勿扰也是橙色
+                    friend.status.contains("离线") || friend.status.contains("offline") || friend.status.equals("unavailable", ignoreCase = true) -> Color.Gray
+                    else -> Color.Gray // 默认灰色表示离线
+                }
+                
+                // 状态指示点始终显示
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(statusColor)
+                )
+                
+                Spacer(modifier = Modifier.width(4.dp))
+                
+                // 获取合适的状态文本，区分消息内容和状态
+                val displayText = if (friend.lastMessage != null) {
+                    // 消息列表项：显示最后一条消息内容，而不是状态
+                    formatLastMessage(friend.lastMessage)
+                } else if (isCompanyTab) {
+                    // 公司黄页：简化状态显示
+                    jidToUsername(friend.jid?.toString() ?: "")
+                } else {
+                    // 好友列表：显示状态文本
+                    friend.status
                 }
                 
                 Text(
-                    text = if (isCompanyTab && friend.jid != null) friend.status else friend.status,
+                    text = displayText,
                     fontSize = 14.sp,
-                    color = Color.Gray
+                    color = Color.Gray,
+                    maxLines = 1
                 )
             }
         }
@@ -1201,6 +1339,34 @@ private fun formatLastMessage(message: ChatMessage?): String {
     return "${message.content} · ${formatMessageTime(message.timestamp)}"
 }
 
+/**
+ * 从名称中提取首字母，支持中文拼音
+ * 
+ * 优先级:
+ * 1. 如果名称包含括号，从括号中提取首字母（如 "陈明 (Chen Ming)" 提取 "C"）
+ * 2. 如果名称以中文开头，根据拼音提取首字母（如 "曾小美" 提取 "Z"）
+ * 3. 其他情况直接提取名称首字母的大写形式
+ */
+private fun extractFirstLetter(name: String): String? {
+    if (name.isEmpty()) return null
+    
+    // 1. 如果名称包含括号，从括号中提取首字母
+    if (name.contains('(') && name.contains(')')) {
+        val pinyinPart = name.substringAfter('(').substringBefore(')')
+        if (pinyinPart.isNotEmpty()) {
+            return pinyinPart.first().uppercase()
+        }
+    }
+    
+    // 2. 如果名称以中文开头，通过拼音转换获取首字母
+    if (PinyinUtils.isChineseChar(name[0])) {
+        return PinyinUtils.getFirstLetter(name)
+    }
+    
+    // 3. 其他情况直接返回首字母的大写形式
+    return name.first().uppercase()
+}
+
 private fun formatMessageTime(time: LocalDateTime): String {
     val now = LocalDateTime.now()
     return when {
@@ -1225,4 +1391,105 @@ private fun formatMessageTime(time: LocalDateTime): String {
 
 private fun getCurrentUserJid(): String {
     return XMPPManager.getInstance().currentConnection?.user?.asEntityBareJidString() ?: ""
+}
+
+@OptIn(ExperimentalMaterialApi::class)
+@Composable
+fun SwipeToDeleteContactItem(
+    contact: ContactItem,
+    onDelete: () -> Unit,
+    isCompanyTab: Boolean = false,
+    isAdded: Boolean = false,
+    onAddFriend: () -> Unit = {},
+    onClick: () -> Unit
+) {
+    // 创建滑动状态
+    val dismissState = rememberDismissState(
+        confirmStateChange = { dismissValue ->
+            if (dismissValue == DismissValue.DismissedToStart) {
+                // 左滑显示删除按钮
+                onDelete()
+                // 不自动关闭，待用户确认后手动关闭
+                false
+            } else {
+                false
+            }
+        }
+    )
+
+    // 计算滑动过程中的动画效果
+    val isDismissed = dismissState.isDismissed(DismissDirection.EndToStart)
+    val isDragged = dismissState.offset.value != 0f
+    val deleteIconScale = animateFloatAsState(
+        targetValue = if (isDragged) 1.3f else 1.0f,
+        label = "deleteIconScale"
+    )
+
+    SwipeToDismiss(
+        state = dismissState,
+        // 设置仅响应从左向右滑动
+        directions = setOf(DismissDirection.EndToStart),
+        // 设置滑动阈值
+        dismissThresholds = { direction -> FractionalThreshold(0.3f) },
+        // 滑动背景，显示删除按钮
+        background = {
+            val color = Color.Red
+            val alignment = Alignment.CenterEnd
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(color)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = alignment
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.scale(deleteIconScale.value)
+                ) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "删除",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "删除",
+                        color = Color.White,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        },
+        // 实际的联系人项目
+        dismissContent = {
+            // 使用Card保证背景是白色，防止滑动时看到底部红色背景
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                elevation = 0.dp,
+                backgroundColor = Color.White,
+                // 消除圆角
+                shape = RoundedCornerShape(0.dp)
+            ) {
+                ContactListItem(
+                    friend = contact,
+                    isCompanyTab = isCompanyTab,
+                    isAdded = isAdded,
+                    onAddFriend = onAddFriend,
+                    onClick = onClick
+                )
+            }
+        }
+    )
+}
+
+// 从JID中提取用户名部分
+private fun jidToUsername(jid: String): String {
+    return if (jid.contains("@")) {
+        jid.substringBefore("@")
+    } else {
+        jid
+    }
 }

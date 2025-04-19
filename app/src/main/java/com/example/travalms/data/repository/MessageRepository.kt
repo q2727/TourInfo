@@ -76,11 +76,44 @@ class MessageRepository(
         val sessionIds = messageDao.getAllSessionIds()
         if (sessionIds.isEmpty()) return emptyList()
         
+        Log.d(TAG, "获取会话列表: 找到 ${sessionIds.size} 个会话ID, 当前用户: $currentUserJid")
+        
         // 2. 获取每个会话的最后一条消息
         val lastMessages = messageDao.getLastMessagesForAllSessions()
         val sessionsMap = mutableMapOf<String, ChatSession>()
         
+        // 获取当前用户的本地部分(用户名)以过滤掉自己与自己的会话
+        val currentUserLocalPart = if (currentUserJid.contains('@')) {
+            currentUserJid.substringBefore('@')
+        } else {
+            currentUserJid
+        }
+        
         for (sessionId in sessionIds) {
+            // 过滤掉当前用户与自己的会话，以及空会话
+            if (sessionId.isEmpty() || sessionId == currentUserJid) {
+                Log.d(TAG, "跳过会话 $sessionId: 与当前用户 $currentUserJid 相同")
+                continue
+            }
+            
+            // 精确匹配本地部分而非使用contains
+            if (sessionId.contains('@') && sessionId.substringBefore('@') == currentUserLocalPart) {
+                Log.d(TAG, "跳过会话 $sessionId: 与当前用户 $currentUserLocalPart 相同")
+                continue
+            }
+            
+            // 查找该会话下的所有消息，确认当前用户参与其中
+            val sessionMessages = messageDao.getMessagesForSessionSync(sessionId)
+            val userInvolved = sessionMessages.any { 
+                it.senderId == currentUserJid || it.recipientId == currentUserJid 
+            }
+            
+            // 如果当前用户未参与此会话，则跳过
+            if (!userInvolved) {
+                Log.d(TAG, "跳过会话 $sessionId: 当前用户未参与其中")
+                continue
+            }
+            
             // 找到这个会话的最后一条消息
             val lastMessage = lastMessages.find { it.sessionId == sessionId }?.toChatMessage()
             
