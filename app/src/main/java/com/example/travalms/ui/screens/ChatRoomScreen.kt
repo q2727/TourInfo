@@ -55,36 +55,76 @@ fun ChatRoomScreen(
         XMPPManager.getInstance().currentConnection?.user?.asEntityBareJidString() ?: ""
     }
     
+    // 添加从服务器加载消息的辅助函数
+    suspend fun loadMessagesFromServer(targetJid: String) {
+        try {
+            val historyResult = chatViewModel.loadHistoryFromServer(targetJid)
+            if (historyResult.isSuccess) {
+                val serverMessages = historyResult.getOrNull() ?: emptyList()
+                
+                if (serverMessages.isNotEmpty()) {
+                    Log.d("ChatRoom", "从服务器加载了 ${serverMessages.size} 条历史消息")
+                    
+                    // 合并消息列表，避免重复
+                    val existingIds = messagesState.map { it.id }.toSet()
+                    val newMessages = serverMessages.filter { it.id !in existingIds }
+                    
+                    if (newMessages.isNotEmpty()) {
+                        Log.d("ChatRoom", "添加 ${newMessages.size} 条新消息到UI")
+                        messagesState.addAll(newMessages)
+                        
+                        // 按时间排序
+                        val sorted = messagesState.sortedBy { it.timestamp }
+                        messagesState.clear()
+                        messagesState.addAll(sorted)
+                    }
+                } else {
+                    Log.d("ChatRoom", "服务器没有返回历史消息")
+                }
+            } else {
+                val error = historyResult.exceptionOrNull()
+                Log.e("ChatRoom", "从服务器加载历史消息失败: ${error?.message}")
+                snackbarHostState.showSnackbar("无法从服务器加载历史消息")
+            }
+        } catch (e: Exception) {
+            Log.e("ChatRoom", "加载服务器历史消息异常", e)
+        }
+    }
+    
     // 加载历史消息并订阅新消息
     LaunchedEffect(key1 = sessionId) {
-        // 获取聊天对象的JID
-        val targetJid = sessionId.takeIf { it.contains('@') } ?: "$sessionId@${XMPPManager.SERVER_DOMAIN}"
+        // 获取聊天对象的JID - 确保总是以完整的JID形式存在
+        val targetJid = if (sessionId.contains('@')) {
+            sessionId
+        } else {
+            "$sessionId@${XMPPManager.SERVER_DOMAIN}"
+        }
         
-        Log.d("ChatRoom", "初始化聊天: targetJid=$targetJid, targetName=$targetName")
+        Log.d("ChatRoom", "初始化聊天: sessionId=$sessionId, 处理后targetJid=$targetJid, targetName=$targetName")
         Log.d("ChatRoom", "当前用户JID: $currentUserJid")
         
         // 加载历史聊天记录
         coroutineScope.launch {
             try {
-                val chatHistory = chatViewModel.getMessagesForSession(targetJid)
-                if (chatHistory.isNotEmpty()) {
-                    Log.d("ChatRoom", "从ViewModel加载了 ${chatHistory.size} 条消息")
-                    messagesState.addAll(chatHistory)
-                } else {
-                    Log.d("ChatRoom", "ViewModel中没有消息，从服务器加载历史记录")
-                    val chatHistoryResult = XMPPManager.getInstance().getChatHistory(targetJid)
-                    if (chatHistoryResult.isSuccess) {
-                        val history = chatHistoryResult.getOrDefault(emptyList())
-                        Log.d("ChatRoom", "已加载 ${history.size} 条历史消息")
-                        messagesState.addAll(history)
-                    } else {
-                        val error = chatHistoryResult.exceptionOrNull()
-                        Log.e("ChatRoom", "加载历史消息失败: ${error?.message}")
-                        snackbarHostState.showSnackbar("无法加载聊天记录: ${error?.message ?: "未知错误"}")
+                // 1. 首先尝试从本地数据库加载消息
+                val localMessages = chatViewModel.getMessagesForSession(targetJid)
+                
+                if (localMessages.isNotEmpty()) {
+                    Log.d("ChatRoom", "从本地数据库加载了 ${localMessages.size} 条消息")
+                    messagesState.clear()
+                    messagesState.addAll(localMessages)
+                    
+                    // 如果消息不多，尝试从服务器补充获取
+                    if (localMessages.size < 20) {
+                        loadMessagesFromServer(targetJid)
                     }
+                } else {
+                    // 2. 如果本地没有消息，从服务器获取
+                    Log.d("ChatRoom", "本地数据库没有消息，从服务器加载历史记录")
+                    loadMessagesFromServer(targetJid)
                 }
 
-                // 标记会话为已读
+                // 3. 标记会话为已读
                 chatViewModel.markSessionAsRead(targetJid)
             } catch (e: Exception) {
                 Log.e("ChatRoom", "加载历史消息异常", e)
@@ -98,7 +138,7 @@ fun ChatRoomScreen(
                 XMPPManager.getInstance().messageFlow.collectLatest { newMessage ->
                     Log.d("ChatRoom", "收到消息: ${newMessage.content} 从 ${newMessage.senderId}")
                     
-                    // 增强去重逻辑：使用消息ID作为唯一标识，避免重复处理同一消息
+                    // 增强去重逻辑
                     val isDuplicate = messagesState.any { existingMsg -> 
                         existingMsg.id == newMessage.id ||
                         (existingMsg.content == newMessage.content && 

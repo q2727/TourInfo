@@ -53,7 +53,7 @@ class UserSearchIQ : IQ("query", "jabber:iq:search") {
 // 搜索请求 IQ 类，用于发送包含搜索条件的请求
 class UserSearchRequestIQ(searchXML: String) : IQ("query", "jabber:iq:search") {
     private val innerXml = searchXML
-    
+
     override fun getIQChildElementBuilder(childElementBuilder: IQ.IQChildElementXmlStringBuilder): IQ.IQChildElementXmlStringBuilder {
         childElementBuilder.rightAngleBracket()
         childElementBuilder.append(innerXml)
@@ -112,15 +112,15 @@ class XMPPManager private constructor() {
     // 项目通知流
     private val _pubsubItemsFlow = MutableSharedFlow<PubSubNotification>(replay = 100)
     val pubsubItemsFlow: SharedFlow<PubSubNotification> = _pubsubItemsFlow
-    
+
     // 添加消息流
     private val _messageFlow = MutableSharedFlow<ChatMessage>(replay = 10)
     val messageFlow = _messageFlow.asSharedFlow()
-    
+
     // 添加登录结果流
     private val _loginResultFlow = MutableSharedFlow<Result<Unit>>(replay = 1)
     val loginResultFlow: SharedFlow<Result<Unit>> = _loginResultFlow
-    
+
     // 添加协程作用域
     private val scope = CoroutineScope(Dispatchers.IO)
 
@@ -304,7 +304,7 @@ class XMPPManager private constructor() {
             // 保存当前连接
             currentConnection = connection
             // initPubSubManager 会在 authenticated 回调中调用
-            
+
             // 调用登录成功处理函数
             onLoginSuccess()
 
@@ -315,12 +315,12 @@ class XMPPManager private constructor() {
             Log.e(TAG, "XMPP登录失败", e)
             _connectionState.value = ConnectionState.ERROR
             disconnect() // Ensure cleanup on error
-            
+
             // 发送登录失败消息
             scope.launch {
                 _loginResultFlow.emit(Result.failure(e))
             }
-            
+
             // 返回失败结果
             Result.failure(e)
         }
@@ -538,7 +538,7 @@ class XMPPManager private constructor() {
                     } catch (e2: Exception) {
                         Log.e(TAG, "获取现有节点失败 (冲突后): ${e2.message}", e2)
                         // 如果获取也失败，返回原始冲突错误
-                         return@withContext Result.failure(e)
+                        return@withContext Result.failure(e)
                     }
                 } else {
                     // 其他创建错误
@@ -689,10 +689,10 @@ class XMPPManager private constructor() {
             try {
                 // 对 JSON 内容进行 XML 转义，避免特殊字符导致的解析问题
                 val escapedContent = content.replace("&", "&amp;")
-                                         .replace("<", "&lt;")
-                                         .replace(">", "&gt;")
-                                         .replace("\"", "&quot;")
-                                         .replace("'", "&apos;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                    .replace("\"", "&quot;")
+                    .replace("'", "&apos;")
 
                 // 创建包含完整内容的 XML 负载
                 val xmlContent = """
@@ -1094,7 +1094,7 @@ class XMPPManager private constructor() {
             // 设置周期性发送Presence保持连接活跃
             initScope.launch {
                 while (currentConnection?.isAuthenticated == true &&
-                      _connectionState.value == ConnectionState.AUTHENTICATED) {
+                    _connectionState.value == ConnectionState.AUTHENTICATED) {
                     try {
                         sendInitialPresence()
                         Log.d(TAG, "发送周期性Presence更新")
@@ -1189,7 +1189,7 @@ class XMPPManager private constructor() {
         try {
             Log.d(TAG, "尝试获取好友资料: $friendJid")
             val profileMap = mutableMapOf<String, String>()
-            
+
 
             // 2. 如果缺少基本信息，尝试使用Roster获取
             if (!profileMap.containsKey("nickName") && !profileMap.containsKey("fullName")) {
@@ -1678,13 +1678,13 @@ class XMPPManager private constructor() {
             if (!roster.isLoaded) {
                 roster.reloadAndWait()
             }
-            
+
             val friends = roster.entries.map { entry ->
                 // 优先使用昵称，如果没有则使用JID的本地部分
                 val name = entry.name ?: entry.jid?.let { getLocalpartSafely(it) } ?: "未知好友"
                 Pair(entry.jid, name)
             }
-            
+
             Log.d(TAG, "获取到好友列表，数量=${friends.size}")
             Result.success(friends)
         } catch (e: Exception) {
@@ -1709,18 +1709,18 @@ class XMPPManager private constructor() {
             if (!roster.isLoaded) {
                 roster.reloadAndWait()
             }
-            
+
             // 确保是好友才获取状态
             if (!roster.contains(jid)) {
                 return@withContext Result.failure(IllegalArgumentException("该用户不是好友"))
             }
-            
+
             // 获取好友的所有Presence信息
             val presences = roster.getPresences(jid)
             if (presences.isEmpty()) {
                 return@withContext Result.success("离线")
             }
-            
+
             // 遍历所有Presence找出最高可用性
             var bestPresence: Presence? = null
             for (presence in presences) {
@@ -1730,7 +1730,7 @@ class XMPPManager private constructor() {
                     }
                 }
             }
-            
+
             // 根据最高优先级的Presence返回状态
             val status = when {
                 bestPresence == null -> "离线"
@@ -1741,7 +1741,7 @@ class XMPPManager private constructor() {
                 bestPresence.mode == Presence.Mode.dnd -> "忙碌"
                 else -> bestPresence.status ?: "在线"
             }
-            
+
             return@withContext Result.success(status)
         } catch (e: Exception) {
             Log.e(TAG, "获取好友在线状态失败: ${e.message}", e)
@@ -1764,19 +1764,19 @@ class XMPPManager private constructor() {
             if (!roster.isLoaded) {
                 roster.reloadAndWait()
             }
-            
+
             // 获取所有好友并处理他们的状态
             val statusMap = mutableMapOf<BareJid, String>()
             for (entry in roster.entries) {
                 val jid = entry.jid ?: continue
-                
+
                 // 获取好友的所有Presence信息
                 val presences = roster.getPresences(jid)
                 if (presences.isEmpty()) {
                     statusMap[jid] = "离线"
                     continue
                 }
-                
+
                 // 遍历所有Presence找出最高可用性
                 var bestPresence: Presence? = null
                 for (presence in presences) {
@@ -1786,7 +1786,7 @@ class XMPPManager private constructor() {
                         }
                     }
                 }
-                
+
                 // 根据最高优先级的Presence返回状态
                 val status = when {
                     bestPresence == null -> "离线"
@@ -1797,10 +1797,10 @@ class XMPPManager private constructor() {
                     bestPresence.mode == Presence.Mode.dnd -> "忙碌"
                     else -> bestPresence.status ?: "在线"
                 }
-                
+
                 statusMap[jid] = status
             }
-            
+
             Log.d(TAG, "获取到 ${statusMap.size} 个好友的在线状态")
             Result.success(statusMap)
         } catch (e: Exception) {
@@ -1819,13 +1819,13 @@ class XMPPManager private constructor() {
             jidStr // Return the full string if no "@" is present (might be domain only)
         }
     }
-    
+
     private fun isServiceComponent(localpart: String): Boolean {
         return localpart.equals("pubsub", ignoreCase = true) ||
-               localpart.equals("conference", ignoreCase = true) ||
-               localpart.equals("proxy", ignoreCase = true) ||
-               localpart.equals("search", ignoreCase = true) ||
-               localpart.equals("vjud", ignoreCase = true)
+                localpart.equals("conference", ignoreCase = true) ||
+                localpart.equals("proxy", ignoreCase = true) ||
+                localpart.equals("search", ignoreCase = true) ||
+                localpart.equals("vjud", ignoreCase = true)
     }
 
     // 添加在connectionManager初始化相关代码之后
@@ -1835,21 +1835,21 @@ class XMPPManager private constructor() {
             Log.e(TAG, "setupMessageListener: 未登录或连接无效")
             return
         }
-        
+
         try {
             // 获取当前用户JID用于比较
             val currentUserJid = currentConnection?.user?.asEntityBareJidString()
             Log.d(TAG, "当前用户JID: $currentUserJid")
-            
+
             // 添加消息监听器
             currentConnection?.addStanzaListener({ stanza ->
                 if (stanza is org.jivesoftware.smack.packet.Message && stanza.type == org.jivesoftware.smack.packet.Message.Type.chat) {
                     val fromJid = stanza.from.asBareJid().toString()
                     val body = stanza.body
-                    
+
                     Log.d(TAG, "==================== 收到消息 ====================")
                     Log.d(TAG, "收到聊天消息: $body 从 $fromJid (当前用户: $currentUserJid)")
-                    
+
                     if (body != null) {
                         // 使用协程异步处理
                         scope.launch {
@@ -1857,10 +1857,10 @@ class XMPPManager private constructor() {
                                 // 获取对方的实际名称
                                 val senderName = getSenderName(JidCreate.bareFrom(fromJid))
                                 Log.d(TAG, "获取到发送者名称: $senderName")
-                                
+
                                 // 使用XMPP消息的stanzaId作为唯一标识，如果没有则生成新的
                                 val messageId = stanza.stanzaId ?: UUID.randomUUID().toString()
-                                
+
                                 val newMessage = ChatMessage(
                                     id = messageId,
                                     senderId = fromJid, // 使用完整JID
@@ -1870,9 +1870,9 @@ class XMPPManager private constructor() {
                                     isRead = false,
                                     recipientId = currentUserJid // 接收者是当前用户
                                 )
-                                
+
                                 Log.d(TAG, "创建接收消息: ID=$messageId, senderId=$fromJid, recipientId=$currentUserJid, senderName=$senderName")
-                                
+
                                 // 发布到Flow
                                 _messageFlow.emit(newMessage)
                             } catch (e: Exception) {
@@ -1882,7 +1882,7 @@ class XMPPManager private constructor() {
                     }
                 }
             }, org.jivesoftware.smack.filter.StanzaTypeFilter(org.jivesoftware.smack.packet.Message::class.java))
-            
+
             Log.d(TAG, "成功设置消息监听器")
         } catch (e: Exception) {
             Log.e(TAG, "设置消息监听器失败: ${e.message}", e)
@@ -1902,43 +1902,43 @@ class XMPPManager private constructor() {
             Log.e(TAG, "sendMessage: 用户未认证")
             return@withContext Result.failure(IllegalStateException("用户未认证"))
         }
-        
+
         val connection = currentConnection ?: run {
             Log.e(TAG, "sendMessage: 连接无效")
             return@withContext Result.failure(IllegalStateException("连接无效"))
         }
-        
+
         try {
             // 获取当前用户的完整JID
             val currentUserJid = connection.user.asEntityBareJidString()
             val currentUserName = currentConnection?.user?.localpart?.toString() ?: "我"
-            
+
             // 确保recipientJid格式正确
             val fullRecipientJid = if (!recipientJid.contains('@')) {
                 "$recipientJid@$SERVER_DOMAIN"
             } else {
                 recipientJid
             }
-            
+
             Log.d(TAG, "==================== 发送消息 ====================")
             Log.d(TAG, "当前用户JID: $currentUserJid")
             Log.d(TAG, "接收者JID: $fullRecipientJid")
             Log.d(TAG, "消息内容: $messageContent")
-            
+
             // 创建消息
             val message = org.jivesoftware.smack.packet.Message()
             message.type = org.jivesoftware.smack.packet.Message.Type.chat
             message.to = JidCreate.entityBareFrom(fullRecipientJid)
             message.body = messageContent
             message.from = connection.user // 确保from字段正确设置
-            
+
             // 生成唯一的消息ID
             val messageId = UUID.randomUUID().toString()
             message.stanzaId = messageId
-            
+
             // 发送消息
             connection.sendStanza(message)
-            
+
             // 创建本地消息对象 - 使用当前用户的实际名称
             val chatMessage = ChatMessage(
                 id = messageId, // 使用相同的ID
@@ -1949,12 +1949,12 @@ class XMPPManager private constructor() {
                 isRead = true, // 自己发的消息默认已读
                 recipientId = fullRecipientJid // 使用完整接收者JID
             )
-            
+
             Log.d(TAG, "创建本地消息: ID=$messageId, senderId=$currentUserJid, recipientId=$fullRecipientJid, senderName=$currentUserName")
-            
+
             // 发布到Flow
             _messageFlow.emit(chatMessage)
-            
+
             Log.d(TAG, "消息已发送，ID: $messageId")
             Result.success(chatMessage)
         } catch (e: Exception) {
@@ -1974,16 +1974,16 @@ class XMPPManager private constructor() {
             Log.e(TAG, "getChatHistory: 用户未认证")
             return@withContext Result.failure(IllegalStateException("用户未认证"))
         }
-        
+
         try {
             Log.d(TAG, "获取与 $otherJid 的聊天历史")
-            
+
             // 这里应该是从服务器或本地数据库获取聊天记录
             // 目前XMPP服务器可能没有默认的消息归档功能，需要使用XEP-0136 (Message Archiving) 扩展
             // 简化起见，这里先返回空列表，然后通过 messageFlow 接收新的消息
-            
+
             // 如果要实现完整功能，需要添加数据库存储逻辑
-            
+
             Result.success(emptyList())
         } catch (e: Exception) {
             Log.e(TAG, "获取聊天历史失败: ${e.message}", e)
@@ -2011,15 +2011,15 @@ class XMPPManager private constructor() {
     private fun onLoginSuccess() {
         // 设置消息监听器
         setupMessageListener()
-        
+
         // 更新连接状态
         _connectionState.value = ConnectionState.AUTHENTICATED
-        
+
         // 通知登录成功
         scope.launch {
             _loginResultFlow.emit(Result.success(Unit))
         }
-        
+
         Log.i(TAG, "登录成功")
     }
 
@@ -2032,24 +2032,24 @@ class XMPPManager private constructor() {
             Log.e(TAG, "sendPing: 未登录或连接无效")
             return@withContext Result.failure(IllegalStateException("未登录或连接无效"))
         }
-        
+
         try {
             val pingManager = PingManager.getInstanceFor(currentConnection)
             val pingSuccess = pingManager.ping(currentConnection?.user?.asDomainBareJid())
-            
+
             if (pingSuccess) {
                 Log.d(TAG, "XMPP ping成功")
             } else {
                 Log.w(TAG, "XMPP ping失败")
             }
-            
+
             Result.success(pingSuccess)
         } catch (e: Exception) {
             Log.e(TAG, "发送ping时出错: ${e.message}", e)
             Result.failure(e)
         }
     }
-    
+
     /**
      * 保存登录凭据到安全存储
      * 注意：这是一个简单的实现，生产环境中应使用更安全的存储方式
@@ -2061,13 +2061,13 @@ class XMPPManager private constructor() {
                 .putString("username", username)
                 .putString("password", password)
                 .apply()
-            
+
             Log.d(TAG, "已保存登录凭据")
         } catch (e: Exception) {
             Log.e(TAG, "保存登录凭据时出错: ${e.message}", e)
         }
     }
-    
+
     /**
      * 清除保存的登录凭据
      */
@@ -2078,7 +2078,7 @@ class XMPPManager private constructor() {
                 .remove("username")
                 .remove("password")
                 .apply()
-            
+
             Log.d(TAG, "已清除登录凭据")
         } catch (e: Exception) {
             Log.e(TAG, "清除登录凭据时出错: ${e.message}", e)
@@ -2087,7 +2087,7 @@ class XMPPManager private constructor() {
 
     /**
      * 获取最近联系的用户列表
-     * 
+     *
      * @return 最近联系人的BareJid列表
      */
     suspend fun getRecentContacts(): Result<List<BareJid>> = withContext(Dispatchers.IO) {
@@ -2095,11 +2095,11 @@ class XMPPManager private constructor() {
             Log.e(TAG, "getRecentContacts: 未登录")
             return@withContext Result.failure(IllegalStateException("未登录"))
         }
-        
+
         try {
             // 获取所有好友
             val friendsResult = getFriendsJids()
-            
+
             if (friendsResult.isSuccess) {
                 // 返回所有好友JID（按字母顺序）
                 return@withContext Result.success(friendsResult.getOrDefault(emptySet()).toList())
@@ -2123,4 +2123,3 @@ data class PubSubNotification(
     val itemId: String,   // 项目ID
     val payload: String   // 内容负载
 )
-

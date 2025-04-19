@@ -15,5 +15,6 @@ data class ContactItem(
     // val avatarResId: Int, // Original, less flexible
     val jid: BareJid? = null, // Add optional JID field
     val lastMessage: ChatMessage? = null, // 最后一条消息
-    val unreadCount: Int = 0 // 未读消息数量
+    val unreadCount: Int = 0, // 未读消息数量
+    val originalId: String? = null // 原始ID/JID，用于导航
 ) 

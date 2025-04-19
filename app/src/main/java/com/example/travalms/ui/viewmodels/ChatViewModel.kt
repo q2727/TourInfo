@@ -1,34 +1,41 @@
 package com.example.travalms.ui.viewmodels
 
+import android.app.Application
 import android.util.Log
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.travalms.data.db.ChatDatabase  // 取消注释
 import com.example.travalms.data.model.ChatMessage
 import com.example.travalms.data.model.ChatSession
 import com.example.travalms.data.remote.XMPPManager
+import com.example.travalms.data.repository.MessageRepository  // 取消注释
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 
 /**
  * 聊天ViewModel，管理聊天消息和会话
  */
-class ChatViewModel : ViewModel() {
+class ChatViewModel(application: Application) : AndroidViewModel(application) {
     
     private val TAG = "ChatViewModel"
     private val xmppManager = XMPPManager.getInstance()
     
-    // 存储所有聊天消息
-    private val messageStore = mutableMapOf<String, MutableList<ChatMessage>>()
+    // 使用Room数据库
+    private val database = ChatDatabase.getDatabase(application)
+    private val messageDao = database.messageDao()
+    private val messageRepository = MessageRepository(messageDao, xmppManager)
     
     // 存储最近的会话列表
     private val _recentSessions = MutableStateFlow<List<ChatSession>>(emptyList())
     val recentSessions: StateFlow<List<ChatSession>> = _recentSessions.asStateFlow()
 
-    // 初始化，开始监听新消息
+    // 初始化，开始监听新消息和加载会话
     init {
         // 订阅消息流
         viewModelScope.launch {
@@ -40,6 +47,11 @@ class ChatViewModel : ViewModel() {
                 Log.e(TAG, "监听消息流出错", e)
             }
         }
+        
+        // 如果已经登录，加载会话列表
+        if (xmppManager.currentConnection?.isAuthenticated == true) {
+            updateRecentSessions()
+        }
     }
 
     /**
@@ -50,38 +62,35 @@ class ChatViewModel : ViewModel() {
         
         // 确定会话ID（根据发送者或接收者）
         val currentUserJid = getCurrentUserJid()
+        val sessionId = determineSessionId(message, currentUserJid)
         
-        // 记录日志，方便调试
-        Log.d(TAG, "当前用户JID: $currentUserJid, 消息发送者: ${message.senderId}")
+        if (sessionId.isEmpty()) {
+            Log.w(TAG, "无法确定会话ID，跳过处理消息")
+            return
+        }
         
-        val sessionId = if (message.senderId == currentUserJid) {
-            // 当前用户发送的消息，使用接收者作为会话ID
-            message.recipientId ?: return
+        // 保存消息到数据库
+        viewModelScope.launch {
+            try {
+                messageRepository.saveMessage(message, sessionId)
+                // 更新最近会话列表
+                updateRecentSessions()
+            } catch (e: Exception) {
+                Log.e(TAG, "保存消息到数据库失败", e)
+            }
+        }
+    }
+    
+    /**
+     * 确定消息的会话ID
+     */
+    private fun determineSessionId(message: ChatMessage, currentUserJid: String): String {
+        return if (message.senderId == currentUserJid) {
+            // 自己发送的消息，使用接收者作为会话ID
+            message.recipientId ?: ""
         } else {
             // 收到的消息，使用发送者作为会话ID
             message.senderId
-        }
-        
-        // 获取会话的消息列表
-        val sessionMessages = messageStore.getOrPut(sessionId) { mutableListOf() }
-        
-        // 检查消息是否已存在（去重）
-        val isDuplicate = sessionMessages.any { existingMsg -> 
-            existingMsg.id == message.id ||
-            (existingMsg.content == message.content && 
-             existingMsg.senderId == message.senderId &&
-             existingMsg.timestamp.isEqual(message.timestamp))
-        }
-        
-        if (!isDuplicate) {
-            // 保存消息到对应会话的消息列表
-            sessionMessages.add(message)
-            Log.d(TAG, "添加消息到会话 $sessionId: ${message.id}, 发送者=${message.senderId}")
-            
-            // 更新最近会话列表
-            updateRecentSessions()
-        } else {
-            Log.d(TAG, "忽略重复消息: ${message.id}")
         }
     }
     
@@ -90,64 +99,43 @@ class ChatViewModel : ViewModel() {
      */
     private fun updateRecentSessions() {
         viewModelScope.launch {
-            val sessions = mutableListOf<ChatSession>()
-            
-            messageStore.forEach { (jid, messages) ->
-                if (messages.isNotEmpty()) {
-                    // 获取最后一条消息
-                    val lastMessage = messages.maxByOrNull { it.timestamp }
-                    
-                    // 获取未读消息数量
-                    val unreadCount = messages.count { 
-                        !it.isRead && it.senderId != getCurrentUserJid() 
-                    }
-                    
-                    // 获取好友名称
-                    val name = getSenderName(jid)
-                    
-                    // 创建会话
-                    val session = ChatSession(
-                        id = jid,
-                        targetId = jid,
-                        targetName = name,
-                        targetType = "person", // 假设都是个人会话
-                        lastMessage = lastMessage,
-                        unreadCount = unreadCount
-                    )
-                    
-                    sessions.add(session)
+            try {
+                val currentUserJid = getCurrentUserJid()
+                if (currentUserJid.isNotEmpty()) {
+                    val sessions = messageRepository.getAllSessions(currentUserJid)
+                    _recentSessions.update { sessions }
+                    Log.d(TAG, "已更新 ${sessions.size} 个最近会话")
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "更新会话列表失败", e)
             }
-            
-            // 按最后消息时间排序
-            sessions.sortByDescending { it.lastMessage?.timestamp }
-            
-            // 更新状态流
-            _recentSessions.update { sessions }
-            Log.d(TAG, "已更新 ${sessions.size} 个最近会话")
         }
     }
     
     /**
      * 获取指定会话的所有消息
      */
-    fun getMessagesForSession(sessionId: String): List<ChatMessage> {
-        return messageStore[sessionId] ?: emptyList()
+    suspend fun getMessagesForSession(sessionId: String): List<ChatMessage> {
+        return try {
+            messageRepository.getMessagesForSessionSync(sessionId)
+        } catch (e: Exception) {
+            Log.e(TAG, "获取会话消息失败: $sessionId", e)
+            emptyList()
+        }
     }
     
     /**
      * 将会话标记为已读
      */
     fun markSessionAsRead(sessionId: String) {
-        messageStore[sessionId]?.let { messages ->
-            // 将所有接收到的消息标记为已读
-            for (i in messages.indices) {
-                if (messages[i].senderId == sessionId && !messages[i].isRead) {
-                    messages[i] = messages[i].copy(isRead = true)
-                }
+        viewModelScope.launch {
+            try {
+                messageRepository.markSessionAsRead(sessionId, sessionId)
+                // 更新会话列表
+                updateRecentSessions()
+            } catch (e: Exception) {
+                Log.e(TAG, "标记会话已读失败", e)
             }
-            // 更新会话列表
-            updateRecentSessions()
         }
     }
     
@@ -172,20 +160,50 @@ class ChatViewModel : ViewModel() {
     }
     
     /**
+     * 从服务器加载历史消息
+     */
+    suspend fun loadHistoryFromServer(otherJid: String): Result<List<ChatMessage>> {
+        return try {
+            messageRepository.loadHistoryFromServer(otherJid)
+        } catch (e: Exception) {
+            Log.e(TAG, "加载服务器历史消息失败", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
      * 发送新消息
      */
     fun sendMessage(recipientJid: String, content: String) {
         viewModelScope.launch {
             try {
-                val result = xmppManager.sendMessage(recipientJid, content)
+                val result = messageRepository.sendMessage(recipientJid, content)
                 if (result.isSuccess) {
                     Log.d(TAG, "消息发送成功")
-                    // 消息应该已经通过messageFlow被处理了
+                    // 消息已由MessageRepository保存到数据库
+                    // 更新会话列表
+                    updateRecentSessions()
                 } else {
                     Log.e(TAG, "发送消息失败", result.exceptionOrNull())
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "发送消息异常", e)
+            }
+        }
+    }
+    
+    /**
+     * 清除会话历史
+     */
+    fun clearSessionHistory(sessionId: String) {
+        viewModelScope.launch {
+            try {
+                messageRepository.clearSessionHistory(sessionId)
+                // 更新会话列表
+                updateRecentSessions()
+                Log.d(TAG, "已清除会话 $sessionId 的历史记录")
+            } catch (e: Exception) {
+                Log.e(TAG, "清除会话历史失败", e)
             }
         }
     }

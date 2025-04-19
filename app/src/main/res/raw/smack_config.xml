@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!-- 自定义Smack配置文件，用于Android平台 -->
+<smack>
+    <!-- 禁用所有自动DNS SRV查询 -->
+    <disabledSmackClasses>
+        <!-- 禁用JNDI相关类 -->
+        <class>org.jivesoftware.smack.util.dns.javax.JavaxResolver</class>
+        <class>org.jivesoftware.smack.util.dns.javax.SRVService</class>
+    </disabledSmackClasses>
+    
+    <!-- 明确指定要加载的类 -->
+    <startupClasses>
+        <!-- 明确使用MiniDnsResolver -->
+        <className>org.jivesoftware.smack.util.dns.minidns.MiniDnsResolver</className>
+    </startupClasses>
+    
+    <!-- 配置连接默认参数 -->
+    <connectionConfiguration>
+        <compressionEnabled>false</compressionEnabled>
+        <!-- 关闭DNS SRV查询 -->
+        <enabledDnsSrvLookup>false</enabledDnsSrvLookup>
+    </connectionConfiguration>
+</smack> 

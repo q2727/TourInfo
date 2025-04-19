@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.travalms.data.model.ContactItem
 import com.example.travalms.data.remote.XMPPManager
+import com.example.travalms.data.remote.toBareJidOrNull
 import com.example.travalms.ui.components.LetterIndex
 import com.example.travalms.ui.navigation.AppRoutes
 import com.example.travalms.ui.theme.PrimaryColor
@@ -310,9 +311,10 @@ fun MessageScreen(
             id = session.targetId.hashCode(),
             name = session.targetName,
             status = formatLastMessage(session.lastMessage),
-            jid = null,
+            jid = session.targetId.toBareJidOrNull(),  // 存储原始的targetId(JID)
             lastMessage = session.lastMessage,
-            unreadCount = session.unreadCount
+            unreadCount = session.unreadCount,
+            originalId = session.targetId  // 增加一个字段保存原始ID
         )
     }
 
@@ -530,29 +532,17 @@ fun MessageScreen(
     fun onContactSelected(contact: ContactItem) {
         when (selectedTab) {
             0 -> {
-                // 全部消息选项卡 - 标记为已读
-                contact.lastMessage?.let { 
-                    if (it.senderId.contains("@")) {
-                        chatViewModel.markSessionAsRead(it.senderId)
-                    } else if (it.recipientId != null) {
-                        chatViewModel.markSessionAsRead(it.recipientId)
-                    }
-                }
-                
-                val targetId = contact.lastMessage?.let {
-                    if (it.senderId == getCurrentUserJid()) it.recipientId else it.senderId
-                } ?: contact.id.toString()
-                
-                // 导航到聊天界面
+                // 全部消息选项卡导航到聊天室
+                val sessionId = contact.originalId ?: contact.id.toString()
                 navController.navigate(
                     AppRoutes.CHAT_ROOM
-                        .replace("{sessionId}", targetId)
+                        .replace("{sessionId}", sessionId)
                         .replace("{targetName}", contact.name)
                         .replace("{targetType}", "message")
                 )
             }
             1 -> {
-                // 好友选项卡
+                // 如果有JID，导航到聊天界面
                 if (contact.jid != null) {
                     navController.navigate(
                         AppRoutes.CHAT_ROOM
@@ -564,12 +554,12 @@ fun MessageScreen(
             }
             2 -> {
                 // 群聊选项卡
-                val targetType = "group"
+                val targetId = contact.jid?.toString() ?: contact.id.toString()
                 navController.navigate(
                     AppRoutes.CHAT_ROOM
-                        .replace("{sessionId}", contact.id.toString())
+                        .replace("{sessionId}", targetId)
                         .replace("{targetName}", contact.name)
-                        .replace("{targetType}", targetType)
+                        .replace("{targetType}", "group")
                 )
             }
             3 -> {
@@ -910,8 +900,15 @@ fun MessageScreen(
                                 },
                                 onClick = {
                                     when (selectedTab) {
-                                        0, 2 -> {
-                                            onContactSelected(contact)
+                                        0 -> {
+                                            // 全部消息选项卡导航到聊天室
+                                            val sessionId = contact.originalId ?: contact.id.toString()
+                                            navController.navigate(
+                                                AppRoutes.CHAT_ROOM
+                                                    .replace("{sessionId}", sessionId)
+                                                    .replace("{targetName}", contact.name)
+                                                    .replace("{targetType}", "message")
+                                            )
                                         }
                                         1 -> {
                                             // 如果有JID，导航到聊天界面
@@ -923,6 +920,16 @@ fun MessageScreen(
                                                         .replace("{targetType}", "message")
                                                 )
                                             }
+                                        }
+                                        2 -> {
+                                            // 群聊选项卡
+                                            val targetId = contact.jid?.toString() ?: contact.id.toString()
+                                            navController.navigate(
+                                                AppRoutes.CHAT_ROOM
+                                                    .replace("{sessionId}", targetId)
+                                                    .replace("{targetName}", contact.name)
+                                                    .replace("{targetType}", "group")
+                                            )
                                         }
                                         3 -> {
                                             // 公司黄页选项卡
