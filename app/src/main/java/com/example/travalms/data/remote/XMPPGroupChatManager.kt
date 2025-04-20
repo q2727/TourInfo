@@ -29,10 +29,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import org.jivesoftware.smack.packet.Presence
+import org.jivesoftware.smackx.muc.RoomInfo
+import org.jivesoftware.smack.XMPPException
+import org.jivesoftware.smack.chat2.ChatManager
+import org.jivesoftware.smack.chat2.IncomingChatMessageListener
+import org.jivesoftware.smackx.muc.InvitationListener
 
 /**
  * XMPPGroupChatManager - 专门负责XMPP群聊(MUC)功能的类
- * 
+ *
  * 将XMPPManager中的群聊功能解构出来，实现更清晰的代码组织
  */
 class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
@@ -55,6 +60,10 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
 
     private val _unreadInvitationCount = MutableStateFlow(0)
     val unreadInvitationCount: StateFlow<Int> = _unreadInvitationCount.asStateFlow()
+
+    // Store listener references for removal
+    private var groupChatMessageListener: org.jivesoftware.smack.StanzaListener? = null
+    private var mucInvitationListener: InvitationListener? = null
 
     init {
         // 添加连接状态监听
@@ -100,7 +109,7 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
                 // 设置自动加入模式，这样在重连时会自动重新加入之前的房间
                 setAutoJoinOnReconnect(true)
             }
-            
+
             // 设置群聊消息监听器
             setupGroupChatMessageListener()
 
@@ -119,17 +128,23 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
     fun setupGroupChatMessageListener() {
         val connection = xmppManager.currentConnection ?: return
 
-        // 添加消息监听器
-        connection.addAsyncStanzaListener({ stanza ->
+        // Remove previous listener if exists
+        groupChatMessageListener?.let {
+            try { connection.removeAsyncStanzaListener(it) } catch (e: Exception) { /* Ignore */ }
+        }
+
+        // Create and store the new listener
+        groupChatMessageListener = org.jivesoftware.smack.StanzaListener { stanza ->
             if (stanza is Message) {
                 val from = stanza.from.toString()
-
                 // 只处理群聊消息（来自conference域的消息）
                 if (from.contains("conference.")) {
                     processGroupChatMessage(stanza)
                 }
             }
-        }, null)
+        }
+        // Add the new listener
+        connection.addAsyncStanzaListener(groupChatMessageListener, null)
 
         Log.d(TAG, "群聊消息监听器设置完成")
     }
@@ -143,9 +158,20 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
             val mucRoom = fromJid.toString().substringBefore("/")
             val senderNickname = fromJid.toString().substringAfter("/", "")
 
-            // 判断是否是自己发送的消息
-            val currentUserNick = xmppManager.currentConnection?.user?.localpart?.toString() ?: ""
-            val isFromMe = senderNickname == currentUserNick
+            // 判断是否是自己发送的消息，使用不含资源标识符的基本用户名
+            val currentUserJid = xmppManager.currentConnection?.user?.asEntityBareJidString() ?: ""
+            val currentUserName = currentUserJid.substringBefore('@')
+
+            // 消息发送者可能是用户的完整JID或者只是昵称
+            val isFromMe = if (senderNickname.contains('@')) {
+                // 如果发送者包含@，说明是JID，比较不含资源的部分
+                senderNickname.substringBefore('/').contains(currentUserName, ignoreCase = true)
+            } else {
+                // 否则直接比较昵称
+                senderNickname == currentUserName
+            }
+
+            Log.d(TAG, "处理群聊消息: room=$mucRoom, sender=$senderNickname, currentUser=$currentUserName, isFromMe=$isFromMe")
 
             // 创建群聊消息对象
             val groupMessage = GroupChatMessage(
@@ -174,24 +200,22 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
             val connection = xmppManager.currentConnection ?: return
             val mucMgr = _mucManager ?: return
 
-            // 注册MUC邀请监听器
-            mucMgr.addInvitationListener { conn, room, inviter, reason, password, message, invitation ->
-                Log.d(TAG, "收到群聊邀请: room=$room, inviter=$inviter, reason=$reason")
+            // Remove previous listener if exists
+            mucInvitationListener?.let {
+                try { mucMgr.removeInvitationListener(it) } catch (e: Exception) { /* Ignore */ }
+            }
 
+            // Create and store the new listener
+            mucInvitationListener = InvitationListener { conn, room, inviter, reason, password, message, invitation ->
+                Log.d(TAG, "收到群聊邀请: room=$room, inviter=$inviter, reason=$reason")
                 try {
-                    // 清理JID格式，确保没有非法字符
                     val cleanRoomJid = room.toString().replace(Regex("\\(.+\\)$"), "").trim()
-                    
-                    // 移除可能存在的"MUC:"前缀
                     val finalRoomJid = if (cleanRoomJid.startsWith("MUC:", ignoreCase = true)) {
                         cleanRoomJid.substring(4).trim()
                     } else {
                         cleanRoomJid
                     }
-                    
                     Log.d(TAG, "处理邀请: 原始房间JID=$room, 清理后=$finalRoomJid")
-
-                    // 获取房间信息，尝试获取房间名称
                     var roomName = finalRoomJid.substringBefore('@')
                     try {
                         val roomInfo = mucMgr.getRoomInfo(JidCreate.entityBareFrom(finalRoomJid))
@@ -201,23 +225,20 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
                     } catch (e: Exception) {
                         Log.w(TAG, "获取房间信息失败: ${e.message}")
                     }
-
-                    // 创建邀请对象
                     val chatInvitation = ChatInvitation(
                         roomJid = finalRoomJid,
                         roomName = roomName,
                         senderJid = inviter.toString(),
                         reason = reason ?: "邀请你加入群聊"
                     )
-
-                    // 添加到邀请列表
                     addInvitation(chatInvitation)
-
                     Log.d(TAG, "已添加群聊邀请: ${chatInvitation.shortDescription}")
                 } catch (e: Exception) {
                     Log.e(TAG, "处理群聊邀请时出错", e)
                 }
             }
+            // Add the new listener
+            mucMgr.addInvitationListener(mucInvitationListener)
 
             Log.d(TAG, "群聊邀请监听器设置成功")
         } catch (e: Exception) {
@@ -285,7 +306,7 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
     private fun updateUnreadInvitationCount() {
         val count = _invitations.value.size
         Log.d(TAG, "更新未读邀请数量: $count")
-        
+
         // 如果数量有变化，才更新
         if (_unreadInvitationCount.value != count) {
             _unreadInvitationCount.value = count
@@ -341,7 +362,7 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
                 } else {
                     cleanRoomJid
                 }
-                
+
                 Log.d(TAG, "【接受群聊邀请】处理后的房间JID: $finalRoomJid (原始: ${invitation.roomJid})")
 
                 // 获取当前用户昵称
@@ -430,7 +451,7 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
      */
     fun rejectInvitation(invitation: ChatInvitation) {
         Log.d(TAG, "拒绝邀请: ${invitation.roomJid}")
-        
+
         try {
             // 判断房间是否实际存在
             val connection = xmppManager.currentConnection
@@ -442,9 +463,9 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
                 } else {
                     cleanRoomJid
                 }
-                
+
                 Log.d(TAG, "拒绝邀请，清理后的房间JID: $finalRoomJid")
-                
+
                 // 如果用户已经在房间中，尝试离开该房间
                 if (_mucManager?.getMultiUserChat(JidCreate.entityBareFrom(finalRoomJid))?.isJoined == true) {
                     try {
@@ -717,7 +738,7 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
 
                 // 加入房间
                 muc.join(mucConfig)
-                
+
                 // 加入后重新获取信息
                 info = mucMgr.getRoomInfo(jid)
 
@@ -744,7 +765,7 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
         try {
             val jid = JidCreate.entityBareFrom(roomJid)
             val muc = _mucManager?.getMultiUserChat(jid)
-            
+
             if (muc?.isJoined == true) {
                 // 直接调用 leave 方法，不需要参数
                 muc.leave()
@@ -794,7 +815,7 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
                 } else {
                     cleanRoomJid
                 }
-                
+
                 Log.d(TAG, "处理后的房间JID: $finalRoomJid (原始: $roomJid)")
 
                 // 获取房间
@@ -984,7 +1005,7 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
                 } else {
                     cleanRoomJid
                 }
-                
+
                 Log.d(TAG, "处理后的房间JID: $finalRoomJid (原始: $roomJid)")
 
                 // 获取房间
@@ -1036,7 +1057,7 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
             // 发送邀请
             muc.invite(inviteeJid, reason)
             Log.d(TAG, "邀请发送成功")
-            
+
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "发送邀请失败", e)
@@ -1067,7 +1088,7 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
                 } else {
                     cleanRoomJid
                 }
-                
+
                 Log.d(TAG, "处理后的房间JID: $finalRoomJid (原始: $roomJid)")
 
                 // 获取房间
@@ -1106,53 +1127,145 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
      * Retrieves a list of rooms the user has joined
      * @return List of GroupRoom objects representing joined rooms
      */
-    suspend fun getJoinedRooms(): List<GroupRoom> {
-        // 确保MUC管理器已初始化
-        if (_mucManager == null) {
-            Log.d(TAG, "getJoinedRooms: MUC manager not initialized, attempting to initialize it")
-            initMucManager()
-            kotlinx.coroutines.delay(300)
+    suspend fun getJoinedRooms(): List<GroupRoom> = withContext(Dispatchers.IO) {
+        Log.d(TAG, "获取已加入的群聊列表")
+        val connection = xmppManager.currentConnection
+        if (connection == null || !connection.isConnected) {
+            Log.e(TAG, "无法获取已加入群聊，连接未建立")
+            return@withContext emptyList()
         }
 
-        if (!isMucManagerInitialized()) {
-            Log.e(TAG, "getJoinedRooms: MUC manager initialization failed")
-            return emptyList()
+        val mucManager = _mucManager ?: MultiUserChatManager.getInstanceFor(connection).also {
+            _mucManager = it
         }
+
+        val joinedRoomsList = mutableListOf<GroupRoom>()
 
         try {
-            val connection = xmppManager.currentConnection
-            if (connection == null || !connection.isConnected || !connection.isAuthenticated) {
-                Log.e(TAG, "getJoinedRooms: 连接无效或未认证，无法获取群聊列表")
-                return emptyList()
-            }
+            val joinedRoomJids: Set<EntityBareJid> = mucManager.joinedRooms
+            Log.d(TAG, "已加入的房间 JIDs: $joinedRoomJids")
 
-            // 直接从服务器获取已加入的房间
-            val joinedRooms = _mucManager?.getJoinedRooms()
-            Log.d(TAG, "getJoinedRooms: 从服务器获取到 ${joinedRooms?.size ?: 0} 个已加入的房间")
-
-            // 转换为GroupRoom对象列表
-            return joinedRooms?.mapNotNull { roomJid ->
+            for (roomJid in joinedRoomJids) {
                 try {
-                    val muc = _mucManager?.getMultiUserChat(roomJid)
-                    val info = _mucManager?.getRoomInfo(roomJid)
-                    
-                    GroupRoom(
-                        roomJid = roomJid.toString(),
-                        name = info?.name ?: roomJid.localpart.toString(),
-                        description = info?.description ?: "Group Chat",
-                        memberCount = info?.occupantsCount ?: 1,
-                        isPrivate = info?.isMembersOnly ?: false,
-                        canEdit = true
-                    )
+                    val muc = mucManager.getMultiUserChat(roomJid)
+                    // Attempt to get room info. This might require being joined,
+                    // but getJoinedRooms should ideally return rooms the user *is* currently joined to.
+                    // If getRoomInfo fails for a joined room, log it but continue.
+                    val roomInfo: RoomInfo? = try {
+                         mucManager.getRoomInfo(roomJid)
+                    } catch (e: SmackException.NoResponseException) {
+                        Log.w(TAG, "获取房间信息超时: $roomJid", e)
+                        null // Proceed without full info if timed out
+                    } catch (e: XMPPException.XMPPErrorException) {
+                        Log.w(TAG, "获取房间信息错误: $roomJid", e)
+                        null // Proceed without full info if there's an XMPP error (e.g., forbidden)
+                     } catch (e: SmackException.NotConnectedException) {
+                         Log.e(TAG, "获取房间信息失败，连接断开: $roomJid", e)
+                         return@withContext emptyList() // Cannot proceed without connection
+                     } catch (e: InterruptedException) {
+                         Log.w(TAG, "获取房间信息被中断: $roomJid", e)
+                         Thread.currentThread().interrupt() // Re-interrupt the thread
+                         null // Proceed without full info
+                    }
+
+                    if (roomInfo != null) {
+                        val groupRoom = GroupRoom(
+                            roomJid = roomJid.toString(),
+                            name = roomInfo.name ?: roomJid.localpart.toString(), // Use JID localpart if name is null
+                            description = roomInfo.description ?: "",
+                            memberCount = roomInfo.occupantsCount,
+                            isPrivate = roomInfo.isMembersOnly, // Assuming membersOnly implies private
+                            // 'canEdit' might need more complex logic based on user role/permissions
+                            // For now, setting a default or checking if the room is persistent/moderated
+                            canEdit = roomInfo.isPersistent // Example: Assume persistent rooms can be "edited"
+                        )
+                        joinedRoomsList.add(groupRoom)
+                        Log.d(TAG, "成功获取并映射房间信息: ${groupRoom.name}")
+                    } else {
+                         // Fallback: Create a minimal GroupRoom if info retrieval failed but we know the JID
+                         val minimalGroupRoom = GroupRoom(
+                            roomJid = roomJid.toString(),
+                            name = roomJid.localpart.toString(), // Use JID localpart as name
+                            description = "无法获取房间信息",
+                            memberCount = -1, // Indicate unknown count
+                            isPrivate = false, // Default or unknown
+                            canEdit = false // Default or unknown
+                         )
+                         joinedRoomsList.add(minimalGroupRoom)
+                        Log.w(TAG, "无法获取房间 $roomJid 的完整信息，使用基本信息")
+                    }
                 } catch (e: Exception) {
-                    Log.e(TAG, "处理房间信息失败: $roomJid", e)
-                    null
+                    // Catch potential errors during MUC instance creation or processing a specific room
+                    Log.e(TAG, "处理房间 $roomJid 时出错", e)
                 }
-            } ?: emptyList()
+            }
+        } catch (e: SmackException.NotConnectedException) {
+            Log.e(TAG, "获取已加入房间列表失败，连接断开", e)
+            return@withContext emptyList() // Return empty list if disconnected during the initial fetch
+        } catch (e: SmackException.NoResponseException) {
+            Log.e(TAG, "获取已加入房间列表超时", e)
+            return@withContext emptyList() // Return empty list on timeout
+        } catch (e: XMPPException.XMPPErrorException) {
+            Log.e(TAG, "获取已加入房间列表时发生XMPP错误", e)
+             return@withContext emptyList() // Return empty list on XMPP error
+        } catch (e: InterruptedException) {
+            Log.e(TAG, "获取已加入房间列表被中断", e)
+            Thread.currentThread().interrupt() // Re-interrupt the thread
+            return@withContext emptyList() // Return empty list if interrupted
         } catch (e: Exception) {
-            Log.e(TAG, "获取已加入房间列表失败", e)
-            return emptyList()
+            Log.e(TAG, "获取已加入群聊列表时发生未知错误", e)
+            // Depending on the desired behavior, you might return emptyList() or throw e
+            return@withContext emptyList()
         }
+
+        Log.d(TAG, "成功获取 ${joinedRoomsList.size} 个已加入的群聊")
+        joinedRoomsList
+    }
+
+    /**
+     * Cleans up resources and listeners when the user logs out or the connection is lost.
+     * This should be called from XMPPManager during its disconnect/logout process.
+     */
+    fun cleanupOnLogout() {
+        Log.d(TAG, "Cleaning up XMPPGroupChatManager state...")
+        val connection = xmppManager.currentConnection // Get current connection state
+
+        // Remove Group Chat Message Listener if it exists and connection is valid
+        if (groupChatMessageListener != null && connection != null) {
+            try {
+                // Assuming the listener was added directly to the connection
+                connection.removeAsyncStanzaListener(groupChatMessageListener)
+                Log.d(TAG, "Removed group chat message listener.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error removing group chat message listener", e)
+            }
+        }
+        groupChatMessageListener = null
+
+        // Remove MUC Invitation Listener if it exists and manager is valid
+        if (mucInvitationListener != null && _mucManager != null) {
+             try {
+                _mucManager?.removeInvitationListener(mucInvitationListener)
+                Log.d(TAG, "Removed MUC invitation listener.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error removing MUC invitation listener", e)
+            }
+        }
+         mucInvitationListener = null
+
+        // Clear cached MUC Manager instance
+        _mucManager = null
+        Log.d(TAG, "Cleared MUC Manager instance.")
+
+        // Clear invitation flows and counts
+        _invitations.value = emptyList()
+        _unreadInvitationCount.value = 0
+        Log.d(TAG, "Cleared invitations state.")
+
+        // Clear group message flow (optional, depending on desired behavior)
+        // _groupMessageFlow.resetReplayCache() // If it's a SharedFlow with replay
+
+        Log.d(TAG, "XMPPGroupChatManager cleanup complete.")
     }
 
 }

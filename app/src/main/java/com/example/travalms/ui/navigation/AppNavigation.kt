@@ -28,7 +28,6 @@ import com.example.travalms.ui.screens.ChatRoomScreen
 import com.example.travalms.ui.screens.MessageListScreen
 import com.example.travalms.ui.screens.MyFavoritesScreen
 import com.example.travalms.ui.screens.TailListScreen
-import com.example.travalms.ui.screens.ProfileScreen
 import com.example.travalms.ui.publish.PublishNodeSelectorScreen
 import com.example.travalms.ui.screens.CreateGroupScreen
 import androidx.compose.material3.Text
@@ -37,6 +36,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxSize
 import com.example.travalms.ui.screens.GroupChatScreen
+import android.content.Context
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import com.example.travalms.data.remote.XMPPManager
+import kotlinx.coroutines.launch
 
 // 定义应用中的路由路径
 object AppRoutes {
@@ -208,11 +213,28 @@ fun AppNavigation(
 
         // 个人主页
         composable(AppRoutes.PROFILE) {
+            // 获取上下文以便退出登录时使用
+            val context = LocalContext.current
+            val scope = rememberCoroutineScope()
+            
             ProfileScreen(
                 onLogoutClick = {
-                    // 退出登录，返回登录页面
-                    navController.navigate(AppRoutes.LOGIN) {
-                        popUpTo(AppRoutes.HOME) { inclusive = true }
+                    // 调用XMPPManager的logout函数进行退出登录
+                    scope.launch {
+                        // 调用logout函数清除凭据和断开连接
+                        try {
+                            XMPPManager.getInstance().logout(context)
+                        } catch (e: Exception) {
+                            // 即使logout失败也继续导航到登录页面
+                            e.printStackTrace()
+                        }
+                        
+                        // 退出登录后，导航到登录页面
+                        navController.navigate(AppRoutes.LOGIN) {
+                            // 清除整个回退栈，防止用户返回到需要登录的页面
+                            popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                            launchSingleTop = true
+                        }
                     }
                 },
                 onProfileEditClick = { navController.navigate(AppRoutes.PROFILE_EDIT) },

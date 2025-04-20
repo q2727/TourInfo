@@ -469,7 +469,7 @@ fun MessageScreen(
                 
                 // 先获取当前连接状态和用户信息
                 val connection = XMPPManager.getInstance().currentConnection
-                val currentUser = connection?.user?.toString() ?: "未知用户"
+                val currentUser = connection?.user?.asEntityBareJidString()?.substringBefore("@") ?: "未知用户"
                 Log.d("MessageScreen", "当前用户: $currentUser, 连接状态: ${connection?.isAuthenticated == true}")
                 
                 // 获取群聊列表
@@ -490,22 +490,50 @@ fun MessageScreen(
                     Log.d("MessageScreen", "从getJoinedRoomJids获取到 ${roomJids.size} 个房间JID")
                     
                     if (roomJids.isNotEmpty()) {
-                        // 如果有房间JID，手动构建群聊列表
-                        val roomList = roomJids.mapIndexed { index, jid ->
-                            Log.d("MessageScreen", "处理房间 #${index+1}: JID=$jid")
-                            
-                            // 从JID中提取房间名称
-                            val roomName = jid.substringBefore('@').replace("_", " ")
-                            
-                            // 创建GroupRoom对象
-                            GroupRoom(
-                                roomJid = jid,
-                                name = roomName,
-                                description = "Group Chat",
-                                memberCount = 1, // 至少显示1人（自己）
-                                isPrivate = false,
-                                canEdit = true
-                            )
+                        // 如果有房间JID，尝试获取每个房间的详细信息
+                        val roomList = mutableListOf<GroupRoom>()
+                        
+                        for (jid in roomJids) {
+                            try {
+                                // 尝试通过JID获取房间信息
+                                val mucManager = XMPPManager.getInstance().groupChatManager.mucManager
+                                val roomJid = JidCreate.entityBareFrom(jid)
+                                val roomInfo = mucManager?.getRoomInfo(roomJid)
+                                
+                                val roomName = roomInfo?.name ?: jid.substringBefore('@').replace("_", " ")
+                                val roomDescription = roomInfo?.description ?: "Group Chat"
+                                val memberCount = roomInfo?.occupantsCount ?: 1
+                                val isPrivate = roomInfo?.isMembersOnly ?: false
+                                
+                                Log.d("MessageScreen", "处理房间: JID=$jid, 名称=$roomName, 成员数=$memberCount")
+                                
+                                // 创建GroupRoom对象
+                                roomList.add(
+                                    GroupRoom(
+                                        roomJid = jid,
+                                        name = roomName,
+                                        description = roomDescription,
+                                        memberCount = memberCount,
+                                        isPrivate = isPrivate,
+                                        canEdit = true
+                                    )
+                                )
+                            } catch (e: Exception) {
+                                // 出错时使用基本信息
+                                Log.e("MessageScreen", "获取房间 $jid 详情失败: ${e.message}")
+                                val roomName = jid.substringBefore('@').replace("_", " ")
+                                
+                                roomList.add(
+                                    GroupRoom(
+                                        roomJid = jid,
+                                        name = roomName,
+                                        description = "Group Chat",
+                                        memberCount = 1,
+                                        isPrivate = false,
+                                        canEdit = true
+                                    )
+                                )
+                            }
                         }
                         
                         Log.d("MessageScreen", "成功构建 ${roomList.size} 个群聊房间")
@@ -520,11 +548,8 @@ fun MessageScreen(
                 
                 groupsLoadingState = null
             } catch (e: Exception) {
-                Log.e("MessageScreen", "获取群聊列表过程中发生异常", e)
-                Log.e("MessageScreen", "错误类型: ${e.javaClass.name}")
-                Log.e("MessageScreen", "错误消息: ${e.message}")
-                Log.e("MessageScreen", "错误堆栈: ${e.stackTraceToString()}")
-                groupsLoadingState = "加载群聊列表时发生错误: ${e.message}"
+                Log.e("MessageScreen", "刷新群聊列表失败", e)
+                groupsLoadingState = "加载失败：${e.message}"
             }
         }
     }
