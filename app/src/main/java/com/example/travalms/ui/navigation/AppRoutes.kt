@@ -1,4 +1,5 @@
 object AppRoutes {
+    const val CREATE_GROUP = "create_group"
     const val LOGIN = "login"
     const val REGISTER = "register"
     const val HOME = "home"
@@ -20,4 +21,6 @@ object AppRoutes {
     const val MESSAGE_LIST = "message_list"
     const val MY_FAVORITES = "my_favorites"
     const val TAIL_LIST = "tail_list"
+    const val GROUP_LIST = "group_list"
+    const val GROUP_CHAT = "group_chat/{roomJid}"
 } 

@@ -2,8 +2,10 @@ package com.example.travalms.data.remote
 
 import android.content.Context
 import android.util.Log
+import com.example.travalms.data.model.ChatInvitation
 import com.example.travalms.data.model.ChatMessage
 import com.example.travalms.data.model.ContactItem
+import com.example.travalms.data.model.Message
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.jivesoftware.smack.*
@@ -24,10 +26,6 @@ import org.jivesoftware.smackx.pubsub.listener.ItemEventListener
 import org.jivesoftware.smackx.pubsub.packet.PubSub
 import org.jivesoftware.smackx.search.UserSearchManager
 import org.jivesoftware.smackx.vcardtemp.VCardManager
-import org.jivesoftware.smackx.vcardtemp.packet.VCard
-import org.jivesoftware.smackx.xdata.packet.DataForm
-import org.jivesoftware.smackx.xdata.form.Form
-import org.jivesoftware.smack.util.PacketParserUtils
 import org.jivesoftware.smackx.iqregister.AccountManager
 import org.jivesoftware.smackx.ping.PingManager
 import org.jivesoftware.smackx.ping.PingFailedListener
@@ -38,10 +36,6 @@ import org.jxmpp.jid.*
 import org.jxmpp.jid.impl.JidCreate
 import org.jxmpp.jid.parts.Localpart
 import org.jxmpp.stringprep.XmppStringprepException
-import org.jxmpp.util.XmppStringUtils
-import javax.net.ssl.SSLContext
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
 
 // 自定义 IQ 类，用于发送 XEP-0055 User Search 请求
 class UserSearchIQ : IQ("query", "jabber:iq:search") {
@@ -110,6 +104,13 @@ class XMPPManager private constructor() {
     // PubSub管理器
     private var pubSubManager: PubSubManager? = null
 
+    // 添加群聊管理器
+    private val _groupChatManager by lazy { XMPPGroupChatManager(this) }
+
+    // 对外提供群聊管理器访问
+    val groupChatManager: XMPPGroupChatManager
+        get() = _groupChatManager
+
     // 项目通知流
     private val _pubsubItemsFlow = MutableSharedFlow<PubSubNotification>(replay = 100)
     val pubsubItemsFlow: SharedFlow<PubSubNotification> = _pubsubItemsFlow
@@ -123,7 +124,8 @@ class XMPPManager private constructor() {
     val loginResultFlow: SharedFlow<Result<Unit>> = _loginResultFlow
 
     // 添加 Presence 更新流
-    private val _presenceUpdateFlow = MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 64) // JID String to Status String
+    private val _presenceUpdateFlow =
+        MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 64) // JID String to Status String
     val presenceUpdateFlow: SharedFlow<Pair<String, String>> = _presenceUpdateFlow.asSharedFlow()
 
     // 内部维护的在线状态映射
@@ -141,7 +143,8 @@ class XMPPManager private constructor() {
 
     // 订阅节点管理
     private val subscribedNodes = mutableSetOf<String>()
-    private val nodeListeners = mutableMapOf<String, ItemEventListener<PayloadItem<SimplePayload>>>()
+    private val nodeListeners =
+        mutableMapOf<String, ItemEventListener<PayloadItem<SimplePayload>>>()
     private val messageCache = mutableMapOf<String, List<PubSubNotification>>()
 
     private val connectionListener = object : ConnectionListener {
@@ -175,6 +178,8 @@ class XMPPManager private constructor() {
             initPubSubManager()
             // 配置保活
             setupPingMechanism()
+            // 设置消息监听器
+            setupMessageListeners()
             // 设置Roster监听器
             setupRosterListener()
             // 请求所有联系人的在线状态
@@ -183,6 +188,11 @@ class XMPPManager private constructor() {
             setupPresenceListener()
             // 发送可用状态
             sendInitialPresence()
+
+            // 初始化群聊管理器
+            _groupChatManager.initMucManager()
+            // 设置群聊消息监听器
+            _groupChatManager.setupGroupChatMessageListener()
         }
 
         override fun connectionClosed() {
@@ -240,105 +250,116 @@ class XMPPManager private constructor() {
      * @param password 密码
      * @return 登录结果，包含成功/失败信息和连接对象（如果成功）
      */
-    suspend fun login(username: String, password: String): Result<Unit> = withContext(Dispatchers.IO) {
-        if (currentConnection?.isAuthenticated == true) {
-            // 检查是否是同一个用户
-            val currentJid = currentConnection?.user?.asEntityBareJidString()
-            val newJid = "$username@$SERVER_DOMAIN"
+    suspend fun login(username: String, password: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            if (currentConnection?.isAuthenticated == true) {
+                // 检查是否是同一个用户
+                val currentJid = currentConnection?.user?.asEntityBareJidString()
+                val newJid = "$username@$SERVER_DOMAIN"
 
-            if (currentJid == newJid) {
-                Log.d(TAG, "已登录同一账号，无需重复操作")
-                _connectionState.value = ConnectionState.AUTHENTICATED // Ensure state is correct
-                return@withContext Result.success(Unit)
-            } else {
-                Log.d(TAG, "检测到账号切换，先断开旧连接: $currentJid -> $newJid")
-                // 不同账号，必须先清理旧连接
+                if (currentJid == newJid) {
+                    Log.d(TAG, "已登录同一账号，无需重复操作")
+                    _connectionState.value =
+                        ConnectionState.AUTHENTICATED // Ensure state is correct
+                    return@withContext Result.success(Unit)
+                } else {
+                    Log.d(TAG, "检测到账号切换，先断开旧连接: $currentJid -> $newJid")
+                    // 不同账号，必须先清理旧连接
+                    disconnect()
+                }
+            } else if (currentConnection != null) {
+                // 有连接但未认证，也需要断开
+                Log.d(TAG, "有未认证的连接，先断开它")
                 disconnect()
             }
-        } else if (currentConnection != null) {
-            // 有连接但未认证，也需要断开
-            Log.d(TAG, "有未认证的连接，先断开它")
-            disconnect()
-        }
 
-        _connectionState.value = ConnectionState.CONNECTING
-        try {
-            // 设置系统属性
-            System.setProperty("smack.dnssec.disabled", "true")
-            System.setProperty("smack.debugEnabled", "true")
-            System.setProperty("smack.dnsResolver", "org.jivesoftware.smack.util.dns.minidns.MiniDnsResolver")
-            System.setProperty("smack.dnssrv.enabled", "false")
-            System.setProperty("smack.debuggerClass", "org.jivesoftware.smack.debugger.ConsoleDebugger")
-
-            // 创建连接配置
-            val config = getConnectionConfig()
-
-            // 创建XMPP连接
-            val connection = XMPPTCPConnection(config)
-
-            // 添加监听器
-            connection.addConnectionListener(connectionListener)
-
-            // 配置自动重连 - 使用更保守的设置
-            ReconnectionManager.getInstanceFor(connection).apply {
-                enableAutomaticReconnection()
-                setReconnectionPolicy(ReconnectionManager.ReconnectionPolicy.FIXED_DELAY)
-                setFixedDelay(30) // 重试间隔增加到30秒，减少频繁重连
-            }
-
-            // 连接到服务器
-            Log.d(TAG, "开始连接...")
+            _connectionState.value = ConnectionState.CONNECTING
             try {
-                connection.connect()
-            } catch (e: Exception) {
-                Log.e(TAG, "连接到XMPP服务器失败", e)
-                return@withContext Result.failure(e)
-            }
-            // connectionListener会处理状态变为 CONNECTED
+                // 设置系统属性
+                System.setProperty("smack.dnssec.disabled", "true")
+                System.setProperty("smack.debugEnabled", "true")
+                System.setProperty(
+                    "smack.dnsResolver",
+                    "org.jivesoftware.smack.util.dns.minidns.MiniDnsResolver"
+                )
+                System.setProperty("smack.dnssrv.enabled", "false")
+                System.setProperty(
+                    "smack.debuggerClass",
+                    "org.jivesoftware.smack.debugger.ConsoleDebugger"
+                )
 
-            // 登录
-            _connectionState.value = ConnectionState.AUTHENTICATING
-            Log.d(TAG, "开始登录: $username")
-            try {
-                connection.login(username, password)
-            } catch (e: Exception) {
-                Log.e(TAG, "XMPP认证失败", e)
-                try {
-                    connection.disconnect()
-                } catch (e2: Exception) {
-                    Log.e(TAG, "断开失败的连接时发生错误", e2)
+                // 创建连接配置
+                val config = getConnectionConfig()
+
+                // 创建XMPP连接
+                val connection = XMPPTCPConnection(config)
+
+                // 添加监听器
+                connection.addConnectionListener(connectionListener)
+
+                // 配置自动重连 - 使用更保守的设置
+                ReconnectionManager.getInstanceFor(connection).apply {
+                    enableAutomaticReconnection()
+                    setReconnectionPolicy(ReconnectionManager.ReconnectionPolicy.FIXED_DELAY)
+                    setFixedDelay(30) // 重试间隔增加到30秒，减少频繁重连
                 }
-                return@withContext Result.failure(e)
+
+                // 连接到服务器
+                Log.d(TAG, "开始连接...")
+                try {
+                    connection.connect()
+                } catch (e: Exception) {
+                    Log.e(TAG, "连接到XMPP服务器失败", e)
+                    return@withContext Result.failure(e)
+                }
+                // connectionListener会处理状态变为 CONNECTED
+
+                // 登录
+                _connectionState.value = ConnectionState.AUTHENTICATING
+                Log.d(TAG, "开始登录: $username")
+                try {
+                    connection.login(username, password)
+                } catch (e: Exception) {
+                    Log.e(TAG, "XMPP认证失败", e)
+                    try {
+                        connection.disconnect()
+                    } catch (e2: Exception) {
+                        Log.e(TAG, "断开失败的连接时发生错误", e2)
+                    }
+                    return@withContext Result.failure(e)
+                }
+                // connectionListener会处理状态变为 AUTHENTICATED
+
+                Log.d(TAG, "XMPP登录成功: 用户名=$username")
+                Log.d(
+                    TAG,
+                    "服务器连接信息: 服务器=${connection.host}, 端口=${connection.port}, 用户=${connection.user}"
+                )
+
+                // 保存当前连接
+                currentConnection = connection
+                // initPubSubManager 会在 authenticated 回调中调用
+
+                // 调用登录成功处理函数
+                onLoginSuccess()
+
+                // 返回成功结果
+                Result.success(Unit)
+            } catch (e: Exception) {
+                // 记录错误日志
+                Log.e(TAG, "XMPP登录失败", e)
+                _connectionState.value = ConnectionState.ERROR
+                disconnect() // Ensure cleanup on error
+
+                // 发送登录失败消息
+                scope.launch {
+                    _loginResultFlow.emit(Result.failure(e))
+                }
+
+                // 返回失败结果
+                Result.failure(e)
             }
-            // connectionListener会处理状态变为 AUTHENTICATED
-
-            Log.d(TAG, "XMPP登录成功: 用户名=$username")
-            Log.d(TAG, "服务器连接信息: 服务器=${connection.host}, 端口=${connection.port}, 用户=${connection.user}")
-
-            // 保存当前连接
-            currentConnection = connection
-            // initPubSubManager 会在 authenticated 回调中调用
-
-            // 调用登录成功处理函数
-            onLoginSuccess()
-
-            // 返回成功结果
-            Result.success(Unit)
-        } catch (e: Exception) {
-            // 记录错误日志
-            Log.e(TAG, "XMPP登录失败", e)
-            _connectionState.value = ConnectionState.ERROR
-            disconnect() // Ensure cleanup on error
-
-            // 发送登录失败消息
-            scope.launch {
-                _loginResultFlow.emit(Result.failure(e))
-            }
-
-            // 返回失败结果
-            Result.failure(e)
         }
-    }
 
     /**
      * 在XMPP服务器上注册新用户
@@ -463,108 +484,112 @@ class XMPPManager private constructor() {
      * 创建发布-订阅节点
      * 确保使用正确的服务JID并处理冲突和无效名称
      */
-    suspend fun createNode(nodeId: String, name: String?, description: String?): Result<LeafNode> = withContext(Dispatchers.IO) { // 允许 name 和 description 为 null
-        if (connectionState.value != ConnectionState.AUTHENTICATED) {
-            Log.e(TAG, "创建节点失败 $nodeId: 用户未认证")
-            return@withContext Result.failure(IllegalStateException("用户未认证"))
-        }
-
-        val connection = currentConnection ?: return@withContext Result.failure(IllegalStateException("连接无效"))
-
-        try {
-            // 1. 使用明确的PubSub服务JID
-            val pubsubServiceJid = JidCreate.domainBareFrom("pubsub.$SERVER_DOMAIN")
-            Log.d(TAG, "为节点 $nodeId 获取PubSubManager，使用服务JID: $pubsubServiceJid")
-
-            // 2. 获取PubSubManager实例 (确保过滤器已在init中设置好)
-            val pubsub = PubSubManager.getInstanceFor(connection, pubsubServiceJid)
-
-            // 3. 检查节点是否已存在 (使用 try-catch)
-            try {
-                val existingNode = pubsub.getNode(nodeId)
-                Log.d(TAG, "节点已存在: $nodeId, 直接返回")
-                return@withContext Result.success(existingNode as LeafNode)
-            } catch (e: Exception) {
-                // 预期 getNode 会失败，因为节点不存在
-                if (e is XMPPException.XMPPErrorException && e.stanzaError.condition == StanzaError.Condition.item_not_found) {
-                    Log.d(TAG, "getNode确认节点不存在，将创建新节点: $nodeId")
-                } else {
-                    // 其他getNode错误也认为是节点不存在，尝试创建
-                    Log.w(TAG, "getNode时出现意外错误 (${e.message})，仍尝试创建节点: $nodeId")
-                }
+    suspend fun createNode(nodeId: String, name: String?, description: String?): Result<LeafNode> =
+        withContext(Dispatchers.IO) { // 允许 name 和 description 为 null
+            if (connectionState.value != ConnectionState.AUTHENTICATED) {
+                Log.e(TAG, "创建节点失败 $nodeId: 用户未认证")
+                return@withContext Result.failure(IllegalStateException("用户未认证"))
             }
 
-            // 4. 尝试创建节点
+            val connection = currentConnection ?: return@withContext Result.failure(
+                IllegalStateException("连接无效")
+            )
+
             try {
-                Log.d(TAG, "尝试创建节点 (目标: $pubsubServiceJid): $nodeId")
-                // 使用完整配置创建
-                val defaultConfigureForm = pubsub.defaultConfiguration
-                val configForm: FillableConfigureForm = defaultConfigureForm.fillableForm
+                // 1. 使用明确的PubSub服务JID
+                val pubsubServiceJid = JidCreate.domainBareFrom("pubsub.$SERVER_DOMAIN")
+                Log.d(TAG, "为节点 $nodeId 获取PubSubManager，使用服务JID: $pubsubServiceJid")
 
-                // *** 添加对 name 的检查和处理 ***
-                val validTitle = if (name.isNullOrBlank()) {
-                    Log.w(TAG, "节点 '$nodeId' 的名称无效 (null或空)，将使用 nodeId 作为标题。")
-                    nodeId // 使用 nodeId 作为备用标题
-                } else {
-                    name
-                }
-                Log.d(TAG, "准备设置节点标题: '$validTitle'")
-                // *** 结束检查 ***
+                // 2. 获取PubSubManager实例 (确保过滤器已在init中设置好)
+                val pubsub = PubSubManager.getInstanceFor(connection, pubsubServiceJid)
 
-                configForm.setAccessModel(AccessModel.open)
-                configForm.setDeliverPayloads(true)
-                configForm.setPersistentItems(true) // 改为true，以便节点持久存在
-                configForm.setPublishModel(PublishModel.open)
-
-                // 使用try-catch包装setTitle调用，以便捕获可能的异常
+                // 3. 检查节点是否已存在 (使用 try-catch)
                 try {
-                    // 确保标题不为null，并且是一个符合要求的字符串
-                    val safeTitle = validTitle.toString().trim()
-                    configForm.setTitle(safeTitle)
-                    Log.d(TAG, "已成功设置节点标题: '$safeTitle'")
+                    val existingNode = pubsub.getNode(nodeId)
+                    Log.d(TAG, "节点已存在: $nodeId, 直接返回")
+                    return@withContext Result.success(existingNode as LeafNode)
                 } catch (e: Exception) {
-                    Log.e(TAG, "设置节点标题失败: ${e.message}，尝试使用更安全的标题", e)
-                    // 尝试使用一个非常安全的备用标题 (只包含字母、数字和下划线)
-                    val fallbackTitle = "Node_${nodeId.replace(Regex("[^a-zA-Z0-9_]"), "_")}"
-                    try {
-                        Log.d(TAG, "尝试使用备用标题: '$fallbackTitle'")
-                        configForm.setTitle(fallbackTitle)
-                    } catch (e2: Exception) {
-                        Log.e(TAG, "设置备用标题也失败了，将跳过标题设置: ${e2.message}")
-                        // 跳过标题设置，继续其他配置
+                    // 预期 getNode 会失败，因为节点不存在
+                    if (e is XMPPException.XMPPErrorException && e.stanzaError.condition == StanzaError.Condition.item_not_found) {
+                        Log.d(TAG, "getNode确认节点不存在，将创建新节点: $nodeId")
+                    } else {
+                        // 其他getNode错误也认为是节点不存在，尝试创建
+                        Log.w(TAG, "getNode时出现意外错误 (${e.message})，仍尝试创建节点: $nodeId")
                     }
                 }
 
-                configForm.setMaxItems(50)
+                // 4. 尝试创建节点
+                try {
+                    Log.d(TAG, "尝试创建节点 (目标: $pubsubServiceJid): $nodeId")
+                    // 使用完整配置创建
+                    val defaultConfigureForm = pubsub.defaultConfiguration
+                    val configForm: FillableConfigureForm = defaultConfigureForm.fillableForm
 
-                val node = pubsub.createNode(nodeId, configForm)
-                Log.d(TAG, "节点创建成功: $nodeId, name=$validTitle") // 使用 validTitle 记录日志
-                Result.success(node as LeafNode)
+                    // *** 添加对 name 的检查和处理 ***
+                    val validTitle = if (name.isNullOrBlank()) {
+                        Log.w(TAG, "节点 '$nodeId' 的名称无效 (null或空)，将使用 nodeId 作为标题。")
+                        nodeId // 使用 nodeId 作为备用标题
+                    } else {
+                        name
+                    }
+                    Log.d(TAG, "准备设置节点标题: '$validTitle'")
+                    // *** 结束检查 ***
+
+                    configForm.setAccessModel(AccessModel.open)
+                    configForm.setDeliverPayloads(true)
+                    configForm.setPersistentItems(true) // 改为true，以便节点持久存在
+                    configForm.setPublishModel(PublishModel.open)
+
+                    // 使用try-catch包装setTitle调用，以便捕获可能的异常
+                    try {
+                        // 确保标题不为null，并且是一个符合要求的字符串
+                        val safeTitle = validTitle.toString().trim()
+                        configForm.setTitle(safeTitle)
+                        Log.d(TAG, "已成功设置节点标题: '$safeTitle'")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "设置节点标题失败: ${e.message}，尝试使用更安全的标题", e)
+                        // 尝试使用一个非常安全的备用标题 (只包含字母、数字和下划线)
+                        val fallbackTitle = "Node_${nodeId.replace(Regex("[^a-zA-Z0-9_]"), "_")}"
+                        try {
+                            Log.d(TAG, "尝试使用备用标题: '$fallbackTitle'")
+                            configForm.setTitle(fallbackTitle)
+                        } catch (e2: Exception) {
+                            Log.e(TAG, "设置备用标题也失败了，将跳过标题设置: ${e2.message}")
+                            // 跳过标题设置，继续其他配置
+                        }
+                    }
+
+                    configForm.setMaxItems(50)
+
+                    val node = pubsub.createNode(nodeId, configForm)
+                    Log.d(TAG, "节点创建成功: $nodeId, name=$validTitle") // 使用 validTitle 记录日志
+                    Result.success(node as LeafNode)
+                } catch (e: Exception) {
+                    // 5. 处理创建时的冲突错误
+                    if (e is XMPPException.XMPPErrorException &&
+                        e.stanzaError.condition == StanzaError.Condition.conflict
+                    ) {
+                        Log.d(TAG, "节点 $nodeId 已存在(创建时冲突409)，尝试获取现有节点")
+                        try {
+                            val existingNode = pubsub.getNode(nodeId)
+                            Log.d(TAG, "成功获取到现有节点: $nodeId")
+                            return@withContext Result.success(existingNode as LeafNode)
+                        } catch (e2: Exception) {
+                            Log.e(TAG, "获取现有节点失败 (冲突后): ${e2.message}", e2)
+                            // 如果获取也失败，返回原始冲突错误
+                            return@withContext Result.failure(e)
+                        }
+                    } else {
+                        // 其他创建错误
+                        Log.e(TAG, "创建节点失败: ${e.message}", e)
+                        Result.failure(e)
+                    }
+                }
             } catch (e: Exception) {
-                // 5. 处理创建时的冲突错误
-                if (e is XMPPException.XMPPErrorException &&
-                    e.stanzaError.condition == StanzaError.Condition.conflict) {
-                    Log.d(TAG, "节点 $nodeId 已存在(创建时冲突409)，尝试获取现有节点")
-                    try {
-                        val existingNode = pubsub.getNode(nodeId)
-                        Log.d(TAG, "成功获取到现有节点: $nodeId")
-                        return@withContext Result.success(existingNode as LeafNode)
-                    } catch (e2: Exception) {
-                        Log.e(TAG, "获取现有节点失败 (冲突后): ${e2.message}", e2)
-                        // 如果获取也失败，返回原始冲突错误
-                        return@withContext Result.failure(e)
-                    }
-                } else {
-                    // 其他创建错误
-                    Log.e(TAG, "创建节点失败: ${e.message}", e)
-                    Result.failure(e)
-                }
+                Log.e(TAG, "创建节点过程中发生顶级异常: ${e.message}", e)
+                Result.failure(e)
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "创建节点过程中发生顶级异常: ${e.message}", e)
-            Result.failure(e)
         }
-    }
 
     /**
      * 订阅节点
@@ -577,7 +602,8 @@ class XMPPManager private constructor() {
         }
 
         try {
-            val manager = pubSubManager ?: return@withContext Result.failure(IllegalStateException("PubSub管理器未初始化"))
+            val manager = pubSubManager
+                ?: return@withContext Result.failure(IllegalStateException("PubSub管理器未初始化"))
 
             // 检查是否已经订阅
             if (subscribedNodes.contains(nodeId)) {
@@ -631,7 +657,8 @@ class XMPPManager private constructor() {
             return@withContext Result.failure(IllegalStateException("用户未认证"))
         }
 
-        val pubsub = pubSubManager ?: return@withContext Result.failure(IllegalStateException("PubSub管理器未初始化"))
+        val pubsub = pubSubManager
+            ?: return@withContext Result.failure(IllegalStateException("PubSub管理器未初始化"))
 
         try {
             Log.d(TAG, "尝试获取用户订阅信息")
@@ -649,7 +676,10 @@ class XMPPManager private constructor() {
                 // 逐一取消每个订阅
                 for (subscription in nodeSubscriptions) {
                     try {
-                        Log.d(TAG, "正在取消订阅: 节点=${subscription.node}, JID=${subscription.jid}, 订阅ID=${subscription.id}")
+                        Log.d(
+                            TAG,
+                            "正在取消订阅: 节点=${subscription.node}, JID=${subscription.jid}, 订阅ID=${subscription.id}"
+                        )
                         if (subscription.id != null) {
                             // 如果有订阅ID，使用带订阅ID的方法
                             node.unsubscribe(subscription.jid.toString(), subscription.id)
@@ -689,11 +719,16 @@ class XMPPManager private constructor() {
      * @param contentType 内容类型 (如 "application/json")
      * @return 操作结果，包含生成的itemId
      */
-    suspend fun publishToNode(nodeId: String, content: String, contentType: String = "application/json"): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun publishToNode(
+        nodeId: String,
+        content: String,
+        contentType: String = "application/json"
+    ): Result<String> = withContext(Dispatchers.IO) {
         if (connectionState.value != ConnectionState.AUTHENTICATED) {
             return@withContext Result.failure(IllegalStateException("用户未认证"))
         }
-        val pubsub = pubSubManager ?: return@withContext Result.failure(IllegalStateException("PubSub管理器未初始化"))
+        val pubsub = pubSubManager
+            ?: return@withContext Result.failure(IllegalStateException("PubSub管理器未初始化"))
 
         try {
             Log.d(TAG, "尝试获取节点: $nodeId")
@@ -779,57 +814,60 @@ class XMPPManager private constructor() {
      * @param nodeId 节点ID
      * @return 项目列表结果
      */
-    suspend fun getNodeItems(nodeId: String): Result<List<PubSubNotification>> = withContext(Dispatchers.IO) {
-        if (connectionState.value != ConnectionState.AUTHENTICATED) {
-            return@withContext Result.failure(IllegalStateException("用户未认证"))
-        }
-
-        try {
-            val manager = pubSubManager ?: return@withContext Result.failure(IllegalStateException("PubSub管理器未初始化"))
-
-            // 检查缓存中是否有数据
-            val cachedItems = messageCache[nodeId]
-            if (cachedItems != null) {
-                Log.d(TAG, "从缓存中获取节点 $nodeId 的项目，数量: ${cachedItems.size}")
-                return@withContext Result.success(cachedItems)
+    suspend fun getNodeItems(nodeId: String): Result<List<PubSubNotification>> =
+        withContext(Dispatchers.IO) {
+            if (connectionState.value != ConnectionState.AUTHENTICATED) {
+                return@withContext Result.failure(IllegalStateException("用户未认证"))
             }
 
-            // 如果没有缓存，从服务器获取
-            val node = manager.getNode(nodeId) as LeafNode
+            try {
+                val manager = pubSubManager ?: return@withContext Result.failure(
+                    IllegalStateException("PubSub管理器未初始化")
+                )
 
-            // 明确指定getItems返回的泛型类型
-            val items: List<Item> = node.getItems()
+                // 检查缓存中是否有数据
+                val cachedItems = messageCache[nodeId]
+                if (cachedItems != null) {
+                    Log.d(TAG, "从缓存中获取节点 $nodeId 的项目，数量: ${cachedItems.size}")
+                    return@withContext Result.success(cachedItems)
+                }
 
-            // 转换并缓存项目
-            val convertedItems = mutableListOf<PubSubNotification>()
+                // 如果没有缓存，从服务器获取
+                val node = manager.getNode(nodeId) as LeafNode
 
-            for (item in items) {
-                if (item is PayloadItem<*>) {
-                    val payload = item.payload
-                    val itemId = item.id ?: UUID.randomUUID().toString()
-                    val payloadXml = payload?.toXML()?.toString()
-                    if (payloadXml != null) {
-                        convertedItems.add(
-                            PubSubNotification(
-                                nodeId = nodeId,
-                                itemId = itemId,
-                                payload = payloadXml
+                // 明确指定getItems返回的泛型类型
+                val items: List<Item> = node.getItems()
+
+                // 转换并缓存项目
+                val convertedItems = mutableListOf<PubSubNotification>()
+
+                for (item in items) {
+                    if (item is PayloadItem<*>) {
+                        val payload = item.payload
+                        val itemId = item.id ?: UUID.randomUUID().toString()
+                        val payloadXml = payload?.toXML()?.toString()
+                        if (payloadXml != null) {
+                            convertedItems.add(
+                                PubSubNotification(
+                                    nodeId = nodeId,
+                                    itemId = itemId,
+                                    payload = payloadXml
+                                )
                             )
-                        )
+                        }
                     }
                 }
+
+                // 更新缓存
+                messageCache[nodeId] = convertedItems
+
+                Log.d(TAG, "成功获取节点 $nodeId 的项目，数量: ${convertedItems.size}")
+                Result.success(convertedItems)
+            } catch (e: Exception) {
+                Log.e(TAG, "获取节点 $nodeId 的项目失败", e)
+                Result.failure(e)
             }
-
-            // 更新缓存
-            messageCache[nodeId] = convertedItems
-
-            Log.d(TAG, "成功获取节点 $nodeId 的项目，数量: ${convertedItems.size}")
-            Result.success(convertedItems)
-        } catch (e: Exception) {
-            Log.e(TAG, "获取节点 $nodeId 的项目失败", e)
-            Result.failure(e)
         }
-    }
 
     /**
      * 获取用户已订阅的所有节点
@@ -839,7 +877,8 @@ class XMPPManager private constructor() {
         if (connectionState.value != ConnectionState.AUTHENTICATED) {
             return@withContext Result.failure(IllegalStateException("用户未认证"))
         }
-        val pubsub = pubSubManager ?: return@withContext Result.failure(IllegalStateException("PubSub管理器未初始化"))
+        val pubsub = pubSubManager
+            ?: return@withContext Result.failure(IllegalStateException("PubSub管理器未初始化"))
 
         try {
             val subscriptions = pubsub.getSubscriptions()
@@ -859,7 +898,9 @@ class XMPPManager private constructor() {
         if (connectionState.value != ConnectionState.AUTHENTICATED) {
             return@withContext Result.failure(IllegalStateException("用户未认证"))
         }
-        val connection = currentConnection ?: return@withContext Result.failure(IllegalStateException("连接无效"))
+        val connection = currentConnection ?: return@withContext Result.failure(
+            IllegalStateException("连接无效")
+        )
 
         try {
             // 1. 使用明确的PubSub服务JID
@@ -913,105 +954,113 @@ class XMPPManager private constructor() {
      * @param nodeIds 要订阅的节点ID列表
      * @return 成功订阅的节点ID列表
      */
-    suspend fun batchSubscribe(nodeIds: List<String>): Result<List<String>> = withContext(Dispatchers.IO) {
-        if (connectionState.value != ConnectionState.AUTHENTICATED) {
-            return@withContext Result.failure(IllegalStateException("用户未认证"))
-        }
-
-        try {
-            // 首先获取所有可用节点
-            val allNodesResult = getAllNodes()
-            if (allNodesResult.isFailure) {
-                return@withContext Result.failure(IllegalStateException("无法获取可用节点列表"))
+    suspend fun batchSubscribe(nodeIds: List<String>): Result<List<String>> =
+        withContext(Dispatchers.IO) {
+            if (connectionState.value != ConnectionState.AUTHENTICATED) {
+                return@withContext Result.failure(IllegalStateException("用户未认证"))
             }
 
-            val availableNodes = allNodesResult.getOrThrow().toSet()
-
-            val successfulSubscriptions = mutableListOf<String>()
-            val invalidNodes = mutableListOf<String>()
-            val failedNodes = mutableListOf<String>()
-
-            // 筛选出有效节点和无效节点
-            for (nodeId in nodeIds) {
-                if (!availableNodes.contains(nodeId)) {
-                    Log.w(TAG, "节点 $nodeId 不存在，跳过订阅")
-                    invalidNodes.add(nodeId)
-                    continue
+            try {
+                // 首先获取所有可用节点
+                val allNodesResult = getAllNodes()
+                if (allNodesResult.isFailure) {
+                    return@withContext Result.failure(IllegalStateException("无法获取可用节点列表"))
                 }
 
-                try {
-                    val result = subscribeToNode(nodeId)
-                    if (result.isSuccess) {
-                        successfulSubscriptions.add(nodeId)
-                        Log.d(TAG, "成功订阅节点: $nodeId")
-                    } else {
-                        failedNodes.add(nodeId)
-                        Log.e(TAG, "订阅节点 $nodeId 失败: ${result.exceptionOrNull()?.message}")
+                val availableNodes = allNodesResult.getOrThrow().toSet()
+
+                val successfulSubscriptions = mutableListOf<String>()
+                val invalidNodes = mutableListOf<String>()
+                val failedNodes = mutableListOf<String>()
+
+                // 筛选出有效节点和无效节点
+                for (nodeId in nodeIds) {
+                    if (!availableNodes.contains(nodeId)) {
+                        Log.w(TAG, "节点 $nodeId 不存在，跳过订阅")
+                        invalidNodes.add(nodeId)
+                        continue
                     }
-                } catch (e: Exception) {
-                    failedNodes.add(nodeId)
-                    Log.e(TAG, "订阅节点 $nodeId 失败: ${e.message}")
+
+                    try {
+                        val result = subscribeToNode(nodeId)
+                        if (result.isSuccess) {
+                            successfulSubscriptions.add(nodeId)
+                            Log.d(TAG, "成功订阅节点: $nodeId")
+                        } else {
+                            failedNodes.add(nodeId)
+                            Log.e(
+                                TAG,
+                                "订阅节点 $nodeId 失败: ${result.exceptionOrNull()?.message}"
+                            )
+                        }
+                    } catch (e: Exception) {
+                        failedNodes.add(nodeId)
+                        Log.e(TAG, "订阅节点 $nodeId 失败: ${e.message}")
+                    }
                 }
-            }
 
-            // 记录详细的结果日志
-            if (invalidNodes.isNotEmpty()) {
-                Log.w(TAG, "以下节点不存在，已跳过: ${invalidNodes.joinToString()}")
-            }
-
-            if (failedNodes.isNotEmpty()) {
-                Log.e(TAG, "以下节点订阅失败: ${failedNodes.joinToString()}")
-            }
-
-            Log.d(TAG, "批量订阅完成: 成功=${successfulSubscriptions.size}, 无效=${invalidNodes.size}, 失败=${failedNodes.size}, 总请求=${nodeIds.size}")
-
-            // 如果有无效节点，在结果中包含提示信息
-            if (invalidNodes.isNotEmpty() || failedNodes.isNotEmpty()) {
-                val message = buildString {
-                    if (invalidNodes.isNotEmpty()) append("${invalidNodes.size}个节点不存在")
-                    if (invalidNodes.isNotEmpty() && failedNodes.isNotEmpty()) append(", ")
-                    if (failedNodes.isNotEmpty()) append("${failedNodes.size}个节点订阅失败")
+                // 记录详细的结果日志
+                if (invalidNodes.isNotEmpty()) {
+                    Log.w(TAG, "以下节点不存在，已跳过: ${invalidNodes.joinToString()}")
                 }
-                Log.w(TAG, message)
-            }
 
-            Result.success(successfulSubscriptions)
-        } catch (e: Exception) {
-            Log.e(TAG, "批量订阅失败: ${e.message}", e)
-            Result.failure(e)
+                if (failedNodes.isNotEmpty()) {
+                    Log.e(TAG, "以下节点订阅失败: ${failedNodes.joinToString()}")
+                }
+
+                Log.d(
+                    TAG,
+                    "批量订阅完成: 成功=${successfulSubscriptions.size}, 无效=${invalidNodes.size}, 失败=${failedNodes.size}, 总请求=${nodeIds.size}"
+                )
+
+                // 如果有无效节点，在结果中包含提示信息
+                if (invalidNodes.isNotEmpty() || failedNodes.isNotEmpty()) {
+                    val message = buildString {
+                        if (invalidNodes.isNotEmpty()) append("${invalidNodes.size}个节点不存在")
+                        if (invalidNodes.isNotEmpty() && failedNodes.isNotEmpty()) append(", ")
+                        if (failedNodes.isNotEmpty()) append("${failedNodes.size}个节点订阅失败")
+                    }
+                    Log.w(TAG, message)
+                }
+
+                Result.success(successfulSubscriptions)
+            } catch (e: Exception) {
+                Log.e(TAG, "批量订阅失败: ${e.message}", e)
+                Result.failure(e)
+            }
         }
-    }
 
     /**
      * 批量取消订阅节点
      */
-    suspend fun batchUnsubscribe(nodeIds: List<String>): Result<List<String>> = withContext(Dispatchers.IO) {
-        if (nodeIds.isEmpty()) {
-            return@withContext Result.success(emptyList())
-        }
+    suspend fun batchUnsubscribe(nodeIds: List<String>): Result<List<String>> =
+        withContext(Dispatchers.IO) {
+            if (nodeIds.isEmpty()) {
+                return@withContext Result.success(emptyList())
+            }
 
-        val successfulNodes = mutableListOf<String>()
-        val failedNodes = mutableListOf<String>()
+            val successfulNodes = mutableListOf<String>()
+            val failedNodes = mutableListOf<String>()
 
-        for (nodeId in nodeIds) {
-            try {
-                val result = unsubscribeFromNode(nodeId)
-                if (result.isSuccess && result.getOrDefault(false)) {
-                    successfulNodes.add(nodeId)
-                } else {
+            for (nodeId in nodeIds) {
+                try {
+                    val result = unsubscribeFromNode(nodeId)
+                    if (result.isSuccess && result.getOrDefault(false)) {
+                        successfulNodes.add(nodeId)
+                    } else {
+                        failedNodes.add(nodeId)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "批量取消订阅时出错: $nodeId", e)
                     failedNodes.add(nodeId)
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "批量取消订阅时出错: $nodeId", e)
-                failedNodes.add(nodeId)
             }
+
+            Log.d(TAG, "批量取消订阅完成: 成功=${successfulNodes.size}/${nodeIds.size}")
+
+            // 即使有些失败，也返回成功的节点列表
+            return@withContext Result.success(successfulNodes)
         }
-
-        Log.d(TAG, "批量取消订阅完成: 成功=${successfulNodes.size}/${nodeIds.size}")
-
-        // 即使有些失败，也返回成功的节点列表
-        return@withContext Result.success(successfulNodes)
-    }
 
     /**
      * 断开与XMPP服务器的连接
@@ -1108,7 +1157,8 @@ class XMPPManager private constructor() {
             // 设置周期性发送Presence保持连接活跃
             initScope.launch {
                 while (currentConnection?.isAuthenticated == true &&
-                    _connectionState.value == ConnectionState.AUTHENTICATED) {
+                    _connectionState.value == ConnectionState.AUTHENTICATED
+                ) {
                     try {
                         sendInitialPresence()
                         Log.d(TAG, "发送周期性Presence更新")
@@ -1154,7 +1204,9 @@ class XMPPManager private constructor() {
             return@withContext Result.failure(IllegalStateException("用户未认证"))
         }
 
-        val connection = currentConnection ?: return@withContext Result.failure(IllegalStateException("连接无效"))
+        val connection = currentConnection ?: return@withContext Result.failure(
+            IllegalStateException("连接无效")
+        )
 
         try {
             val accountManager = AccountManager.getInstance(connection)
@@ -1189,471 +1241,521 @@ class XMPPManager private constructor() {
      * @param friendJid 好友的BareJid
      * @return 好友资料信息Map，如果未登录或获取失败则返回错误
      */
-    suspend fun getFriendProfile(friendJid: BareJid): Result<Map<String, String>> = withContext(Dispatchers.IO) {
-        if (connectionState.value != ConnectionState.AUTHENTICATED) {
-            Log.e(TAG, "getFriendProfile: 用户未认证")
-            return@withContext Result.failure(IllegalStateException("用户未认证"))
-        }
+    suspend fun getFriendProfile(friendJid: BareJid): Result<Map<String, String>> =
+        withContext(Dispatchers.IO) {
+            if (connectionState.value != ConnectionState.AUTHENTICATED) {
+                Log.e(TAG, "getFriendProfile: 用户未认证")
+                return@withContext Result.failure(IllegalStateException("用户未认证"))
+            }
 
-        val connection = currentConnection ?: run {
-            Log.e(TAG, "getFriendProfile: 连接无效")
-            return@withContext Result.failure(IllegalStateException("连接无效"))
-        }
+            val connection = currentConnection ?: run {
+                Log.e(TAG, "getFriendProfile: 连接无效")
+                return@withContext Result.failure(IllegalStateException("连接无效"))
+            }
 
-        try {
-            Log.d(TAG, "尝试获取好友资料: $friendJid")
-            val profileMap = mutableMapOf<String, String>()
+            try {
+                Log.d(TAG, "尝试获取好友资料: $friendJid")
+                val profileMap = mutableMapOf<String, String>()
 
 
-            // 2. 如果缺少基本信息，尝试使用Roster获取
-            if (!profileMap.containsKey("nickName") && !profileMap.containsKey("fullName")) {
-                try {
-                    val roster = Roster.getInstanceFor(connection)
-                    if (!roster.isLoaded) {
-                        roster.reloadAndWait()
-                    }
+                // 2. 如果缺少基本信息，尝试使用Roster获取
+                if (!profileMap.containsKey("nickName") && !profileMap.containsKey("fullName")) {
+                    try {
+                        val roster = Roster.getInstanceFor(connection)
+                        if (!roster.isLoaded) {
+                            roster.reloadAndWait()
+                        }
 
-                    val rosterEntry = roster.getEntry(friendJid)
-                    rosterEntry?.name?.let {
-                        if (it.isNotBlank()) {
-                            profileMap["rosterName"] = it
-                            // 如果没有其他名称信息，使用花名册名称作为显示名称
-                            if (!profileMap.containsKey("nickName") && !profileMap.containsKey("fullName")) {
-                                profileMap["displayName"] = it
+                        val rosterEntry = roster.getEntry(friendJid)
+                        rosterEntry?.name?.let {
+                            if (it.isNotBlank()) {
+                                profileMap["rosterName"] = it
+                                // 如果没有其他名称信息，使用花名册名称作为显示名称
+                                if (!profileMap.containsKey("nickName") && !profileMap.containsKey("fullName")) {
+                                    profileMap["displayName"] = it
+                                }
                             }
                         }
+
+                        // 添加在线状态
+                        val presence = roster.getPresence(friendJid)
+                        profileMap["presence"] = presence.type.toString()
+                        presence.status?.let { if (it.isNotBlank()) profileMap["status"] = it }
+
+                        Log.d(TAG, "补充了来自Roster的好友信息")
+                    } catch (e: Exception) {
+                        Log.d(TAG, "获取 $friendJid 的Roster信息失败: ${e.javaClass.simpleName}")
                     }
-
-                    // 添加在线状态
-                    val presence = roster.getPresence(friendJid)
-                    profileMap["presence"] = presence.type.toString()
-                    presence.status?.let { if (it.isNotBlank()) profileMap["status"] = it }
-
-                    Log.d(TAG, "补充了来自Roster的好友信息")
-                } catch (e: Exception) {
-                    Log.d(TAG, "获取 $friendJid 的Roster信息失败: ${e.javaClass.simpleName}")
                 }
+
+                // 3. 添加JID相关信息
+                profileMap["jid"] = friendJid.toString()
+                profileMap["username"] =
+                    friendJid.localpartOrNull?.toString() ?: friendJid.toString()
+
+                // 如果没有设置显示名称，使用优先级顺序：nickname > fullName > rosterName > username
+                if (!profileMap.containsKey("displayName")) {
+                    val displayName = profileMap["nickName"]
+                        ?: profileMap["fullName"]
+                        ?: profileMap["rosterName"]
+                        ?: profileMap["username"]
+                    displayName?.let { profileMap["displayName"] = it }
+                }
+
+                if (profileMap.isEmpty()) {
+                    return@withContext Result.failure(Exception("无法获取好友资料信息"))
+                }
+
+                Log.d(TAG, "成功获取好友 $friendJid 的资料信息")
+                Result.success(profileMap)
+
+            } catch (e: SmackException.NotConnectedException) {
+                Log.e(TAG, "获取好友资料失败: 连接已断开", e)
+                Result.failure(e)
+            } catch (e: SmackException.NoResponseException) {
+                Log.e(TAG, "获取好友资料失败: 服务器无响应", e)
+                Result.failure(e)
+            } catch (e: XMPPException.XMPPErrorException) {
+                Log.e(TAG, "获取好友资料时发生XMPP错误: ${e.stanzaError}", e)
+                Result.failure(e)
+            } catch (e: Exception) {
+                Log.e(TAG, "获取好友资料时发生未知错误", e)
+                Result.failure(e)
             }
-
-            // 3. 添加JID相关信息
-            profileMap["jid"] = friendJid.toString()
-            profileMap["username"] = friendJid.localpartOrNull?.toString() ?: friendJid.toString()
-
-            // 如果没有设置显示名称，使用优先级顺序：nickname > fullName > rosterName > username
-            if (!profileMap.containsKey("displayName")) {
-                val displayName = profileMap["nickName"]
-                    ?: profileMap["fullName"]
-                    ?: profileMap["rosterName"]
-                    ?: profileMap["username"]
-                displayName?.let { profileMap["displayName"] = it }
-            }
-
-            if (profileMap.isEmpty()) {
-                return@withContext Result.failure(Exception("无法获取好友资料信息"))
-            }
-
-            Log.d(TAG, "成功获取好友 $friendJid 的资料信息")
-            Result.success(profileMap)
-
-        } catch (e: SmackException.NotConnectedException) {
-            Log.e(TAG, "获取好友资料失败: 连接已断开", e)
-            Result.failure(e)
-        } catch (e: SmackException.NoResponseException) {
-            Log.e(TAG, "获取好友资料失败: 服务器无响应", e)
-            Result.failure(e)
-        } catch (e: XMPPException.XMPPErrorException) {
-            Log.e(TAG, "获取好友资料时发生XMPP错误: ${e.stanzaError}", e)
-            Result.failure(e)
-        } catch (e: Exception) {
-            Log.e(TAG, "获取好友资料时发生未知错误", e)
-            Result.failure(e)
         }
-    }
 
     /**
      * 发送好友请求 (添加好友到花名册)
      * @param friendJidString 要添加的好友的完整JID (例如 "user@domain")
      * @return 操作结果 Result<Unit>
      */
-    suspend fun sendFriendRequest(friendJidString: String): Result<Unit> = withContext(Dispatchers.IO) {
-        if (connectionState.value != ConnectionState.AUTHENTICATED) {
-            Log.e(TAG, "sendFriendRequest: 用户未认证")
-            return@withContext Result.failure(IllegalStateException("用户未认证"))
-        }
-        val connection = currentConnection ?: run {
-            Log.e(TAG, "sendFriendRequest: 连接无效")
-            return@withContext Result.failure(IllegalStateException("连接无效"))
-        }
-
-        try {
-            Log.d(TAG, "尝试添加好友: $friendJidString")
-            val friendJid: BareJid = JidCreate.bareFrom(friendJidString)
-            val roster = Roster.getInstanceFor(connection)
-
-            // 确保Roster已加载，虽然通常是自动的
-            if (!roster.isLoaded) {
-                roster.reloadAndWait()
+    suspend fun sendFriendRequest(friendJidString: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            if (connectionState.value != ConnectionState.AUTHENTICATED) {
+                Log.e(TAG, "sendFriendRequest: 用户未认证")
+                return@withContext Result.failure(IllegalStateException("用户未认证"))
+            }
+            val connection = currentConnection ?: run {
+                Log.e(TAG, "sendFriendRequest: 连接无效")
+                return@withContext Result.failure(IllegalStateException("连接无效"))
             }
 
-            // 检查是否已经是好友
-            if (roster.contains(friendJid)) {
-                Log.w(TAG, "用户 $friendJidString 已经是好友")
-                // 可以根据需要返回特定的成功或失败信息
-                return@withContext Result.failure(IllegalArgumentException("用户已经是好友"))
+            try {
+                Log.d(TAG, "尝试添加好友: $friendJidString")
+                val friendJid: BareJid = JidCreate.bareFrom(friendJidString)
+                val roster = Roster.getInstanceFor(connection)
+
+                // 确保Roster已加载，虽然通常是自动的
+                if (!roster.isLoaded) {
+                    roster.reloadAndWait()
+                }
+
+                // 检查是否已经是好友
+                if (roster.contains(friendJid)) {
+                    Log.w(TAG, "用户 $friendJidString 已经是好友")
+                    // 可以根据需要返回特定的成功或失败信息
+                    return@withContext Result.failure(IllegalArgumentException("用户已经是好友"))
+                }
+
+                // 创建条目并发送订阅请求。使用对方 JID 的 localpart 作为默认昵称。
+                // 第三个参数是组名，这里设为 null 表示不分组。
+                val nickname = getLocalpartSafely(friendJid) // 使用安全方法获取localpart
+                roster.createEntry(friendJid, nickname, null)
+
+                Log.d(TAG, "已发送好友请求给: $friendJidString")
+                Result.success(Unit)
+
+            } catch (e: XmppStringprepException) {
+                Log.e(TAG, "无效的好友 JID 格式: $friendJidString", e)
+                Result.failure(IllegalArgumentException("无效的好友 JID 格式", e))
+            } catch (e: SmackException.NotLoggedInException) {
+                Log.e(TAG, "发送好友请求失败: 未登录", e)
+                Result.failure(e)
+            } catch (e: SmackException.NoResponseException) {
+                Log.e(TAG, "发送好友请求失败: 服务器无响应", e)
+                Result.failure(e)
+            } catch (e: SmackException.NotConnectedException) {
+                Log.e(TAG, "发送好友请求失败: 连接已断开", e)
+                Result.failure(e)
+            } catch (e: XMPPException.XMPPErrorException) {
+                Log.e(TAG, "发送好友请求时发生 XMPP 错误: ${e.stanzaError}", e)
+                Result.failure(e)
+            } catch (e: InterruptedException) {
+                Log.e(TAG, "发送好友请求操作被中断", e)
+                Thread.currentThread().interrupt() // Restore interruption status
+                Result.failure(e)
+            } catch (e: Exception) {
+                Log.e(TAG, "发送好友请求时发生未知错误", e)
+                Result.failure(e)
             }
-
-            // 创建条目并发送订阅请求。使用对方 JID 的 localpart 作为默认昵称。
-            // 第三个参数是组名，这里设为 null 表示不分组。
-            val nickname = getLocalpartSafely(friendJid) // 使用安全方法获取localpart
-            roster.createEntry(friendJid, nickname, null)
-
-            Log.d(TAG, "已发送好友请求给: $friendJidString")
-            Result.success(Unit)
-
-        } catch (e: XmppStringprepException) {
-            Log.e(TAG, "无效的好友 JID 格式: $friendJidString", e)
-            Result.failure(IllegalArgumentException("无效的好友 JID 格式", e))
-        } catch (e: SmackException.NotLoggedInException) {
-            Log.e(TAG, "发送好友请求失败: 未登录", e)
-            Result.failure(e)
-        } catch (e: SmackException.NoResponseException) {
-            Log.e(TAG, "发送好友请求失败: 服务器无响应", e)
-            Result.failure(e)
-        } catch (e: SmackException.NotConnectedException) {
-            Log.e(TAG, "发送好友请求失败: 连接已断开", e)
-            Result.failure(e)
-        } catch (e: XMPPException.XMPPErrorException) {
-            Log.e(TAG, "发送好友请求时发生 XMPP 错误: ${e.stanzaError}", e)
-            Result.failure(e)
-        } catch (e: InterruptedException) {
-            Log.e(TAG, "发送好友请求操作被中断", e)
-            Thread.currentThread().interrupt() // Restore interruption status
-            Result.failure(e)
-        } catch (e: Exception) {
-            Log.e(TAG, "发送好友请求时发生未知错误", e)
-            Result.failure(e)
         }
-    }
 
     /**
      * 获取服务器上的所有用户 (使用User Search XEP-0055优先，失败则回退到服务发现和花名册)
      * @return 用户列表，包含 JID 和 昵称 (如果可用) Result<List<Pair<BareJid, String?>>>
      */
-    suspend fun getServerUsers(): Result<List<Pair<BareJid, String?>>> = withContext(Dispatchers.IO) {
-        if (connectionState.value != ConnectionState.AUTHENTICATED) {
-            return@withContext Result.failure(IllegalStateException("用户未认证"))
-        }
-        val connection = currentConnection ?: return@withContext Result.failure(IllegalStateException("连接无效"))
-        val currentUserJid = connection.user.asBareJid()
-        val domain = connection.xmppServiceDomain.toString()
+    suspend fun getServerUsers(): Result<List<Pair<BareJid, String?>>> =
+        withContext(Dispatchers.IO) {
+            if (connectionState.value != ConnectionState.AUTHENTICATED) {
+                return@withContext Result.failure(IllegalStateException("用户未认证"))
+            }
+            val connection = currentConnection ?: return@withContext Result.failure(
+                IllegalStateException("连接无效")
+            )
+            val currentUserJid = connection.user.asBareJid()
+            val domain = connection.xmppServiceDomain.toString()
 
-        try {
-            val usersMap = mutableMapOf<BareJid, String?>() // Use a map to avoid duplicates
-            var source = "Unknown"
-            var lastError: Exception? = null
-
-            // 尝试使用 XEP-0055 User Search 获取用户
             try {
-                Log.d(TAG, "尝试通过 User Search (XEP-0055) 获取用户")
+                val usersMap = mutableMapOf<BareJid, String?>() // Use a map to avoid duplicates
+                var source = "Unknown"
+                var lastError: Exception? = null
 
-                // 常见的搜索服务名称: "search.$domain" 或 "vjud.$domain"
-                val searchServices = listOf(
-                    "search.$domain",
-                    "vjud.$domain",
-                    domain // 最后尝试主域
-                )
+                // 尝试使用 XEP-0055 User Search 获取用户
+                try {
+                    Log.d(TAG, "尝试通过 User Search (XEP-0055) 获取用户")
 
-                var foundUsers = false
+                    // 常见的搜索服务名称: "search.$domain" 或 "vjud.$domain"
+                    val searchServices = listOf(
+                        "search.$domain",
+                        "vjud.$domain",
+                        domain // 最后尝试主域
+                    )
 
-                for (serviceName in searchServices) {
-                    if (foundUsers && usersMap.isNotEmpty()) {
-                        Log.d(TAG, "已通过先前的服务找到 ${usersMap.size} 个用户，跳过剩余服务")
-                        break
-                    }
+                    var foundUsers = false
 
-                    try {
-                        val serviceJid = JidCreate.domainBareFrom(serviceName)
-                        Log.d(TAG, "尝试搜索服务: $serviceJid")
+                    for (serviceName in searchServices) {
+                        if (foundUsers && usersMap.isNotEmpty()) {
+                            Log.d(TAG, "已通过先前的服务找到 ${usersMap.size} 个用户，跳过剩余服务")
+                            break
+                        }
 
-                        // 步骤1: 获取搜索表单
-                        val searchFormIQ = UserSearchIQ()
-                        searchFormIQ.to = serviceJid
-                        searchFormIQ.type = IQ.Type.get
-
-                        var formResult: IQ? = null
                         try {
-                            // 使用 StanzaCollector 等待响应
-                            val formCollector = connection.createStanzaCollectorAndSend(searchFormIQ)
-                            formResult = formCollector.nextResult<IQ>(connection.replyTimeout) // 使用 replyTimeout
-                            formCollector.cancel() // 及时取消收集器
+                            val serviceJid = JidCreate.domainBareFrom(serviceName)
+                            Log.d(TAG, "尝试搜索服务: $serviceJid")
 
-                            if (formResult != null) {
-                                Log.d(TAG, "收到搜索表单响应")
-                            } else {
-                                Log.w(TAG, "获取搜索表单响应超时或为空")
+                            // 步骤1: 获取搜索表单
+                            val searchFormIQ = UserSearchIQ()
+                            searchFormIQ.to = serviceJid
+                            searchFormIQ.type = IQ.Type.get
+
+                            var formResult: IQ? = null
+                            try {
+                                // 使用 StanzaCollector 等待响应
+                                val formCollector =
+                                    connection.createStanzaCollectorAndSend(searchFormIQ)
+                                formResult =
+                                    formCollector.nextResult<IQ>(connection.replyTimeout) // 使用 replyTimeout
+                                formCollector.cancel() // 及时取消收集器
+
+                                if (formResult != null) {
+                                    Log.d(TAG, "收到搜索表单响应")
+                                } else {
+                                    Log.w(TAG, "获取搜索表单响应超时或为空")
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "获取搜索表单失败: ${e.message}")
+                                continue
                             }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "获取搜索表单失败: ${e.message}")
-                            continue
-                        }
 
-                        if (formResult == null || formResult.type == IQ.Type.error) {
-                            Log.e(TAG, "搜索服务 $serviceJid 返回错误或无响应")
-                            continue
-                        }
-
-                        // 步骤2: 解析表单，准备搜索请求
-                        val dataExtension: ExtensionElement? = formResult?.getExtension("x", "jabber:x:data")
-                        if (dataExtension == null) {
-                            Log.e(TAG, "搜索表单不包含 Data Form 扩展")
-                            continue
-                        }
-
-                        // 创建搜索请求XML
-                        val searchRequestXml = StringBuilder()
-                        searchRequestXml.append("<x xmlns='jabber:x:data' type='submit'>")
-
-                        // 添加表单类型
-                        searchRequestXml.append("<field var='FORM_TYPE'><value>jabber:iq:search</value></field>")
-
-                        // 添加搜索条件: 使用通配符查找所有用户
-                        searchRequestXml.append("<field var='search'><value>*</value></field>")
-
-                        // 添加其他可能的字段，启用所有搜索选项
-                        val fieldNames = listOf("Username", "Name", "Email")
-                        for (fieldName in fieldNames) {
-                            searchRequestXml.append("<field var='$fieldName'><value>1</value></field>")
-                        }
-
-                        searchRequestXml.append("</x>")
-
-                        // 步骤3: 发送搜索请求
-                        val searchRequestIQ = UserSearchRequestIQ(searchRequestXml.toString())
-                        searchRequestIQ.to = serviceJid
-                        searchRequestIQ.type = IQ.Type.set
-
-                        var searchResult: IQ? = null
-                        try {
-                            // 使用 StanzaCollector 等待响应
-                            val searchCollector = connection.createStanzaCollectorAndSend(searchRequestIQ)
-                            searchResult = searchCollector.nextResult<IQ>(connection.replyTimeout) // 使用 replyTimeout
-                            searchCollector.cancel() // 及时取消收集器
-
-                            if (searchResult != null) {
-                                Log.d(TAG, "收到搜索结果响应")
-                            } else {
-                                Log.w(TAG, "获取搜索结果响应超时或为空")
+                            if (formResult == null || formResult.type == IQ.Type.error) {
+                                Log.e(TAG, "搜索服务 $serviceJid 返回错误或无响应")
+                                continue
                             }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "执行搜索请求失败: ${e.message}")
-                            continue
-                        }
 
-                        if (searchResult == null || searchResult.type == IQ.Type.error) {
-                            Log.e(TAG, "搜索请求返回错误或无响应")
-                            continue
-                        }
+                            // 步骤2: 解析表单，准备搜索请求
+                            val dataExtension: ExtensionElement? =
+                                formResult?.getExtension("x", "jabber:x:data")
+                            if (dataExtension == null) {
+                                Log.e(TAG, "搜索表单不包含 Data Form 扩展")
+                                continue
+                            }
 
-                        // 步骤4: 解析搜索结果
-                        val resultExtension: ExtensionElement? = searchResult?.getExtension("x", "jabber:x:data")
-                        if (resultExtension == null) {
-                            Log.d(TAG, "搜索结果不包含Data Form扩展")
-                            continue
-                        }
+                            // 创建搜索请求XML
+                            val searchRequestXml = StringBuilder()
+                            searchRequestXml.append("<x xmlns='jabber:x:data' type='submit'>")
 
-                        // 从结果中提取用户信息
-                        val resultXml = resultExtension.toXML().toString()
-                        Log.d(TAG, "收到搜索结果XML，长度: ${resultXml.length}")
+                            // 添加表单类型
+                            searchRequestXml.append("<field var='FORM_TYPE'><value>jabber:iq:search</value></field>")
 
-                        // 提取用户数据
-                        val userCountBefore = usersMap.size
+                            // 添加搜索条件: 使用通配符查找所有用户
+                            searchRequestXml.append("<field var='search'><value>*</value></field>")
 
-                        // 使用多种解析方法，确保能提取出用户
-                        var parsed = false
+                            // 添加其他可能的字段，启用所有搜索选项
+                            val fieldNames = listOf("Username", "Name", "Email")
+                            for (fieldName in fieldNames) {
+                                searchRequestXml.append("<field var='$fieldName'><value>1</value></field>")
+                            }
 
-                        // 方法1: 使用基于item结构的解析
-                        try {
-                            val jidValuePattern = "<field\\s+var=\"jid\"[^>]*>.*?<value>\\s*(.*?)\\s*</value>".toRegex(RegexOption.DOT_MATCHES_ALL)
-                            val usernameValuePattern = "<field\\s+var=\"Username\"[^>]*>.*?<value>\\s*(.*?)\\s*</value>".toRegex(RegexOption.DOT_MATCHES_ALL)
-                            val nameValuePattern = "<field\\s+var=\"Name\"[^>]*>.*?<value>\\s*(.*?)\\s*</value>".toRegex(RegexOption.DOT_MATCHES_ALL)
+                            searchRequestXml.append("</x>")
 
-                            // 分析出整个项目列表结构
-                            val itemPattern = "<item>(.*?)</item>".toRegex(RegexOption.DOT_MATCHES_ALL)
-                            val items = itemPattern.findAll(resultXml).map { it.groupValues[1] }.toList()
+                            // 步骤3: 发送搜索请求
+                            val searchRequestIQ = UserSearchRequestIQ(searchRequestXml.toString())
+                            searchRequestIQ.to = serviceJid
+                            searchRequestIQ.type = IQ.Type.set
 
-                            Log.d(TAG, "找到 ${items.size} 个用户项")
+                            var searchResult: IQ? = null
+                            try {
+                                // 使用 StanzaCollector 等待响应
+                                val searchCollector =
+                                    connection.createStanzaCollectorAndSend(searchRequestIQ)
+                                searchResult =
+                                    searchCollector.nextResult<IQ>(connection.replyTimeout) // 使用 replyTimeout
+                                searchCollector.cancel() // 及时取消收集器
 
-                            if (items.isNotEmpty()) {
-                                for (item in items) {
-                                    // 在每个item内单独查找 jid, username 和 name
-                                    val itemJidMatch = jidValuePattern.find(item)
-                                    val itemUsernameMatch = usernameValuePattern.find(item)
-                                    val itemNameMatch = nameValuePattern.find(item)
+                                if (searchResult != null) {
+                                    Log.d(TAG, "收到搜索结果响应")
+                                } else {
+                                    Log.w(TAG, "获取搜索结果响应超时或为空")
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "执行搜索请求失败: ${e.message}")
+                                continue
+                            }
 
-                                    if (itemJidMatch != null) {
+                            if (searchResult == null || searchResult.type == IQ.Type.error) {
+                                Log.e(TAG, "搜索请求返回错误或无响应")
+                                continue
+                            }
+
+                            // 步骤4: 解析搜索结果
+                            val resultExtension: ExtensionElement? =
+                                searchResult?.getExtension("x", "jabber:x:data")
+                            if (resultExtension == null) {
+                                Log.d(TAG, "搜索结果不包含Data Form扩展")
+                                continue
+                            }
+
+                            // 从结果中提取用户信息
+                            val resultXml = resultExtension.toXML().toString()
+                            Log.d(TAG, "收到搜索结果XML，长度: ${resultXml.length}")
+
+                            // 提取用户数据
+                            val userCountBefore = usersMap.size
+
+                            // 使用多种解析方法，确保能提取出用户
+                            var parsed = false
+
+                            // 方法1: 使用基于item结构的解析
+                            try {
+                                val jidValuePattern =
+                                    "<field\\s+var=\"jid\"[^>]*>.*?<value>\\s*(.*?)\\s*</value>".toRegex(
+                                        RegexOption.DOT_MATCHES_ALL
+                                    )
+                                val usernameValuePattern =
+                                    "<field\\s+var=\"Username\"[^>]*>.*?<value>\\s*(.*?)\\s*</value>".toRegex(
+                                        RegexOption.DOT_MATCHES_ALL
+                                    )
+                                val nameValuePattern =
+                                    "<field\\s+var=\"Name\"[^>]*>.*?<value>\\s*(.*?)\\s*</value>".toRegex(
+                                        RegexOption.DOT_MATCHES_ALL
+                                    )
+
+                                // 分析出整个项目列表结构
+                                val itemPattern =
+                                    "<item>(.*?)</item>".toRegex(RegexOption.DOT_MATCHES_ALL)
+                                val items = itemPattern.findAll(resultXml).map { it.groupValues[1] }
+                                    .toList()
+
+                                Log.d(TAG, "找到 ${items.size} 个用户项")
+
+                                if (items.isNotEmpty()) {
+                                    for (item in items) {
+                                        // 在每个item内单独查找 jid, username 和 name
+                                        val itemJidMatch = jidValuePattern.find(item)
+                                        val itemUsernameMatch = usernameValuePattern.find(item)
+                                        val itemNameMatch = nameValuePattern.find(item)
+
+                                        if (itemJidMatch != null) {
+                                            try {
+                                                val jidStr = itemJidMatch.groupValues[1].trim()
+                                                if (jidStr.isNotEmpty()) {
+                                                    val userJid = JidCreate.bareFrom(jidStr)
+
+                                                    // 排除当前用户和服务组件
+                                                    if (userJid != currentUserJid && !isServiceComponent(
+                                                            getLocalpartSafely(userJid)
+                                                        )
+                                                    ) {
+                                                        // 默认用户名为JID的本地部分
+                                                        var userName = getLocalpartSafely(userJid)
+
+                                                        // 首先尝试从Name字段获取显示名
+                                                        if (itemNameMatch != null) {
+                                                            val name =
+                                                                itemNameMatch.groupValues[1].trim()
+                                                            if (name.isNotEmpty()) {
+                                                                userName = name
+                                                            }
+                                                        }
+                                                        // 如果没有Name，尝试Username字段
+                                                        else if (itemUsernameMatch != null) {
+                                                            val username =
+                                                                itemUsernameMatch.groupValues[1].trim()
+                                                            if (username.isNotEmpty()) {
+                                                                userName = username
+                                                            }
+                                                        }
+
+                                                        usersMap[userJid] = userName
+                                                        Log.d(
+                                                            TAG,
+                                                            "添加用户: $userJid -> $userName"
+                                                        )
+                                                        foundUsers = true
+                                                        parsed = true
+                                                    } else {
+                                                        Log.d(
+                                                            TAG,
+                                                            "跳过用户 $jidStr (当前用户或服务组件)"
+                                                        )
+                                                    }
+                                                }
+                                            } catch (e: Exception) {
+                                                Log.e(TAG, "处理JID失败: ${e.message}")
+                                                // 继续处理其他JID
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Log.d(TAG, "未找到基于item的用户数据，尝试其他解析方法")
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "尝试提取基于item的用户数据时出错: ${e.message}")
+                                lastError = e
+                                // 继续尝试其他解析方法
+                            }
+
+                            // 方法4: 极简匹配，尝试最后的解析努力
+                            if (!parsed) {
+                                try {
+                                    Log.d(TAG, "尝试极简解析方法4")
+                                    // 匹配任何 xxx@yyy 形式的字符串
+                                    val ultraSimplePattern = "\\b([\\w.-]+@[\\w.-]+)\\b".toRegex()
+                                    val matches = ultraSimplePattern.findAll(resultXml)
+
+                                    for (match in matches) {
+                                        val jidStr = match.groupValues[1].trim()
                                         try {
-                                            val jidStr = itemJidMatch.groupValues[1].trim()
-                                            if (jidStr.isNotEmpty()) {
+                                            if (jidStr.contains("@") && !jidStr.contains("<") && !jidStr.contains(
+                                                    ">"
+                                                )
+                                            ) {
                                                 val userJid = JidCreate.bareFrom(jidStr)
-
-                                                // 排除当前用户和服务组件
-                                                if (userJid != currentUserJid && !isServiceComponent(getLocalpartSafely(userJid))) {
-                                                    // 默认用户名为JID的本地部分
-                                                    var userName = getLocalpartSafely(userJid)
-
-                                                    // 首先尝试从Name字段获取显示名
-                                                    if (itemNameMatch != null) {
-                                                        val name = itemNameMatch.groupValues[1].trim()
-                                                        if (name.isNotEmpty()) {
-                                                            userName = name
-                                                        }
-                                                    }
-                                                    // 如果没有Name，尝试Username字段
-                                                    else if (itemUsernameMatch != null) {
-                                                        val username = itemUsernameMatch.groupValues[1].trim()
-                                                        if (username.isNotEmpty()) {
-                                                            userName = username
-                                                        }
-                                                    }
-
+                                                if (userJid != currentUserJid && !isServiceComponent(
+                                                        getLocalpartSafely(userJid)
+                                                    )
+                                                ) {
+                                                    val userName = getLocalpartSafely(userJid)
                                                     usersMap[userJid] = userName
-                                                    Log.d(TAG, "添加用户: $userJid -> $userName")
+                                                    Log.d(
+                                                        TAG,
+                                                        "添加用户(极简方法4): $userJid -> $userName"
+                                                    )
                                                     foundUsers = true
-                                                    parsed = true
-                                                } else {
-                                                    Log.d(TAG, "跳过用户 $jidStr (当前用户或服务组件)")
                                                 }
                                             }
                                         } catch (e: Exception) {
-                                            Log.e(TAG, "处理JID失败: ${e.message}")
-                                            // 继续处理其他JID
+                                            // 忽略单个错误
                                         }
                                     }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "极简解析方法4失败: ${e.message}")
+                                    lastError = e
                                 }
+                            }
+
+                            // 检查是否成功添加了新用户
+                            val addedUsers = usersMap.size - userCountBefore
+                            if (addedUsers > 0) {
+                                Log.d(TAG, "从服务 $serviceName 添加了 $addedUsers 个新用户")
+                                foundUsers = true
+                                source = "User Search (XEP-0055)"
                             } else {
-                                Log.d(TAG, "未找到基于item的用户数据，尝试其他解析方法")
+                                // 打印更详细的错误信息，帮助调试
+                                Log.w(TAG, "服务 $serviceName 的搜索结果中未找到有效用户")
                             }
                         } catch (e: Exception) {
-                            Log.e(TAG, "尝试提取基于item的用户数据时出错: ${e.message}")
+                            Log.e(TAG, "搜索服务 $serviceName 处理失败: ${e.message}")
                             lastError = e
-                            // 继续尝试其他解析方法
                         }
+                    }
 
-                        // 方法4: 极简匹配，尝试最后的解析努力
-                        if (!parsed) {
-                            try {
-                                Log.d(TAG, "尝试极简解析方法4")
-                                // 匹配任何 xxx@yyy 形式的字符串
-                                val ultraSimplePattern = "\\b([\\w.-]+@[\\w.-]+)\\b".toRegex()
-                                val matches = ultraSimplePattern.findAll(resultXml)
-
-                                for (match in matches) {
-                                    val jidStr = match.groupValues[1].trim()
-                                    try {
-                                        if (jidStr.contains("@") && !jidStr.contains("<") && !jidStr.contains(">")) {
-                                            val userJid = JidCreate.bareFrom(jidStr)
-                                            if (userJid != currentUserJid && !isServiceComponent(getLocalpartSafely(userJid))) {
-                                                val userName = getLocalpartSafely(userJid)
-                                                usersMap[userJid] = userName
-                                                Log.d(TAG, "添加用户(极简方法4): $userJid -> $userName")
-                                                foundUsers = true
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        // 忽略单个错误
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "极简解析方法4失败: ${e.message}")
-                                lastError = e
-                            }
-                        }
-
-                        // 检查是否成功添加了新用户
-                        val addedUsers = usersMap.size - userCountBefore
-                        if (addedUsers > 0) {
-                            Log.d(TAG, "从服务 $serviceName 添加了 $addedUsers 个新用户")
-                            foundUsers = true
-                            source = "User Search (XEP-0055)"
+                    // 改变这里的逻辑 - 只要有用户数据，就返回成功
+                    if (usersMap.isNotEmpty()) {
+                        Log.d(TAG, "User Search 成功: 已获取 ${usersMap.size} 个用户")
+                    } else {
+                        Log.w(TAG, "所有搜索服务都未返回有效用户")
+                        if (lastError != null) {
+                            throw lastError
                         } else {
-                            // 打印更详细的错误信息，帮助调试
-                            Log.w(TAG, "服务 $serviceName 的搜索结果中未找到有效用户")
+                            throw Exception("未能找到任何用户")
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "搜索服务 $serviceName 处理失败: ${e.message}")
-                        lastError = e
+                    }
+                } catch (e: Exception) {
+                    // 即使User Search出错也继续处理，如果已有用户则忽略错误
+                    Log.e(TAG, "使用User Search时发生错误: ${e.message}", e)
+                    lastError = e
+                    if (usersMap.isEmpty()) {
+                        // 继续尝试其他获取用户的方法
+                        Log.d(TAG, "User Search失败，未找到任何用户，将尝试其他方法")
+                    } else {
+                        Log.d(TAG, "尽管出现错误，但已找到 ${usersMap.size} 个用户，继续处理")
                     }
                 }
 
-                // 改变这里的逻辑 - 只要有用户数据，就返回成功
-                if (usersMap.isNotEmpty()) {
-                    Log.d(TAG, "User Search 成功: 已获取 ${usersMap.size} 个用户")
-                } else {
-                    Log.w(TAG, "所有搜索服务都未返回有效用户")
-                    if (lastError != null) {
-                        throw lastError
-                    } else {
-                        throw Exception("未能找到任何用户")
+                // 获取用户VCard信息以获取更好的显示名称
+                val finalUsers = if (usersMap.isNotEmpty()) {
+                    try {
+                        Log.d(TAG, "尝试获取用户VCard信息 (来源: $source)")
+                        val vCardManager = VCardManager.getInstanceFor(connection)
+                        val usersList = mutableListOf<Pair<BareJid, String?>>()
+
+                        usersMap.forEach { (bareJid, name) ->
+                            try {
+                                usersList.add(bareJid to name)
+                            } catch (e: Exception) {
+                                // 忽略VCard获取错误，继续使用原始名称
+                                if (e !is SmackException.NotConnectedException && e !is SmackException.NoResponseException) {
+                                    Log.d(
+                                        TAG,
+                                        "获取 $bareJid 的VCard失败: ${e.javaClass.simpleName}"
+                                    )
+                                }
+                                usersList.add(bareJid to name)
+                            }
+                        }
+                        usersList
+                    } catch (e: Exception) {
+                        Log.e(TAG, "获取VCard过程中出错", e)
+                        // VCard管理器整体失败时，仍返回原始用户列表
+                        usersMap.map { it.key to it.value }
                     }
+                } else {
+                    emptyList()
+                }
+
+                Log.d(TAG, "最终获取到 ${finalUsers.size} 个用户 (来源: $source)")
+
+                if (finalUsers.isEmpty()) {
+                    // 确保结果列表有数据
+                    if (usersMap.isNotEmpty()) {
+                        Log.w(
+                            TAG,
+                            "最终用户列表为空，但原始用户映射有 ${usersMap.size} 个条目，直接使用原始映射"
+                        )
+                        return@withContext Result.success(usersMap.map { it.key to it.value }
+                            .sortedBy { it.second })
+                    }
+                    return@withContext Result.failure(lastError ?: Exception("未找到任何有效用户"))
+                } else {
+                    // 按名称排序后返回
+                    return@withContext Result.success(finalUsers.sortedBy { it.second })
                 }
             } catch (e: Exception) {
-                // 即使User Search出错也继续处理，如果已有用户则忽略错误
-                Log.e(TAG, "使用User Search时发生错误: ${e.message}", e)
-                lastError = e
-                if (usersMap.isEmpty()) {
-                    // 继续尝试其他获取用户的方法
-                    Log.d(TAG, "User Search失败，未找到任何用户，将尝试其他方法")
-                } else {
-                    Log.d(TAG, "尽管出现错误，但已找到 ${usersMap.size} 个用户，继续处理")
-                }
+                Log.e(TAG, "获取用户过程中发生错误", e)
+                return@withContext Result.failure(e)
             }
-
-            // 获取用户VCard信息以获取更好的显示名称
-            val finalUsers = if (usersMap.isNotEmpty()) {
-                try {
-                    Log.d(TAG, "尝试获取用户VCard信息 (来源: $source)")
-                    val vCardManager = VCardManager.getInstanceFor(connection)
-                    val usersList = mutableListOf<Pair<BareJid, String?>>()
-
-                    usersMap.forEach { (bareJid, name) ->
-                        try {
-                            usersList.add(bareJid to name)
-                        } catch (e: Exception) {
-                            // 忽略VCard获取错误，继续使用原始名称
-                            if (e !is SmackException.NotConnectedException && e !is SmackException.NoResponseException) {
-                                Log.d(TAG, "获取 $bareJid 的VCard失败: ${e.javaClass.simpleName}")
-                            }
-                            usersList.add(bareJid to name)
-                        }
-                    }
-                    usersList
-                } catch (e: Exception) {
-                    Log.e(TAG, "获取VCard过程中出错", e)
-                    // VCard管理器整体失败时，仍返回原始用户列表
-                    usersMap.map { it.key to it.value }
-                }
-            } else {
-                emptyList()
-            }
-
-            Log.d(TAG, "最终获取到 ${finalUsers.size} 个用户 (来源: $source)")
-
-            if (finalUsers.isEmpty()) {
-                // 确保结果列表有数据
-                if (usersMap.isNotEmpty()) {
-                    Log.w(TAG, "最终用户列表为空，但原始用户映射有 ${usersMap.size} 个条目，直接使用原始映射")
-                    return@withContext Result.success(usersMap.map { it.key to it.value }.sortedBy { it.second })
-                }
-                return@withContext Result.failure(lastError ?: Exception("未找到任何有效用户"))
-            } else {
-                // 按名称排序后返回
-                return@withContext Result.success(finalUsers.sortedBy { it.second })
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "获取用户过程中发生错误", e)
-            return@withContext Result.failure(e)
         }
-    }
 
     /**
      * 获取好友JID集合
@@ -1662,7 +1764,9 @@ class XMPPManager private constructor() {
         if (connectionState.value != ConnectionState.AUTHENTICATED) {
             return@withContext Result.failure(IllegalStateException("用户未认证"))
         }
-        val connection = currentConnection ?: return@withContext Result.failure(IllegalStateException("连接无效"))
+        val connection = currentConnection ?: return@withContext Result.failure(
+            IllegalStateException("连接无效")
+        )
 
         try {
             val roster = Roster.getInstanceFor(connection)
@@ -1685,7 +1789,9 @@ class XMPPManager private constructor() {
         if (connectionState.value != ConnectionState.AUTHENTICATED) {
             return@withContext Result.failure(IllegalStateException("用户未认证"))
         }
-        val connection = currentConnection ?: return@withContext Result.failure(IllegalStateException("连接无效"))
+        val connection = currentConnection ?: return@withContext Result.failure(
+            IllegalStateException("连接无效")
+        )
 
         try {
             val roster = Roster.getInstanceFor(connection)
@@ -1716,7 +1822,9 @@ class XMPPManager private constructor() {
         if (connectionState.value != ConnectionState.AUTHENTICATED) {
             return@withContext Result.failure(IllegalStateException("用户未认证"))
         }
-        val connection = currentConnection ?: return@withContext Result.failure(IllegalStateException("连接无效"))
+        val connection = currentConnection ?: return@withContext Result.failure(
+            IllegalStateException("连接无效")
+        )
 
         try {
             val roster = Roster.getInstanceFor(connection)
@@ -1771,17 +1879,17 @@ class XMPPManager private constructor() {
         try {
             checkConnection()
             Log.d(TAG, "getFriendsPresence: 返回内部维护的状态映射")
-            
+
             val rosterManager = Roster.getInstanceFor(currentConnection)
             if (!rosterManager.isLoaded) {
                 Log.d(TAG, "花名册未加载，正在重新加载...")
                 rosterManager.reloadAndWait()
             }
-            
+
             // 创建结果映射
             val resultMap = mutableMapOf<BareJid, String>()
             val entries = rosterManager.entries
-            
+
             // 如果presenceMap为空，先进行一次状态请求
             if (this@XMPPManager.presenceMap.isEmpty()) {
                 Log.d(TAG, "状态映射为空，请求一次所有联系人状态")
@@ -1789,30 +1897,32 @@ class XMPPManager private constructor() {
                 // 给一点时间让服务器响应
                 delay(500)
             }
-            
+
             Log.d(TAG, "从内部映射中获取状态，映射大小: ${this@XMPPManager.presenceMap.size}")
-            
+
             // 遍历所有roster条目，从presenceMap获取状态
             for (entry in entries) {
                 val jid = entry.jid.asBareJid()
                 val jidStr = jid.toString()
-                
+
                 // 从内部状态映射获取状态
                 val status = this@XMPPManager.presenceMap[jidStr] ?: "离线"
                 resultMap[jid] = status
             }
-            
-            Log.d(TAG, "已返回内部状态映射: 共 ${resultMap.size} 个, " +
+
+            Log.d(
+                TAG, "已返回内部状态映射: 共 ${resultMap.size} 个, " +
                     "在线: ${resultMap.values.count { it.contains("在线") }}, " +
-                    "离线: ${resultMap.values.count { it == "离线" }}")
-            
+                    "离线: ${resultMap.values.count { it == "离线" }}"
+            )
+
             Result.success(resultMap)
         } catch (e: Exception) {
             Log.e(TAG, "获取好友在线状态失败", e)
             Result.failure(e)
         }
     }
-    
+
     /**
      * 请求所有联系人的在线状态
      */
@@ -1822,16 +1932,16 @@ class XMPPManager private constructor() {
                 Log.e(TAG, "无法请求在线状态: 连接无效")
                 return
             }
-            
+
             val roster = Roster.getInstanceFor(currentConnection)
-            
+
             // 确保roster已加载
             if (!roster.isLoaded) {
                 roster.reloadAndWait()
             }
-            
+
             Log.d(TAG, "正在请求 ${roster.entries.size} 个联系人的在线状态...")
-            
+
             // 对每个联系人发送presence probe和subscribe
             roster.entries.forEach { entry ->
                 try {
@@ -1839,18 +1949,18 @@ class XMPPManager private constructor() {
                     val probe = Presence(Presence.Type.available)
                     probe.to = entry.jid
                     currentConnection?.sendStanza(probe)
-                    
+
                     // 2. 发送subscribe请求 - 确保获得持续的状态更新
                     val subscribe = Presence(Presence.Type.subscribe)
                     subscribe.to = entry.jid
                     currentConnection?.sendStanza(subscribe)
-                    
+
                     Log.d(TAG, "已向 ${entry.jid} 发送在线状态请求")
                 } catch (e: Exception) {
                     Log.e(TAG, "向 ${entry.jid} 发送状态请求失败", e)
                 }
             }
-            
+
             Log.d(TAG, "已完成所有联系人状态请求")
         } catch (e: Exception) {
             Log.e(TAG, "请求联系人状态失败", e)
@@ -1890,46 +2000,52 @@ class XMPPManager private constructor() {
             Log.d(TAG, "当前用户JID: $currentUserJid")
 
             // 添加消息监听器
-            currentConnection?.addStanzaListener({ stanza ->
-                if (stanza is org.jivesoftware.smack.packet.Message && stanza.type == org.jivesoftware.smack.packet.Message.Type.chat) {
-                    val fromJid = stanza.from.asBareJid().toString()
-                    val body = stanza.body
+            currentConnection?.addStanzaListener(
+                { stanza ->
+                    if (stanza is org.jivesoftware.smack.packet.Message && stanza.type == org.jivesoftware.smack.packet.Message.Type.chat) {
+                        val fromJid = stanza.from.asBareJid().toString()
+                        val body = stanza.body
 
-                    Log.d(TAG, "==================== 收到消息 ====================")
-                    Log.d(TAG, "收到聊天消息: $body 从 $fromJid (当前用户: $currentUserJid)")
+                        Log.d(TAG, "==================== 收到消息 ====================")
+                        Log.d(TAG, "收到聊天消息: $body 从 $fromJid (当前用户: $currentUserJid)")
 
-                    if (body != null) {
-                        // 使用协程异步处理
-                        scope.launch {
-                            try {
-                                // 获取对方的实际名称
-                                val senderName = getSenderName(JidCreate.bareFrom(fromJid))
-                                Log.d(TAG, "获取到发送者名称: $senderName")
+                        if (body != null) {
+                            // 使用协程异步处理
+                            scope.launch {
+                                try {
+                                    // 获取对方的实际名称
+                                    val senderName = getSenderName(JidCreate.bareFrom(fromJid))
+                                    Log.d(TAG, "获取到发送者名称: $senderName")
 
-                                // 使用XMPP消息的stanzaId作为唯一标识，如果没有则生成新的
-                                val messageId = stanza.stanzaId ?: UUID.randomUUID().toString()
+                                    // 使用XMPP消息的stanzaId作为唯一标识，如果没有则生成新的
+                                    val messageId = stanza.stanzaId ?: UUID.randomUUID().toString()
 
-                                val newMessage = ChatMessage(
-                                    id = messageId,
-                                    senderId = fromJid, // 使用完整JID
-                                    senderName = senderName, // 使用发送者的实际名称
-                                    content = body,
-                                    timestamp = LocalDateTime.now(),
-                                    isRead = false,
-                                    recipientId = currentUserJid // 接收者是当前用户
-                                )
+                                    val newMessage = ChatMessage(
+                                        id = messageId,
+                                        senderId = fromJid, // 使用完整JID
+                                        senderName = senderName, // 使用发送者的实际名称
+                                        content = body,
+                                        timestamp = LocalDateTime.now(),
+                                        isRead = false,
+                                        recipientId = currentUserJid // 接收者是当前用户
+                                    )
 
-                                Log.d(TAG, "创建接收消息: ID=$messageId, senderId=$fromJid, recipientId=$currentUserJid, senderName=$senderName")
+                                    Log.d(
+                                        TAG,
+                                        "创建接收消息: ID=$messageId, senderId=$fromJid, recipientId=$currentUserJid, senderName=$senderName"
+                                    )
 
-                                // 发布到Flow
-                                _messageFlow.emit(newMessage)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "处理收到的消息时出错", e)
+                                    // 发布到Flow
+                                    _messageFlow.emit(newMessage)
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "处理收到的消息时出错", e)
+                                }
                             }
                         }
                     }
-                }
-            }, org.jivesoftware.smack.filter.StanzaTypeFilter(org.jivesoftware.smack.packet.Message::class.java))
+                },
+                org.jivesoftware.smack.filter.StanzaTypeFilter(org.jivesoftware.smack.packet.Message::class.java)
+            )
 
             Log.d(TAG, "成功设置消息监听器")
         } catch (e: Exception) {
@@ -1945,71 +2061,75 @@ class XMPPManager private constructor() {
      * @param messageContent 消息内容
      * @return 发送结果
      */
-    suspend fun sendMessage(recipientJid: String, messageContent: String): Result<ChatMessage> = withContext(Dispatchers.IO) {
-        if (connectionState.value != ConnectionState.AUTHENTICATED) {
-            Log.e(TAG, "sendMessage: 用户未认证")
-            return@withContext Result.failure(IllegalStateException("用户未认证"))
-        }
-
-        val connection = currentConnection ?: run {
-            Log.e(TAG, "sendMessage: 连接无效")
-            return@withContext Result.failure(IllegalStateException("连接无效"))
-        }
-
-        try {
-            // 获取当前用户的完整JID
-            val currentUserJid = connection.user.asEntityBareJidString()
-            val currentUserName = currentConnection?.user?.localpart?.toString() ?: "我"
-
-            // 确保recipientJid格式正确
-            val fullRecipientJid = if (!recipientJid.contains('@')) {
-                "$recipientJid@$SERVER_DOMAIN"
-            } else {
-                recipientJid
+    suspend fun sendMessage(recipientJid: String, messageContent: String): Result<ChatMessage> =
+        withContext(Dispatchers.IO) {
+            if (connectionState.value != ConnectionState.AUTHENTICATED) {
+                Log.e(TAG, "sendMessage: 用户未认证")
+                return@withContext Result.failure(IllegalStateException("用户未认证"))
             }
 
-            Log.d(TAG, "==================== 发送消息 ====================")
-            Log.d(TAG, "当前用户JID: $currentUserJid")
-            Log.d(TAG, "接收者JID: $fullRecipientJid")
-            Log.d(TAG, "消息内容: $messageContent")
+            val connection = currentConnection ?: run {
+                Log.e(TAG, "sendMessage: 连接无效")
+                return@withContext Result.failure(IllegalStateException("连接无效"))
+            }
 
-            // 创建消息
-            val message = org.jivesoftware.smack.packet.Message()
-            message.type = org.jivesoftware.smack.packet.Message.Type.chat
-            message.to = JidCreate.entityBareFrom(fullRecipientJid)
-            message.body = messageContent
-            message.from = connection.user // 确保from字段正确设置
+            try {
+                // 获取当前用户的完整JID
+                val currentUserJid = connection.user.asEntityBareJidString()
+                val currentUserName = currentConnection?.user?.localpart?.toString() ?: "我"
 
-            // 生成唯一的消息ID
-            val messageId = UUID.randomUUID().toString()
-            message.stanzaId = messageId
+                // 确保recipientJid格式正确
+                val fullRecipientJid = if (!recipientJid.contains('@')) {
+                    "$recipientJid@$SERVER_DOMAIN"
+                } else {
+                    recipientJid
+                }
 
-            // 发送消息
-            connection.sendStanza(message)
+                Log.d(TAG, "==================== 发送消息 ====================")
+                Log.d(TAG, "当前用户JID: $currentUserJid")
+                Log.d(TAG, "接收者JID: $fullRecipientJid")
+                Log.d(TAG, "消息内容: $messageContent")
 
-            // 创建本地消息对象 - 使用当前用户的实际名称
-            val chatMessage = ChatMessage(
-                id = messageId, // 使用相同的ID
-                senderId = currentUserJid, // 确保使用完整的JID
-                senderName = currentUserName, // 使用当前用户的实际名称，而不是硬编码的"我"
-                content = messageContent,
-                timestamp = LocalDateTime.now(),
-                isRead = true, // 自己发的消息默认已读
-                recipientId = fullRecipientJid // 使用完整接收者JID
-            )
+                // 创建消息
+                val message = org.jivesoftware.smack.packet.Message()
+                message.type = org.jivesoftware.smack.packet.Message.Type.chat
+                message.to = JidCreate.entityBareFrom(fullRecipientJid)
+                message.body = messageContent
+                message.from = connection.user // 确保from字段正确设置
 
-            Log.d(TAG, "创建本地消息: ID=$messageId, senderId=$currentUserJid, recipientId=$fullRecipientJid, senderName=$currentUserName")
+                // 生成唯一的消息ID
+                val messageId = UUID.randomUUID().toString()
+                message.stanzaId = messageId
 
-            // 发布到Flow
-            _messageFlow.emit(chatMessage)
+                // 发送消息
+                connection.sendStanza(message)
 
-            Log.d(TAG, "消息已发送，ID: $messageId")
-            Result.success(chatMessage)
-        } catch (e: Exception) {
-            Log.e(TAG, "发送消息失败: ${e.message}", e)
-            Result.failure(e)
+                // 创建本地消息对象 - 使用当前用户的实际名称
+                val chatMessage = ChatMessage(
+                    id = messageId, // 使用相同的ID
+                    senderId = currentUserJid, // 确保使用完整的JID
+                    senderName = currentUserName, // 使用当前用户的实际名称，而不是硬编码的"我"
+                    content = messageContent,
+                    timestamp = LocalDateTime.now(),
+                    isRead = true, // 自己发的消息默认已读
+                    recipientId = fullRecipientJid // 使用完整接收者JID
+                )
+
+                Log.d(
+                    TAG,
+                    "创建本地消息: ID=$messageId, senderId=$currentUserJid, recipientId=$fullRecipientJid, senderName=$currentUserName"
+                )
+
+                // 发布到Flow
+                _messageFlow.emit(chatMessage)
+
+                Log.d(TAG, "消息已发送，ID: $messageId")
+                Result.success(chatMessage)
+            } catch (e: Exception) {
+                Log.e(TAG, "发送消息失败: ${e.message}", e)
+                Result.failure(e)
+            }
         }
-    }
 
     /**
      * 获取最近的聊天历史记录
@@ -2017,27 +2137,28 @@ class XMPPManager private constructor() {
      * @param limit 限制返回的消息数量
      * @return 聊天历史记录列表
      */
-    suspend fun getChatHistory(otherJid: String, limit: Int = 20): Result<List<ChatMessage>> = withContext(Dispatchers.IO) {
-        if (connectionState.value != ConnectionState.AUTHENTICATED) {
-            Log.e(TAG, "getChatHistory: 用户未认证")
-            return@withContext Result.failure(IllegalStateException("用户未认证"))
+    suspend fun getChatHistory(otherJid: String, limit: Int = 20): Result<List<ChatMessage>> =
+        withContext(Dispatchers.IO) {
+            if (connectionState.value != ConnectionState.AUTHENTICATED) {
+                Log.e(TAG, "getChatHistory: 用户未认证")
+                return@withContext Result.failure(IllegalStateException("用户未认证"))
+            }
+
+            try {
+                Log.d(TAG, "获取与 $otherJid 的聊天历史")
+
+                // 这里应该是从服务器或本地数据库获取聊天记录
+                // 目前XMPP服务器可能没有默认的消息归档功能，需要使用XEP-0136 (Message Archiving) 扩展
+                // 简化起见，这里先返回空列表，然后通过 messageFlow 接收新的消息
+
+                // 如果要实现完整功能，需要添加数据库存储逻辑
+
+                Result.success(emptyList())
+            } catch (e: Exception) {
+                Log.e(TAG, "获取聊天历史失败: ${e.message}", e)
+                Result.failure(e)
+            }
         }
-
-        try {
-            Log.d(TAG, "获取与 $otherJid 的聊天历史")
-
-            // 这里应该是从服务器或本地数据库获取聊天记录
-            // 目前XMPP服务器可能没有默认的消息归档功能，需要使用XEP-0136 (Message Archiving) 扩展
-            // 简化起见，这里先返回空列表，然后通过 messageFlow 接收新的消息
-
-            // 如果要实现完整功能，需要添加数据库存储逻辑
-
-            Result.success(emptyList())
-        } catch (e: Exception) {
-            Log.e(TAG, "获取聊天历史失败: ${e.message}", e)
-            Result.failure(e)
-        }
-    }
 
     // 辅助方法，获取发送者名称
     private suspend fun getSenderName(jid: BareJid): String {
@@ -2153,7 +2274,9 @@ class XMPPManager private constructor() {
                 return@withContext Result.success(friendsResult.getOrDefault(emptySet()).toList())
             } else {
                 Log.e(TAG, "获取好友JID失败", friendsResult.exceptionOrNull())
-                return@withContext Result.failure(friendsResult.exceptionOrNull() ?: Exception("获取好友JID失败"))
+                return@withContext Result.failure(
+                    friendsResult.exceptionOrNull() ?: Exception("获取好友JID失败")
+                )
             }
         } catch (e: Exception) {
             Log.e(TAG, "获取最近联系人失败", e)
@@ -2169,7 +2292,7 @@ class XMPPManager private constructor() {
         if (connectionState.value != ConnectionState.AUTHENTICATED) {
             throw IllegalStateException("用户未认证")
         }
-        
+
         if (currentConnection == null) {
             throw IllegalStateException("连接无效")
         }
@@ -2183,15 +2306,16 @@ class XMPPManager private constructor() {
             Log.e(TAG, "无法设置Roster监听器：连接无效")
             return
         }
-        
+
         try {
             val roster = Roster.getInstanceFor(currentConnection)
-            
+
             // 配置Roster选项
             roster.subscriptionMode = Roster.SubscriptionMode.accept_all
-            
+
             // 添加Presence监听器，监听联系人状态变化
-            roster.addPresenceEventListener(object : org.jivesoftware.smack.roster.PresenceEventListener {
+            roster.addPresenceEventListener(object :
+                org.jivesoftware.smack.roster.PresenceEventListener {
                 override fun presenceAvailable(jid: FullJid?, presence: Presence?) {
                     val bareJid = jid?.asBareJid()
                     Log.d(TAG, "Presence可用事件: jid=$bareJid, presence=$presence")
@@ -2226,9 +2350,10 @@ class XMPPManager private constructor() {
                     Log.d(TAG, "Presence取消订阅事件: jid=$jid")
                 }
             })
-            
+
             // 设置Roster加载监听器 - 修正类型
-            roster.addRosterLoadedListener(object : org.jivesoftware.smack.roster.RosterLoadedListener {
+            roster.addRosterLoadedListener(object :
+                org.jivesoftware.smack.roster.RosterLoadedListener {
                 override fun onRosterLoaded(roster: Roster?) {
                     Log.d(TAG, "Roster加载完成，共 ${roster?.entries?.size ?: 0} 个条目")
                 }
@@ -2237,13 +2362,13 @@ class XMPPManager private constructor() {
                     Log.e(TAG, "Roster加载失败", exception)
                 }
             })
-            
+
             // 加载Roster
             if (!roster.isLoaded) {
                 Log.d(TAG, "开始加载Roster...")
                 roster.reloadAndWait()
             }
-            
+
             Log.d(TAG, "Roster监听器设置完成")
         } catch (e: Exception) {
             Log.e(TAG, "设置Roster监听器失败", e)
@@ -2264,7 +2389,7 @@ class XMPPManager private constructor() {
                 Log.d(TAG, "广播 Presence 更新: $jidString -> $status")
                 _presenceUpdateFlow.emit(jidString to status)
             } catch (e: Exception) {
-                 Log.e(TAG, "广播 Presence 更新失败 for $jidString: ${e.message}")
+                Log.e(TAG, "广播 Presence 更新失败 for $jidString: ${e.message}")
             }
         }
     }
@@ -2274,17 +2399,18 @@ class XMPPManager private constructor() {
      */
     private fun setupPresenceListener() {
         val connection = currentConnection ?: return
-        
+
         // 添加Presence StanzaListener
         connection.addSyncStanzaListener({ stanza ->
             if (stanza is Presence) {
                 try {
                     val from = stanza.from?.asBareJid()?.toString() ?: return@addSyncStanzaListener
-                    val currentUserJid = connection.user?.asBareJid()?.toString() ?: return@addSyncStanzaListener
-                    
+                    val currentUserJid =
+                        connection.user?.asBareJid()?.toString() ?: return@addSyncStanzaListener
+
                     // 忽略自己发送的Presence
                     if (from == currentUserJid) return@addSyncStanzaListener
-                    
+
                     // 确定状态
                     val status = when {
                         stanza.type == Presence.Type.unavailable -> "离线"
@@ -2300,12 +2426,12 @@ class XMPPManager private constructor() {
                             }
                         }
                     }
-                    
+
                     // 更新内部映射
                     val oldStatus = presenceMap[from]
                     if (oldStatus != status) {
                         presenceMap[from] = status
-                        
+
                         // 广播更新
                         scope.launch {
                             _presenceUpdateFlow.emit(from to status)
@@ -2317,14 +2443,88 @@ class XMPPManager private constructor() {
                 }
             }
         }, { stanza -> stanza is Presence })
-        
+
         Log.d(TAG, "已设置Presence直接监听器")
-        
+
         // 登录后主动请求一次所有联系人的状态
         scope.launch {
             delay(2000) // 给系统一些时间处理初始化
             requestAllContactsPresence()
         }
+    }
+
+    /**
+     * 添加消息监听器，处理各类消息
+     */
+    private fun setupMessageListeners() {
+        val connection = currentConnection ?: return
+        Log.d(TAG, "Setting up message listeners...")
+
+        // 常规消息监听器 - 使用已有的消息处理机制
+        connection.addAsyncStanzaListener({ stanza ->
+            if (stanza is org.jivesoftware.smack.packet.Message) {
+                // 继续使用已有的消息处理流程
+                val body = stanza.body
+                if (body != null) {
+                    Log.d(TAG, "Received regular message: ${stanza.from} -> ${stanza.to}: $body")
+                }
+            }
+        }, null)
+
+        // 群聊消息已经在XMPPGroupChatManager中处理
+        
+        // 添加一个专门用于直接消息邀请的监听器
+        connection.addAsyncStanzaListener({ stanza ->
+            if (stanza is org.jivesoftware.smack.packet.Message && 
+                stanza.type == org.jivesoftware.smack.packet.Message.Type.chat) {
+                
+                // 检查是否包含群聊邀请扩展
+                val extensions = stanza.extensions
+                val invitationExt = extensions.find { 
+                    it.elementName == "group-invitation" && it.namespace == "travalms:invitation" 
+                }
+                
+                if (invitationExt != null) {
+                    Log.d(TAG, "Received direct message stanza with invitation extension")
+                    try {
+                        // 尝试解析XML内容来提取属性
+                        val xmlString = invitationExt.toXML().toString()
+                        Log.d(TAG, "Invitation Extension XML: $xmlString")
+                        
+                        // 简单的XML解析来提取属性
+                        val roomJid = xmlString.substringAfter("roomJid='", "").substringBefore("'", "")
+                        val inviter = xmlString.substringAfter("inviter='", "").substringBefore("'", "")
+                        val reason = xmlString.substringAfter("reason='", "").substringBefore("'", "")
+                        
+                        if (roomJid.isNotEmpty() && inviter.isNotEmpty()) {
+                            Log.d(TAG, "Received direct message invitation: room=$roomJid, inviter=$inviter, reason=$reason")
+                            
+                            // 尝试获取房间名称
+                            val roomName = roomJid.substringBefore('@')
+                            
+                            // 创建邀请对象
+                            val chatInvitation = com.example.travalms.data.model.ChatInvitation(
+                                roomJid = roomJid,
+                                roomName = roomName,
+                                senderJid = inviter,
+                                reason = if (reason.isBlank()) "邀请你加入群聊" else reason
+                            )
+                            
+                            // 添加到邀请列表
+                            _groupChatManager.addInvitation(chatInvitation)
+                            
+                            Log.d(TAG, "Successfully processed direct message invitation: ${chatInvitation.shortDescription}")
+                        } else {
+                            Log.w(TAG, "Failed to parse invitation attributes from XML: $xmlString")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error processing direct message invitation extension", e)
+                    }
+                }
+            }
+        }, null)
+        
+        Log.d(TAG, "Message listeners setup complete.")
     }
 
     /**

@@ -30,6 +30,13 @@ import com.example.travalms.ui.screens.MyFavoritesScreen
 import com.example.travalms.ui.screens.TailListScreen
 import com.example.travalms.ui.screens.ProfileScreen
 import com.example.travalms.ui.publish.PublishNodeSelectorScreen
+import com.example.travalms.ui.screens.CreateGroupScreen
+import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxSize
+import com.example.travalms.ui.screens.GroupChatScreen
 
 // 定义应用中的路由路径
 object AppRoutes {
@@ -54,6 +61,9 @@ object AppRoutes {
     const val MY_FAVORITES = "my_favorites"
     const val TAIL_LIST = "tail_list"
     const val PUBLISH_NODE_SELECTOR = "publish_node_selector"
+    const val GROUP_LIST = "group_list"
+    const val GROUP_CHAT = "group_chat/{roomJid}"
+    const val CREATE_GROUP = "create_group"
 }
 
 /**
@@ -407,6 +417,22 @@ fun AppNavigation(
                 },
                 navController = navController
             )
+        }
+        
+
+        // 添加创建群聊的路由目标
+        composable(AppRoutes.CREATE_GROUP) { 
+            // 将占位符替换为我们的CreateGroupScreen
+            CreateGroupScreen(navController = navController)
+        }
+        
+        // 添加群聊页面路由目标
+        composable(
+            route = AppRoutes.GROUP_CHAT,
+            arguments = listOf(navArgument("roomJid") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val roomJid = backStackEntry.arguments?.getString("roomJid") ?: ""
+            GroupChatScreen(navController = navController, roomJid = roomJid)
         }
     }
 } 
