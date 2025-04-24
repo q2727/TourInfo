@@ -1248,6 +1248,32 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
         Log.d(TAG, "Cleaning up XMPPGroupChatManager state...")
         val connection = xmppManager.currentConnection // Get current connection state
 
+        // 主动离开所有已加入的群聊
+        if (connection != null && connection.isAuthenticated && _mucManager != null) {
+            try {
+                // 获取所有已加入的房间
+                val joinedRooms = _mucManager?.joinedRooms ?: emptySet()
+                Log.d(TAG, "准备离开 ${joinedRooms.size} 个已加入的聊天室")
+                
+                // 逐个离开房间
+                for (roomJid in joinedRooms) {
+                    try {
+                        val muc = _mucManager?.getMultiUserChat(roomJid)
+                        if (muc != null && muc.isJoined) {
+                            Log.d(TAG, "正在离开聊天室: $roomJid")
+                            muc.leave()
+                            Log.d(TAG, "已成功离开聊天室: $roomJid")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "离开聊天室 $roomJid 时出错: ${e.message}", e)
+                    }
+                }
+                Log.d(TAG, "已离开所有聊天室")
+            } catch (e: Exception) {
+                Log.e(TAG, "离开聊天室过程中出错: ${e.message}", e)
+            }
+        }
+
         // Remove Group Chat Message Listener if it exists and connection is valid
         if (groupChatMessageListener != null && connection != null) {
             try {

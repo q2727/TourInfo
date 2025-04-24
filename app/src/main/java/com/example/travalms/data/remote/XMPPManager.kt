@@ -236,16 +236,17 @@ class XMPPManager private constructor() {
         // 设置SASL超时参数，默认是5000ms(5秒)
         SmackConfiguration.setDefaultReplyTimeout(3000000) // 增加到30秒
 
-        // 生成唯一的资源标识符，避免冲突
-        val uniqueResource = "${RESOURCE}_${UUID.randomUUID().toString().substring(0, 8)}"
-        Log.d(TAG, "Using unique resource: $uniqueResource")
+        // 使用固定的资源标识符，避免每次生成新的随机ID导致多连接问题
+        // 使用应用包名+常量作为稳定标识符
+        val fixedResource = "${RESOURCE}_fixed"
+        Log.d(TAG, "Using fixed resource: $fixedResource")
 
         return XMPPTCPConnectionConfiguration.builder()
             .setXmppDomain(SERVER_DOMAIN) // 使用SERVER_DOMAIN作为域名，而不是IP地址
             .setHost(SERVER_HOST) // 服务器地址
             .setPort(SERVER_PORT) // XMPP标准端口
             .setSecurityMode(ConnectionConfiguration.SecurityMode.disabled) // 开发环境禁用安全模式
-            .setResource(uniqueResource) // 使用唯一的资源标识
+            .setResource(fixedResource) // 使用固定的资源标识
             .setConnectTimeout(3000000) // 连接超时30秒
             .setSendPresence(true)
             .setCompressionEnabled(false) // 禁用压缩
