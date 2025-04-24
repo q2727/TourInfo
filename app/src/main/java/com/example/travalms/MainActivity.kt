@@ -18,10 +18,12 @@ import org.jivesoftware.smack.util.dns.DNSResolver
 import org.jivesoftware.smack.util.dns.minidns.MiniDnsResolver
 import com.example.travalms.data.remote.XMPPService
 import com.example.travalms.data.remote.XMPPManager
+import dagger.hilt.android.AndroidEntryPoint
 
 /**
  * MainActivity是应用程序的主活动，负责初始化界面
  */
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val TAG = "MainActivity"
     

@@ -39,6 +39,7 @@ import org.jxmpp.stringprep.XmppStringprepException
 import org.jivesoftware.smack.roster.RosterListener
 import org.jivesoftware.smack.chat2.IncomingChatMessageListener
 import org.jivesoftware.smack.StanzaListener
+import org.jxmpp.jid.EntityBareJid
 
 // 自定义 IQ 类，用于发送 XEP-0055 User Search 请求
 class UserSearchIQ : IQ("query", "jabber:iq:search") {
@@ -2597,6 +2598,45 @@ class XMPPManager private constructor() {
         // 2. 调用 disconnect 进行连接断开和资源清理
         disconnect()
         Log.i(TAG, "Logout process complete.")
+    }
+
+    /**
+     * 检查用户是否已登录并认证
+     * @return 是否已认证
+     */
+    fun isAuthenticated(): Boolean {
+        return currentConnection?.isAuthenticated == true
+    }
+    
+    /**
+     * 获取当前XMPP连接
+     * @return XMPP连接对象，如果未连接则返回null
+     */
+    fun getConnection(): XMPPTCPConnection? {
+        return currentConnection
+    }
+    
+    /**
+     * 获取当前用户昵称
+     * @return 用户昵称，如果未能获取则返回null
+     */
+    fun getUserNickname(): String? {
+        val connection = currentConnection ?: return null
+        if (!connection.isAuthenticated) return null
+        
+        // 尝试从VCard获取昵称
+        return try {
+            val vCardManager = VCardManager.getInstanceFor(connection)
+            // 获取用户JID并转换为EntityBareJid类型
+            val jidString = connection.user.asBareJid().toString()
+            val entityBareJid = JidCreate.entityBareFrom(jidString)
+            val vCard = vCardManager.loadVCard(entityBareJid)
+            vCard.nickName ?: connection.user.localpart.toString()
+        } catch (e: Exception) {
+            Log.e(TAG, "获取用户昵称失败: ${e.message}", e)
+            // 如果获取失败，返回JID的本地部分作为昵称
+            connection.user.localpart.toString()
+        }
     }
 }
 

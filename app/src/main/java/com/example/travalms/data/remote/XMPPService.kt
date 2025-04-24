@@ -15,6 +15,7 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.travalms.MainActivity
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,10 +24,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.inject.Inject
 
 /**
  * 前台服务，用于保持XMPP连接活跃，即使应用在后台运行
  */
+@AndroidEntryPoint
 class XMPPService : Service() {
     companion object {
         private const val TAG = "XMPPService"
@@ -71,6 +74,14 @@ class XMPPService : Service() {
     // XMPP管理器实例
     private lateinit var xmppManager: XMPPManager
     
+    // 注入群聊管理器
+    @Inject
+    lateinit var groupChatManager: GroupChatManager
+    
+    // 注入群聊加入处理器
+    @Inject
+    lateinit var groupChatJoinHandler: GroupChatJoinHandler
+    
     // WakeLock，防止设备休眠时断开连接
     private var wakeLock: PowerManager.WakeLock? = null
     
@@ -84,6 +95,20 @@ class XMPPService : Service() {
         
         // 获取XMPPManager实例
         xmppManager = XMPPManager.getInstance()
+        
+        // 设置群聊加入完成的回调，用于同步群聊列表
+        groupChatManager.setOnGroupChatsJoinedCallback {
+            Log.d(TAG, "群聊加入完成，开始同步群聊列表")
+            // 通过独立的协程调用同步方法，避免可能的死锁
+            serviceScope.launch {
+                try {
+                    delay(1000) // 稍微延迟，确保所有群聊已正确加入
+                    groupChatJoinHandler.syncGroupChatList()
+                } catch (e: Exception) {
+                    Log.e(TAG, "同步群聊列表失败: ${e.message}", e)
+                }
+            }
+        }
         
         // 创建通知渠道（API 26+）
         createNotificationChannel()
@@ -231,6 +256,12 @@ class XMPPService : Service() {
                 }
                 updateNotification(statusText)
                 
+                // 如果连接已认证，加入保存的群聊
+                if (state == ConnectionState.AUTHENTICATED) {
+                    Log.d(TAG, "用户已登录，尝试加入保存的群聊")
+                    joinSavedGroupChats()
+                }
+                
                 // 如果连接断开，尝试重新连接
                 if (state == ConnectionState.DISCONNECTED || 
                     state == ConnectionState.ERROR || 
@@ -245,6 +276,23 @@ class XMPPService : Service() {
             while (true) {
                 delay(monitorInterval * 1000)
                 checkConnection()
+            }
+        }
+    }
+    
+    /**
+     * 加入已保存的群聊
+     */
+    private fun joinSavedGroupChats() {
+        serviceScope.launch {
+            try {
+                // 延迟一小段时间，确保其他初始化已完成
+                delay(3000)
+                Log.d(TAG, "开始加入已保存的群聊")
+                groupChatManager.joinSavedGroupChats()
+                // 回调函数会负责同步群聊列表
+            } catch (e: Exception) {
+                Log.e(TAG, "加入群聊时出错: ${e.message}", e)
             }
         }
     }

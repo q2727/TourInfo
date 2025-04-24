@@ -65,6 +65,17 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
     private var groupChatMessageListener: org.jivesoftware.smack.StanzaListener? = null
     private var mucInvitationListener: InvitationListener? = null
 
+    // 添加房间加入监听器
+    private var onJoinRoomListener: ((GroupRoom) -> Unit)? = null
+    
+    /**
+     * 设置房间加入监听器
+     * @param listener 当成功加入房间时调用的回调函数
+     */
+    fun setOnJoinRoomListener(listener: (GroupRoom) -> Unit) {
+        onJoinRoomListener = listener
+    }
+
     init {
         // 添加连接状态监听
         updateConnectionListener()
@@ -719,16 +730,20 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
                     if (info == null) {
                         info = mucMgr.getRoomInfo(jid) // 重新获取信息
                     }
-                    return@withContext Result.success(
-                        GroupRoom(
-                            roomJid = jid.toString(),
-                            name = info?.name ?: roomJid.substringBefore('@'),
-                            description = info?.description ?: "",
-                            memberCount = info?.occupantsCount ?: 1,
-                            isPrivate = info?.isMembersOnly ?: false,
-                            canEdit = true // 假设加入者可以编辑，或者需要更复杂的逻辑
-                        )
+                    
+                    val groupRoom = GroupRoom(
+                        roomJid = jid.toString(),
+                        name = info?.name ?: roomJid.substringBefore('@'),
+                        description = info?.description ?: "",
+                        memberCount = info?.occupantsCount ?: 1,
+                        isPrivate = info?.isMembersOnly ?: false,
+                        canEdit = true // 假设加入者可以编辑，或者需要更复杂的逻辑
                     )
+                    
+                    // 触发监听器
+                    onJoinRoomListener?.invoke(groupRoom)
+                    
+                    return@withContext Result.success(groupRoom)
                 }
 
                 // 创建加入配置
@@ -742,16 +757,19 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
                 // 加入后重新获取信息
                 info = mucMgr.getRoomInfo(jid)
 
-                Result.success(
-                    GroupRoom(
-                        roomJid = jid.toString(),
-                        name = info?.name ?: roomJid.substringBefore('@'),
-                        description = info?.description ?: "",
-                        memberCount = info?.occupantsCount ?: muc.occupantsCount, // 使用occupantsCount作为备选
-                        isPrivate = info?.isMembersOnly ?: false,
-                        canEdit = true // 假设加入者可以编辑
-                    )
+                val groupRoom = GroupRoom(
+                    roomJid = jid.toString(),
+                    name = info?.name ?: roomJid.substringBefore('@'),
+                    description = info?.description ?: "",
+                    memberCount = info?.occupantsCount ?: muc.occupantsCount, // 使用occupantsCount作为备选
+                    isPrivate = info?.isMembersOnly ?: false,
+                    canEdit = true // 假设加入者可以编辑
                 )
+                
+                // 触发监听器
+                onJoinRoomListener?.invoke(groupRoom)
+                
+                Result.success(groupRoom)
             } catch (e: Exception) {
                 Log.e(TAG, "加入房间失败", e)
                 Result.failure(e)
