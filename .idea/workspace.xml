@@ -9,12 +9,13 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="14895e20-a871-4d5b-a4e1-2b2aa377fc28" name="Changes" comment="群聊列表本地存储">
+    <list default="true" id="14895e20-a871-4d5b-a4e1-2b2aa377fc28" name="Changes" comment="本地存储群聊，修复单用户多次加入">
       <change beforePath="$PROJECT_DIR$/.gradle/buildOutputCleanup/buildOutputCleanup.lock" beforeDir="false" afterPath="$PROJECT_DIR$/.gradle/buildOutputCleanup/buildOutputCleanup.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/deploymentTargetSelector.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/deploymentTargetSelector.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/data/remote/XMPPGroupChatManager.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/data/remote/XMPPGroupChatManager.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/data/remote/GroupChatManager.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/data/remote/GroupChatManager.kt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/data/remote/XMPPManager.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/data/remote/XMPPManager.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/data/remote/XMPPService.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/data/remote/XMPPService.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/ui/auth/LoginViewModel.kt" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/com/example/travalms/ui/auth/LoginViewModel.kt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -590,7 +591,15 @@
       <option name="project" value="LOCAL" />
       <updated>1745475123423</updated>
     </task>
-    <option name="localTasksCounter" value="24" />
+    <task id="LOCAL-00024" summary="本地存储群聊，修复单用户多次加入">
+      <option name="closed" value="true" />
+      <created>1745476735897</created>
+      <option name="number" value="00024" />
+      <option name="presentableId" value="LOCAL-00024" />
+      <option name="project" value="LOCAL" />
+      <updated>1745476735897</updated>
+    </task>
+    <option name="localTasksCounter" value="25" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -634,7 +643,8 @@
     <MESSAGE value="群聊ing" />
     <MESSAGE value="退出登录清理资源" />
     <MESSAGE value="群聊列表本地存储" />
-    <option name="LAST_COMMIT_MESSAGE" value="群聊列表本地存储" />
+    <MESSAGE value="本地存储群聊，修复单用户多次加入" />
+    <option name="LAST_COMMIT_MESSAGE" value="本地存储群聊，修复单用户多次加入" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

@@ -41,8 +41,9 @@ class GroupChatManager @Inject constructor(
     
     /**
      * 在用户登录后自动加入本地数据库存储的所有群聊
+     * @param forceJoin 是否强制重新加入，即使已经在群聊中
      */
-    fun joinSavedGroupChats() {
+    fun joinSavedGroupChats(forceJoin: Boolean = false) {
         coroutineScope.launch {
             try {
                 if (!xmppManager.isAuthenticated()) {
@@ -50,7 +51,7 @@ class GroupChatManager @Inject constructor(
                     return@launch
                 }
                 
-                Log.d(TAG, "开始加入保存的群聊")
+                Log.d(TAG, "开始加入保存的群聊 ${if (forceJoin) "(强制模式)" else ""}")
                 val groupRooms = groupChatRepository.getAllGroupChats().first()
                 
                 if (groupRooms.isEmpty()) {
@@ -78,49 +79,62 @@ class GroupChatManager @Inject constructor(
                         val entityBareJid = JidCreate.entityBareFrom(room.roomJid)
                         val muc = mucManager.getMultiUserChat(entityBareJid)
                         
-                        // 获取当前房间内的所有人
-                        try {
-                            // 先尝试获取房间内的所有成员
-                            val occupants = muc.occupants
-                            
-                            // 过滤出属于当前用户的所有连接
-                            val myConnections = occupants.filter { occupantJid ->
-                                val occupantStr = occupantJid.toString()
-                                // 检查是否是当前用户的连接(用户名部分匹配)
-                                occupantStr.startsWith(currentUserJidBase) || 
-                                occupantStr.contains("/${connection.user.localpart}")
+                        // 如果是强制模式，且当前已在房间中，先退出
+                        if (forceJoin && muc.isJoined) {
+                            try {
+                                Log.d(TAG, "强制模式：先退出房间 ${room.name}")
+                                muc.leave()
+                                Log.d(TAG, "成功退出房间 ${room.name}")
+                                // 等待一小段时间，确保退出操作完成
+                                delay(1000)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "退出房间 ${room.name} 时出错: ${e.message}", e)
                             }
-                            
-                            if (myConnections.size > 1) {
-                                Log.d(TAG, "发现当前用户在群聊 ${room.name} 中有 ${myConnections.size} 个连接")
+                        } else {
+                            // 非强制模式，检查多余连接
+                            try {
+                                // 先尝试获取房间内的所有成员
+                                val occupants = muc.occupants
                                 
-                                // 如果发现同一用户有多个(>1)连接，只退出当前连接，稍后会用新连接重新加入
-                                if (muc.isJoined) {
-                                    try {
-                                        Log.d(TAG, "尝试退出房间 ${room.name} 中的当前连接")
-                                        muc.leave()
-                                        Log.d(TAG, "成功退出房间 ${room.name}")
-                                        // 等待一小段时间，确保退出操作完成
-                                        delay(1000)
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "退出房间 ${room.name} 时出错: ${e.message}", e)
+                                // 过滤出属于当前用户的所有连接
+                                val myConnections = occupants.filter { occupantJid ->
+                                    val occupantStr = occupantJid.toString()
+                                    // 检查是否是当前用户的连接(用户名部分匹配)
+                                    occupantStr.startsWith(currentUserJidBase) || 
+                                    occupantStr.contains("/${connection.user.localpart}")
+                                }
+                                
+                                if (myConnections.size > 1) {
+                                    Log.d(TAG, "发现当前用户在群聊 ${room.name} 中有 ${myConnections.size} 个连接")
+                                    
+                                    // 如果发现同一用户有多个(>1)连接，只退出当前连接，稍后会用新连接重新加入
+                                    if (muc.isJoined) {
+                                        try {
+                                            Log.d(TAG, "尝试退出房间 ${room.name} 中的当前连接")
+                                            muc.leave()
+                                            Log.d(TAG, "成功退出房间 ${room.name}")
+                                            // 等待一小段时间，确保退出操作完成
+                                            delay(1000)
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "退出房间 ${room.name} 时出错: ${e.message}", e)
+                                        }
+                                    }
+                                } else {
+                                    Log.d(TAG, "用户在群聊 ${room.name} 中只有一个或没有连接，无需清理")
+                                    
+                                    // 如果已经在房间中且只有一个连接，且不是强制模式，则无需重新加入
+                                    if (muc.isJoined && !forceJoin) {
+                                        Log.d(TAG, "已经在群聊中且不是强制模式: ${room.name}")
+                                        continue
                                     }
                                 }
-                            } else {
-                                Log.d(TAG, "用户在群聊 ${room.name} 中只有一个或没有连接，无需清理")
-                                
-                                // 如果已经在房间中且只有一个连接，则无需重新加入
-                                if (muc.isJoined) {
-                                    Log.d(TAG, "已经在群聊中: ${room.name}")
-                                    continue
-                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "获取房间 ${room.name} 成员列表失败: ${e.message}", e)
                             }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "获取房间 ${room.name} 成员列表失败: ${e.message}", e)
                         }
                         
-                        // 检查是否已经在房间中，避免重复加入
-                        if (muc.isJoined) {
+                        // 检查是否已经在房间中，避免重复加入 (强制模式下不检查，因为已经确保退出了)
+                        if (muc.isJoined && !forceJoin) {
                             Log.d(TAG, "已经在群聊中: ${room.name}")
                             continue
                         }

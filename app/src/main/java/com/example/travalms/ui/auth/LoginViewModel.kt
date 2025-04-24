@@ -1,10 +1,13 @@
 package com.example.travalms.ui.auth
 
 import android.content.Context
+import android.content.Intent
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.travalms.data.remote.XMPPManager
 import com.example.travalms.data.remote.XMPPService
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +44,7 @@ class LoginViewModel : ViewModel() {
 
     /**
      * 执行登录操作
+     * 强制重新登录，即使已经登录了相同账号
      */
     fun performLogin(username: String, password: String) {
         // 防止重复登录请求
@@ -49,7 +53,8 @@ class LoginViewModel : ViewModel() {
         _uiState.value = LoginUiState.Loading // 更新状态为正在登录
 
         viewModelScope.launch {
-            val result = xmppManager.login(username, password)
+            // 强制重新登录，即使用户已经登录
+            val result = xmppManager.login(username, password, forceLogin = true)
             if (result.isSuccess) {
                 // 保存登录凭据，用于后续自动重连
                 applicationContext?.let { context ->
@@ -57,6 +62,19 @@ class LoginViewModel : ViewModel() {
                     
                     // 确保XMPPService正在运行
                     XMPPService.startService(context)
+                    
+                    // 主动加入用户所在的群聊
+                    try {
+                        // 给一些时间让连接完全建立
+                        delay(1000)
+                        // 主动触发加入群聊
+                        context.startService(Intent(context, XMPPService::class.java).apply {
+                            action = XMPPService.ACTION_JOIN_GROUP_CHATS
+                        })
+                    } catch (e: Exception) {
+                        // 即使加入群聊操作失败，也不影响登录成功
+                        Log.e("LoginViewModel", "触发加入群聊失败: ${e.message}", e)
+                    }
                 }
                 
                 _uiState.value = LoginUiState.Success // 修改为使用不带参数的Success

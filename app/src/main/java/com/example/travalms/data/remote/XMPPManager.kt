@@ -40,6 +40,7 @@ import org.jivesoftware.smack.roster.RosterListener
 import org.jivesoftware.smack.chat2.IncomingChatMessageListener
 import org.jivesoftware.smack.StanzaListener
 import org.jxmpp.jid.EntityBareJid
+import kotlinx.coroutines.delay
 
 // 自定义 IQ 类，用于发送 XEP-0055 User Search 请求
 class UserSearchIQ : IQ("query", "jabber:iq:search") {
@@ -259,32 +260,42 @@ class XMPPManager private constructor() {
      * 登录到XMPP服务器
      * @param username 用户名
      * @param password 密码
+     * @param forceLogin 是否强制重新登录，即使已经登录了相同账号
      * @return 登录结果，包含成功/失败信息和连接对象（如果成功）
      */
-    suspend fun login(username: String, password: String): Result<Unit> =
+    suspend fun login(username: String, password: String, forceLogin: Boolean = false): Result<Unit> =
         withContext(Dispatchers.IO) {
-            if (currentConnection?.isAuthenticated == true) {
+            if (currentConnection?.isAuthenticated == true && !forceLogin) {
                 // 检查是否是同一个用户
                 val currentJid = currentConnection?.user?.asEntityBareJidString()
                 val newJid = "$username@$SERVER_DOMAIN"
 
                 if (currentJid == newJid) {
-                    Log.d(TAG, "已登录同一账号，无需重复操作")
-                    _connectionState.value =
-                        ConnectionState.AUTHENTICATED // Ensure state is correct
+                    Log.d(TAG, "已登录同一账号，但未请求强制登录")
+                    _connectionState.value = ConnectionState.AUTHENTICATED // Ensure state is correct
                     return@withContext Result.success(Unit)
                 } else {
                     Log.d(TAG, "检测到账号切换，先断开旧连接: $currentJid -> $newJid")
-                    // 不同账号，必须先清理旧连接
-                    disconnect()
+                    // 使用forceDisconnect而不是disconnect，确保彻底清理
+                    forceDisconnect()
+                    // 短暂延迟，确保旧连接完全释放
+                    delay(1000)
                 }
-            } else if (currentConnection != null) {
-                // 有连接但未认证，也需要断开
-                Log.d(TAG, "有未认证的连接，先断开它")
-                disconnect()
+            } else {
+                // 有连接但未认证，或者请求强制登录，都需要断开旧连接
+                if (currentConnection != null) {
+                    Log.d(TAG, if (forceLogin) "用户请求强制重新登录" else "有未认证的连接，先断开它")
+                    forceDisconnect()
+                    // 短暂延迟，确保旧连接完全释放
+                    delay(1000)
+                }
             }
-
+            
+            // 强制让连接状态为断开，确保UI正确更新
+            _connectionState.value = ConnectionState.DISCONNECTED 
+            // 开始新的连接过程
             _connectionState.value = ConnectionState.CONNECTING
+            
             try {
                 // 设置系统属性
                 System.setProperty("smack.dnssec.disabled", "true")
@@ -312,7 +323,8 @@ class XMPPManager private constructor() {
                 ReconnectionManager.getInstanceFor(connection).apply {
                     enableAutomaticReconnection()
                     setReconnectionPolicy(ReconnectionManager.ReconnectionPolicy.FIXED_DELAY)
-                    setFixedDelay(30) // 重试间隔增加到30秒，减少频繁重连
+                    // 使用较短的重连间隔，防止长时间无法恢复连接
+                    setFixedDelay(15) // 15秒尝试一次重连
                 }
 
                 // 连接到服务器
@@ -360,7 +372,7 @@ class XMPPManager private constructor() {
                 // 记录错误日志
                 Log.e(TAG, "XMPP登录失败", e)
                 _connectionState.value = ConnectionState.ERROR
-                disconnect() // Ensure cleanup on error
+                forceDisconnect() // 使用forceDisconnect确保完全清理
 
                 // 发送登录失败消息
                 scope.launch {
@@ -2637,6 +2649,126 @@ class XMPPManager private constructor() {
             Log.e(TAG, "获取用户昵称失败: ${e.message}", e)
             // 如果获取失败，返回JID的本地部分作为昵称
             connection.user.localpart.toString()
+        }
+    }
+
+    /**
+     * 发送保活presence包，保持连接活跃
+     * 这种方法可以防止某些服务器因客户端不活跃而断开连接
+     */
+    fun sendKeepAlivePresence() {
+        try {
+            val connection = currentConnection ?: return
+            if (!connection.isAuthenticated) return
+            
+            // 创建一个最小化的presence包
+            val presence = Presence(Presence.Type.available)
+            // 不添加任何额外信息，保持包体积最小
+            
+            // 异步发送
+            connection.sendStanza(presence)
+        } catch (e: Exception) {
+            Log.e(TAG, "发送保活presence失败: ${e.message}", e)
+        }
+    }
+
+    /**
+     * 强制断开XMPP连接，确保彻底释放资源
+     * 在重连前调用此方法可以避免资源冲突
+     */
+    fun forceDisconnect() {
+        Log.d(TAG, "正在强制断开XMPP连接")
+        val conn = currentConnection
+        if (conn != null) {
+            try {
+                // 1. 清理所有群聊资源
+                _groupChatManager.cleanupOnLogout()
+                
+                // 2. 移除所有监听器
+                try {
+                    rosterListener?.let { 
+                        try { 
+                            Roster.getInstanceFor(conn).removeRosterListener(it) 
+                        } catch (e: Exception) { 
+                            /* 忽略错误 */ 
+                        }
+                    }
+                    
+                    presenceListener?.let {
+                        try { 
+                            conn.removeAsyncStanzaListener(it) 
+                        } catch (e: Exception) { 
+                            /* 忽略错误 */ 
+                        }
+                    }
+                    
+                    incomingChatMessageListener?.let {
+                        try { 
+                            ChatManager.getInstanceFor(conn).removeIncomingListener(it) 
+                        } catch (e: Exception) { 
+                            /* 忽略错误 */ 
+                        }
+                    }
+                    
+                    pingFailedListener?.let {
+                        try { 
+                            PingManager.getInstanceFor(conn).unregisterPingFailedListener(it) 
+                        } catch (e: Exception) { 
+                            /* 忽略错误 */ 
+                        }
+                    }
+                    
+                    conn.removeConnectionListener(connectionListener)
+                } catch (e: Exception) {
+                    Log.w(TAG, "移除连接监听器时出错: ${e.message}")
+                }
+                
+                // 3. 停用自动重连
+                try {
+                    val reconnectionManager = ReconnectionManager.getInstanceFor(conn)
+                    reconnectionManager.disableAutomaticReconnection()
+                } catch (e: Exception) {
+                    Log.w(TAG, "禁用自动重连时出错: ${e.message}")
+                }
+                
+                // 4. 断开连接
+                if (conn.isConnected) {
+                    try {
+                        // 发送离线状态
+                        val presence = Presence(Presence.Type.unavailable)
+                        conn.sendStanza(presence)
+                        
+                        // 同步断开连接
+                        conn.disconnect()
+                        Log.d(TAG, "已同步断开XMPP连接")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "断开连接时出错: ${e.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "强制断开连接时出现异常: ${e.message}")
+            } finally {
+                // 5. 清理状态变量
+                currentConnection = null
+                pubSubManager = null
+                messageCache.clear()
+                presenceMap.clear()
+                
+                // 清空监听器引用
+                rosterListener = null
+                presenceListener = null
+                incomingChatMessageListener = null
+                pingFailedListener = null
+                nodeListeners.clear()
+                subscribedNodes.clear()
+                
+                // 更新连接状态
+                _connectionState.value = ConnectionState.DISCONNECTED
+                Log.d(TAG, "强制断开连接完成，状态已设为DISCONNECTED")
+            }
+        } else {
+            Log.d(TAG, "连接已为null，无需断开")
+            _connectionState.value = ConnectionState.DISCONNECTED
         }
     }
 }

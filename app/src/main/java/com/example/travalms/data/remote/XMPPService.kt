@@ -37,6 +37,9 @@ class XMPPService : Service() {
         private const val CHANNEL_ID = "XMPPServiceChannel"
         private const val WAKE_LOCK_TAG = "XMPPService:WakeLock"
         
+        // Intent actions
+        const val ACTION_JOIN_GROUP_CHATS = "com.example.travalms.action.JOIN_GROUP_CHATS"
+        
         // 用于确保服务仅开始一次
         private val isServiceRunning = AtomicBoolean(false)
         
@@ -85,8 +88,11 @@ class XMPPService : Service() {
     // WakeLock，防止设备休眠时断开连接
     private var wakeLock: PowerManager.WakeLock? = null
     
-    // 监测连接状态的周期（秒）
-    private val monitorInterval = 30L
+    // 监测连接状态的周期（秒）- 降低间隔提高响应速度
+    private val monitorInterval = 15L
+    
+    // 是否启用更激进的保活策略
+    private val useAggressiveKeepAlive = true
     
     @SuppressLint("ForegroundServiceType")
     override fun onCreate() {
@@ -129,7 +135,27 @@ class XMPPService : Service() {
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "XMPP服务启动")
+        Log.d(TAG, "XMPP服务启动或收到命令")
+        
+        // 处理intent actions
+        intent?.let { 
+            when (it.action) {
+                ACTION_JOIN_GROUP_CHATS -> {
+                    Log.d(TAG, "收到加入群聊的命令")
+                    // 确保此时已经连接和认证
+                    if (xmppManager.isAuthenticated()) {
+                        Log.d(TAG, "用户已认证，立即执行加入群聊操作")
+                        joinSavedGroupChats(forceJoin = true)
+                    } else {
+                        Log.d(TAG, "用户未认证，无法加入群聊")
+                    }
+                }
+                else -> {
+                    // 处理其他意图动作或无动作的情况
+                    Log.d(TAG, "收到其他命令或无指定命令: ${it.action ?: "无action"}")
+                }
+            }
+        }
         
         // 如果服务被系统杀死并重新启动，我们希望继续运行
         return START_STICKY
@@ -218,9 +244,14 @@ class XMPPService : Service() {
                 WAKE_LOCK_TAG
             ).apply {
                 setReferenceCounted(false)
-                acquire(10*60*1000L /*10分钟*/)
+                // 使用无限时长的WakeLock，防止系统休眠导致连接断开
+                acquire()
+                Log.d(TAG, "获取永久唤醒锁以保持连接")
             }
-            Log.d(TAG, "获取唤醒锁")
+        } else if (!(wakeLock?.isHeld ?: false)) {
+            // 如果WakeLock存在但未持有，重新获取
+            wakeLock?.acquire()
+            Log.d(TAG, "重新获取唤醒锁")
         }
     }
     
@@ -259,7 +290,7 @@ class XMPPService : Service() {
                 // 如果连接已认证，加入保存的群聊
                 if (state == ConnectionState.AUTHENTICATED) {
                     Log.d(TAG, "用户已登录，尝试加入保存的群聊")
-                    joinSavedGroupChats()
+                    joinSavedGroupChats(forceJoin = false)
                 }
                 
                 // 如果连接断开，尝试重新连接
@@ -283,13 +314,13 @@ class XMPPService : Service() {
     /**
      * 加入已保存的群聊
      */
-    private fun joinSavedGroupChats() {
+    private fun joinSavedGroupChats(forceJoin: Boolean) {
         serviceScope.launch {
             try {
                 // 延迟一小段时间，确保其他初始化已完成
                 delay(3000)
                 Log.d(TAG, "开始加入已保存的群聊")
-                groupChatManager.joinSavedGroupChats()
+                groupChatManager.joinSavedGroupChats(forceJoin)
                 // 回调函数会负责同步群聊列表
             } catch (e: Exception) {
                 Log.e(TAG, "加入群聊时出错: ${e.message}", e)
@@ -301,26 +332,54 @@ class XMPPService : Service() {
      * 检查XMPP连接状态，如果需要则重新连接
      */
     private fun checkConnection() {
+        // 确保WakeLock有效
+        if (wakeLock == null || !(wakeLock?.isHeld ?: false)) {
+            acquireWakeLock()
+        }
+        
         val connection = xmppManager.currentConnection
-        if (connection == null || !connection.isAuthenticated) {
-            Log.d(TAG, "定期检查: 连接无效或未认证")
+        if (connection == null || !connection.isConnected) {
+            Log.d(TAG, "定期检查: 连接不存在或已断开")
             tryReconnect()
-        } else {
-            // 发送ping以保持连接活跃
-            serviceScope.launch {
-                try {
-                    val pingResult = xmppManager.sendPing()
-                    if (pingResult.isSuccess && pingResult.getOrNull() == true) {
-                        Log.d(TAG, "Ping成功，连接保持活跃")
-                    } else {
-                        Log.w(TAG, "Ping失败，可能需要重新连接")
-                        // 如果ping失败，尝试重新连接
-                        tryReconnect()
+            return
+        }
+        
+        if (!connection.isAuthenticated) {
+            Log.d(TAG, "定期检查: 连接存在但未认证")
+            tryReconnect()
+            return
+        }
+        
+        // 检查连接状态
+        if (xmppManager.connectionState.value != ConnectionState.AUTHENTICATED) {
+            Log.d(TAG, "定期检查: 状态不是AUTHENTICATED")
+            tryReconnect()
+            return
+        }
+        
+        // 发送ping以保持连接活跃
+        serviceScope.launch {
+            try {
+                val pingResult = xmppManager.sendPing()
+                if (pingResult.isSuccess && pingResult.getOrNull() == true) {
+                    Log.d(TAG, "Ping成功，连接保持活跃")
+                    // 如果启用了激进保活，发送空白presence更新
+                    if (useAggressiveKeepAlive) {
+                        try {
+                            xmppManager.sendKeepAlivePresence()
+                            Log.d(TAG, "发送了保活presence")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "发送保活presence失败: ${e.message}")
+                        }
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "发送ping失败: ${e.message}")
+                } else {
+                    Log.w(TAG, "Ping失败，可能需要重新连接")
+                    // 如果ping失败，尝试重新连接
                     tryReconnect()
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "发送ping失败: ${e.message}")
+                tryReconnect()
             }
         }
     }
@@ -339,6 +398,18 @@ class XMPPService : Service() {
                 
                 if (username.isNotEmpty() && password.isNotEmpty()) {
                     Log.d(TAG, "尝试重新连接XMPP: 用户=$username")
+                    
+                    // 首先确保彻底断开旧连接 - 这很重要，避免资源冲突
+                    try {
+                        // 显式调用logout而不是disconnect，以确保完整清理
+                        xmppManager.forceDisconnect()
+                        // 等待足够的时间确保连接完全释放
+                        delay(3000)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "断开旧连接时出错: ${e.message}", e)
+                        // 继续尝试连接
+                    }
+                    
                     val result = xmppManager.login(username, password)
                     if (result.isSuccess) {
                         Log.d(TAG, "XMPP重新连接成功")
