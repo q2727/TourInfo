@@ -135,16 +135,16 @@ class GroupChatViewModel @Inject constructor(
                 
                 Log.d(TAG, "开始发送消息 roomJid=$roomJid, ID=$stableId, 指纹=$messageFingerprint")
                 
-                // 创建临时消息用于UI显示
+                // 创建临时消息用于UI显示，确保senderNickname就是当前用户名
                 val tempMessage = GroupChatMessage(
                     id = stableId,
                     roomJid = roomJid,
                     roomName = _currentRoom.value?.name ?: roomJid,
                     senderJid = currentUserJid,
-                    senderNickname = currentUserName,  // 使用真实用户名而非"Me"
+                    senderNickname = currentUserName,  // 确保使用真实用户名
                     content = message,
                     timestamp = timestamp,
-                    isFromMe = true,  // 明确标记为自己发送的消息
+                    isFromMe = true,  // 这个字段保留但不再依赖它
                     messageType = GroupChatMessage.MessageType.TEXT
                 )
                 
@@ -219,11 +219,44 @@ class GroupChatViewModel @Inject constructor(
                 val roomName = _currentRoom.value?.name ?: roomJid
                 val history = groupChatRepository.getMessagesForRoom(roomJid, roomName)
                 Log.d(TAG, "Loaded ${history.size} historical messages for room $roomJid")
+                
                 if (history.isNotEmpty()) {
+                    // 获取当前用户JID用于判断消息来源
+                    val currentUserJid = xmppManager.currentConnection?.user?.asEntityBareJidString()
+                    
+                    // 处理每条消息，判断是否来自当前用户
+                    val processedMessages = history.map { message ->
+                        // 从数据库加载的消息默认isFromMe=false，需要根据当前用户JID动态判断
+                        val cleanSenderJid = message.senderJid?.substringBefore("/") ?: ""
+                        val cleanCurrentJid = currentUserJid?.substringBefore("/") ?: ""
+                        
+                        // 判断消息是否来自当前用户
+                        val isFromCurrentUser = when {
+                            // 明确标记为当前用户的临时消息
+                            message.id.startsWith("outgoing_") -> true
+                            // JID完全匹配
+                            cleanSenderJid.isNotEmpty() && cleanCurrentJid.isNotEmpty() && 
+                            cleanSenderJid == cleanCurrentJid -> true
+                            // 用户名匹配
+                            currentUserJid != null && message.senderNickname == currentUserJid.substringBefore("@") -> true
+                            // 其他情况视为非当前用户消息
+                            else -> false
+                        }
+                        
+                        // 根据判断结果更新消息的isFromMe属性
+                        if (isFromCurrentUser != message.isFromMe) {
+                            Log.d(TAG, "修正历史消息的isFromMe属性: ${message.id}, ${message.content}, " +
+                                    "原值=${message.isFromMe}, 新值=$isFromCurrentUser")
+                            message.copy(isFromMe = isFromCurrentUser)
+                        } else {
+                            message
+                        }
+                    }
+                    
                     _roomMessages.value = _roomMessages.value.toMutableMap().apply {
                         val currentList = getOrDefault(roomJid, emptyList()).toMutableList()
                         val existingIds = currentList.map { it.id }.toSet()
-                        val newHistoryMessages = history.filter { it.id !in existingIds }
+                        val newHistoryMessages = processedMessages.filter { it.id !in existingIds }
                         currentList.addAll(newHistoryMessages)
                         this[roomJid] = currentList.sortedBy { it.timestamp }
                     }
@@ -242,16 +275,43 @@ class GroupChatViewModel @Inject constructor(
     private fun processIncomingMessage(message: GroupChatMessage, saveToDb: Boolean = false) {
         val roomJid = message.roomJid
 
-        Log.d(TAG, "处理消息: room=$roomJid, id=${message.id}, 内容='${message.content}', 保存=${saveToDb}")
-        Log.d(TAG, "消息详情: 发送者=${message.senderJid}, 昵称=${message.senderNickname}, 时间=${message.timestamp}")
+        // 获取当前用户JID，用于核对消息是否来自当前用户
+        val currentUserJid = xmppManager.currentConnection?.user?.asEntityBareJidString()
+        val cleanCurrentJid = currentUserJid?.substringBefore("/") ?: ""
+        val cleanSenderJid = message.senderJid?.substringBefore("/") ?: ""
 
+        // 确保isFromMe值是正确的
+        val correctedMessage = if (message.id.startsWith("outgoing_")) {
+            // 临时消息一定是自己发送的
+            if (!message.isFromMe) {
+                Log.d(TAG, "修正临时消息的isFromMe值为true: ${message.id}")
+                message.copy(isFromMe = true)
+            } else {
+                message
+            }
+        } else if (cleanCurrentJid.isNotEmpty() && cleanSenderJid.isNotEmpty()) {
+            // 根据JID判断消息来源
+            val isFromCurrentUser = cleanSenderJid == cleanCurrentJid
+            if (isFromCurrentUser != message.isFromMe) {
+                Log.d(TAG, "修正消息的isFromMe值: ${message.id}, ${message.content}, " +
+                        "原值=${message.isFromMe}, 新值=$isFromCurrentUser")
+                message.copy(isFromMe = isFromCurrentUser)
+            } else {
+                message
+            }
+        } else {
+            message
+        }
+        
+        Log.d(TAG, "处理消息: room=$roomJid, id=${correctedMessage.id}, 内容='${correctedMessage.content}', 来源=${if (correctedMessage.isFromMe) "自己" else "他人"}")
+        
         // 创建当前消息的指纹用于检查重复
-        val senderName = message.senderJid?.substringBefore('@') ?: message.senderNickname
-        val contentFingerprint = "${roomJid}_${senderName}_${message.content.trim()}"
+        val senderName = correctedMessage.senderJid?.substringBefore('@') ?: correctedMessage.senderNickname
+        val contentFingerprint = "${roomJid}_${senderName}_${correctedMessage.content.trim()}"
         
         // 检查是否是自己刚刚发送的消息被服务器返回
         val isEchoOfSentMessage = sentMessageFingerprints.contains(contentFingerprint)
-        if (isEchoOfSentMessage && !message.id.startsWith("outgoing_")) {
+        if (isEchoOfSentMessage && !correctedMessage.id.startsWith("outgoing_")) {
             Log.d(TAG, "检测到服务器回显消息，已忽略: $contentFingerprint")
             return  // 完全跳过处理
         }
@@ -259,40 +319,40 @@ class GroupChatViewModel @Inject constructor(
         _roomMessages.value = _roomMessages.value.toMutableMap().apply {
             val currentList = getOrPut(roomJid) { mutableListOf() }.toMutableList()
             
-            // 增强的重复消息检测逻辑 - 参考ChatRoomScreen.kt
+            // 增强的重复消息检测逻辑
             val isDuplicate = currentList.any { existingMsg -> 
                 // 1. 基于ID的严格匹配
-                if (existingMsg.id == message.id) {
-                    Log.d(TAG, "消息ID重复: ${message.id}")
+                if (existingMsg.id == correctedMessage.id) {
+                    Log.d(TAG, "消息ID重复: ${correctedMessage.id}")
                     return@any true
                 }
                 
                 // 2. 基于内容+发送者的更严格匹配
-                val contentMatch = existingMsg.content.trim() == message.content.trim()
-                val senderMatch = existingMsg.senderJid == message.senderJid || 
-                                 existingMsg.senderNickname == message.senderNickname
+                val contentMatch = existingMsg.content.trim() == correctedMessage.content.trim()
+                val senderMatch = existingMsg.senderJid == correctedMessage.senderJid || 
+                                 existingMsg.senderNickname == correctedMessage.senderNickname
                 
                 // 检查时间是否非常接近 (5秒内)
-                val timeMatch = existingMsg.timestamp.plusSeconds(5).isAfter(message.timestamp) &&
-                               existingMsg.timestamp.minusSeconds(5).isBefore(message.timestamp)
+                val timeMatch = existingMsg.timestamp.plusSeconds(5).isAfter(correctedMessage.timestamp) &&
+                               existingMsg.timestamp.minusSeconds(5).isBefore(correctedMessage.timestamp)
                 
                 // 检查是否有一个是临时消息，另一个是服务器消息
-                val oneIsTemporary = existingMsg.id.startsWith("outgoing_") != message.id.startsWith("outgoing_")
+                val oneIsTemporary = existingMsg.id.startsWith("outgoing_") != correctedMessage.id.startsWith("outgoing_")
                               
                 val compositeMatch = contentMatch && senderMatch && (timeMatch || oneIsTemporary)
                 
                 if (compositeMatch) {
                     if (oneIsTemporary && !existingMsg.id.startsWith("outgoing_")) {
                         // 当已有服务器确认的消息，而新消息是临时消息时，保留服务器消息
-                        Log.d(TAG, "已有服务器消息，忽略临时消息: ${message.content}")
+                        Log.d(TAG, "已有服务器消息，忽略临时消息: ${correctedMessage.content}")
                         return@any true
-                    } else if (oneIsTemporary && !message.id.startsWith("outgoing_")) {
+                    } else if (oneIsTemporary && !correctedMessage.id.startsWith("outgoing_")) {
                         // 当已有临时消息，而新消息是服务器消息时，替换临时消息为服务器消息
-                        Log.d(TAG, "替换临时消息为服务器消息: ${message.content}")
+                        Log.d(TAG, "替换临时消息为服务器消息: ${correctedMessage.content}")
                         currentList.remove(existingMsg)
                         return@any false  // 不视为重复，而是替换
                     } else {
-                        Log.d(TAG, "消息内容、发送者和时间匹配，认为是重复: ${message.content}")
+                        Log.d(TAG, "消息内容、发送者和时间匹配，认为是重复: ${correctedMessage.content}")
                         return@any true
                     }
                 }
@@ -301,23 +361,23 @@ class GroupChatViewModel @Inject constructor(
             }
             
             if (!isDuplicate) {
-                currentList.add(message)
+                currentList.add(correctedMessage)
                 this[roomJid] = currentList.sortedBy { it.timestamp }
                 Log.d(TAG, "消息已添加到StateFlow, 房间=$roomJid, 当前消息数量: ${this[roomJid]?.size}")
                 
                 // 如果需要保存到数据库且不是临时消息
-                if (saveToDb && !message.id.startsWith("outgoing_")) {
+                if (saveToDb && !correctedMessage.id.startsWith("outgoing_")) {
                     viewModelScope.launch {
                         try {
-                            groupChatRepository.saveGroupMessage(message)
-                            Log.d(TAG, "消息已保存到数据库: ${message.id}")
+                            groupChatRepository.saveGroupMessage(correctedMessage)
+                            Log.d(TAG, "消息已保存到数据库: ${correctedMessage.id}")
                         } catch (e: Exception) {
-                            Log.e(TAG, "保存消息到数据库失败: ${message.id}", e)
+                            Log.e(TAG, "保存消息到数据库失败: ${correctedMessage.id}", e)
                         }
                     }
                 }
             } else {
-                Log.d(TAG, "检测到重复消息，已忽略: id=${message.id}, 内容=${message.content}")
+                Log.d(TAG, "检测到重复消息，已忽略: id=${correctedMessage.id}, 内容=${correctedMessage.content}")
             }
         }
     }

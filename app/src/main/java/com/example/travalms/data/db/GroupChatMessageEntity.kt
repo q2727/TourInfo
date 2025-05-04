@@ -8,6 +8,7 @@ import java.time.LocalDateTime
 
 /**
  * Group Chat Message Entity for Room database storage.
+ * 注意：不再存储isFromMe字段，而是在加载时根据当前用户动态判断
  */
 @Entity(tableName = "group_chat_messages")
 @TypeConverters(DateConverters::class) // Assuming DateConverters exists
@@ -19,20 +20,20 @@ data class GroupChatMessageEntity(
     val senderNickname: String,       // Sender nickname
     val content: String,              // Message content
     val timestamp: LocalDateTime,     // Message timestamp (indexed for sorting)
-    val isFromMe: Boolean,            // Is the message from the current user?
     val messageType: String           // Message type (e.g., TEXT, SYSTEM) - Store as String
 ) {
     // Convert Entity to Domain Model
-    fun toGroupChatMessage(roomName: String): GroupChatMessage { // Need roomName potentially
+    fun toGroupChatMessage(roomName: String): GroupChatMessage {
         return GroupChatMessage(
             id = id,
             roomJid = roomJid,
-            roomName = roomName, // Might need to fetch this separately or pass it in
+            roomName = roomName,
             senderJid = senderJid,
             senderNickname = senderNickname,
             content = content,
             timestamp = timestamp,
-            isFromMe = isFromMe,
+            // 不再包含isFromMe字段，显示时将动态判断
+            isFromMe = false, // 默认值，将在显示时根据当前用户动态判断
             messageType = try {
                 GroupChatMessage.MessageType.valueOf(messageType)
             } catch (e: IllegalArgumentException) {
@@ -51,7 +52,7 @@ data class GroupChatMessageEntity(
                 senderNickname = message.senderNickname,
                 content = message.content,
                 timestamp = message.timestamp,
-                isFromMe = message.isFromMe,
+                // 不再保存isFromMe字段
                 messageType = message.messageType.name // Store enum name as String
             )
         }

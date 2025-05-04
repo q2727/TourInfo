@@ -46,7 +46,7 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
       @Override
       @NonNull
       protected String createQuery() {
-        return "INSERT OR REPLACE INTO `group_chat_messages` (`id`,`roomJid`,`senderJid`,`senderNickname`,`content`,`timestamp`,`isFromMe`,`messageType`) VALUES (?,?,?,?,?,?,?,?)";
+        return "INSERT OR REPLACE INTO `group_chat_messages` (`id`,`roomJid`,`senderJid`,`senderNickname`,`content`,`timestamp`,`messageType`) VALUES (?,?,?,?,?,?,?)";
       }
 
       @Override
@@ -83,12 +83,10 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
         } else {
           statement.bindLong(6, _tmp);
         }
-        final int _tmp_1 = entity.isFromMe() ? 1 : 0;
-        statement.bindLong(7, _tmp_1);
         if (entity.getMessageType() == null) {
-          statement.bindNull(8);
+          statement.bindNull(7);
         } else {
-          statement.bindString(8, entity.getMessageType());
+          statement.bindString(7, entity.getMessageType());
         }
       }
     };
@@ -104,7 +102,7 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
 
   @Override
   public Object insertMessage(final GroupChatMessageEntity message,
-      final Continuation<? super Unit> continuation) {
+      final Continuation<? super Unit> arg1) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -118,12 +116,12 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
           __db.endTransaction();
         }
       }
-    }, continuation);
+    }, arg1);
   }
 
   @Override
   public Object insertMessages(final List<GroupChatMessageEntity> messages,
-      final Continuation<? super Unit> continuation) {
+      final Continuation<? super Unit> arg1) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -137,12 +135,11 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
           __db.endTransaction();
         }
       }
-    }, continuation);
+    }, arg1);
   }
 
   @Override
-  public Object deleteMessagesForRoom(final String roomJid,
-      final Continuation<? super Unit> continuation) {
+  public Object deleteMessagesForRoom(final String roomJid, final Continuation<? super Unit> arg1) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -167,7 +164,7 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
           __preparedStmtOfDeleteMessagesForRoom.release(_stmt);
         }
       }
-    }, continuation);
+    }, arg1);
   }
 
   @Override
@@ -192,7 +189,6 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
           final int _cursorIndexOfSenderNickname = CursorUtil.getColumnIndexOrThrow(_cursor, "senderNickname");
           final int _cursorIndexOfContent = CursorUtil.getColumnIndexOrThrow(_cursor, "content");
           final int _cursorIndexOfTimestamp = CursorUtil.getColumnIndexOrThrow(_cursor, "timestamp");
-          final int _cursorIndexOfIsFromMe = CursorUtil.getColumnIndexOrThrow(_cursor, "isFromMe");
           final int _cursorIndexOfMessageType = CursorUtil.getColumnIndexOrThrow(_cursor, "messageType");
           final List<GroupChatMessageEntity> _result = new ArrayList<GroupChatMessageEntity>(_cursor.getCount());
           while (_cursor.moveToNext()) {
@@ -235,17 +231,13 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
               _tmp = _cursor.getLong(_cursorIndexOfTimestamp);
             }
             _tmpTimestamp = __dateConverters.fromTimestamp(_tmp);
-            final boolean _tmpIsFromMe;
-            final int _tmp_1;
-            _tmp_1 = _cursor.getInt(_cursorIndexOfIsFromMe);
-            _tmpIsFromMe = _tmp_1 != 0;
             final String _tmpMessageType;
             if (_cursor.isNull(_cursorIndexOfMessageType)) {
               _tmpMessageType = null;
             } else {
               _tmpMessageType = _cursor.getString(_cursorIndexOfMessageType);
             }
-            _item = new GroupChatMessageEntity(_tmpId,_tmpRoomJid,_tmpSenderJid,_tmpSenderNickname,_tmpContent,_tmpTimestamp,_tmpIsFromMe,_tmpMessageType);
+            _item = new GroupChatMessageEntity(_tmpId,_tmpRoomJid,_tmpSenderJid,_tmpSenderNickname,_tmpContent,_tmpTimestamp,_tmpMessageType);
             _result.add(_item);
           }
           return _result;
@@ -263,7 +255,7 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
 
   @Override
   public Object getMessagesForRoom(final String roomJid,
-      final Continuation<? super List<GroupChatMessageEntity>> continuation) {
+      final Continuation<? super List<GroupChatMessageEntity>> arg1) {
     final String _sql = "SELECT * FROM group_chat_messages WHERE roomJid = ? ORDER BY timestamp ASC";
     final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 1);
     int _argIndex = 1;
@@ -285,7 +277,6 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
           final int _cursorIndexOfSenderNickname = CursorUtil.getColumnIndexOrThrow(_cursor, "senderNickname");
           final int _cursorIndexOfContent = CursorUtil.getColumnIndexOrThrow(_cursor, "content");
           final int _cursorIndexOfTimestamp = CursorUtil.getColumnIndexOrThrow(_cursor, "timestamp");
-          final int _cursorIndexOfIsFromMe = CursorUtil.getColumnIndexOrThrow(_cursor, "isFromMe");
           final int _cursorIndexOfMessageType = CursorUtil.getColumnIndexOrThrow(_cursor, "messageType");
           final List<GroupChatMessageEntity> _result = new ArrayList<GroupChatMessageEntity>(_cursor.getCount());
           while (_cursor.moveToNext()) {
@@ -328,17 +319,13 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
               _tmp = _cursor.getLong(_cursorIndexOfTimestamp);
             }
             _tmpTimestamp = __dateConverters.fromTimestamp(_tmp);
-            final boolean _tmpIsFromMe;
-            final int _tmp_1;
-            _tmp_1 = _cursor.getInt(_cursorIndexOfIsFromMe);
-            _tmpIsFromMe = _tmp_1 != 0;
             final String _tmpMessageType;
             if (_cursor.isNull(_cursorIndexOfMessageType)) {
               _tmpMessageType = null;
             } else {
               _tmpMessageType = _cursor.getString(_cursorIndexOfMessageType);
             }
-            _item = new GroupChatMessageEntity(_tmpId,_tmpRoomJid,_tmpSenderJid,_tmpSenderNickname,_tmpContent,_tmpTimestamp,_tmpIsFromMe,_tmpMessageType);
+            _item = new GroupChatMessageEntity(_tmpId,_tmpRoomJid,_tmpSenderJid,_tmpSenderNickname,_tmpContent,_tmpTimestamp,_tmpMessageType);
             _result.add(_item);
           }
           return _result;
@@ -347,12 +334,12 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
           _statement.release();
         }
       }
-    }, continuation);
+    }, arg1);
   }
 
   @Override
   public Object getLatestMessageForRoom(final String roomJid,
-      final Continuation<? super GroupChatMessageEntity> continuation) {
+      final Continuation<? super GroupChatMessageEntity> arg1) {
     final String _sql = "SELECT * FROM group_chat_messages WHERE roomJid = ? ORDER BY timestamp DESC LIMIT 1";
     final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 1);
     int _argIndex = 1;
@@ -374,7 +361,6 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
           final int _cursorIndexOfSenderNickname = CursorUtil.getColumnIndexOrThrow(_cursor, "senderNickname");
           final int _cursorIndexOfContent = CursorUtil.getColumnIndexOrThrow(_cursor, "content");
           final int _cursorIndexOfTimestamp = CursorUtil.getColumnIndexOrThrow(_cursor, "timestamp");
-          final int _cursorIndexOfIsFromMe = CursorUtil.getColumnIndexOrThrow(_cursor, "isFromMe");
           final int _cursorIndexOfMessageType = CursorUtil.getColumnIndexOrThrow(_cursor, "messageType");
           final GroupChatMessageEntity _result;
           if (_cursor.moveToFirst()) {
@@ -416,17 +402,13 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
               _tmp = _cursor.getLong(_cursorIndexOfTimestamp);
             }
             _tmpTimestamp = __dateConverters.fromTimestamp(_tmp);
-            final boolean _tmpIsFromMe;
-            final int _tmp_1;
-            _tmp_1 = _cursor.getInt(_cursorIndexOfIsFromMe);
-            _tmpIsFromMe = _tmp_1 != 0;
             final String _tmpMessageType;
             if (_cursor.isNull(_cursorIndexOfMessageType)) {
               _tmpMessageType = null;
             } else {
               _tmpMessageType = _cursor.getString(_cursorIndexOfMessageType);
             }
-            _result = new GroupChatMessageEntity(_tmpId,_tmpRoomJid,_tmpSenderJid,_tmpSenderNickname,_tmpContent,_tmpTimestamp,_tmpIsFromMe,_tmpMessageType);
+            _result = new GroupChatMessageEntity(_tmpId,_tmpRoomJid,_tmpSenderJid,_tmpSenderNickname,_tmpContent,_tmpTimestamp,_tmpMessageType);
           } else {
             _result = null;
           }
@@ -436,7 +418,7 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
           _statement.release();
         }
       }
-    }, continuation);
+    }, arg1);
   }
 
   @NonNull

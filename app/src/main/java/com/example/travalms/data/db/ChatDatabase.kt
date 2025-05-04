@@ -11,7 +11,7 @@ import androidx.room.TypeConverters
  */
 @Database(
     entities = [MessageEntity::class, GroupChatEntity::class, GroupChatMessageEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = true // 修改为true以导出schema
 )
 @TypeConverters(DateConverters::class)

@@ -128,8 +128,7 @@ public final class MessageDao_Impl implements MessageDao {
   }
 
   @Override
-  public Object insertMessage(final MessageEntity message,
-      final Continuation<? super Unit> continuation) {
+  public Object insertMessage(final MessageEntity message, final Continuation<? super Unit> arg1) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -143,12 +142,12 @@ public final class MessageDao_Impl implements MessageDao {
           __db.endTransaction();
         }
       }
-    }, continuation);
+    }, arg1);
   }
 
   @Override
   public Object insertMessages(final List<MessageEntity> messages,
-      final Continuation<? super Unit> continuation) {
+      final Continuation<? super Unit> arg1) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -162,12 +161,12 @@ public final class MessageDao_Impl implements MessageDao {
           __db.endTransaction();
         }
       }
-    }, continuation);
+    }, arg1);
   }
 
   @Override
   public Object updateReadStatus(final String sessionId, final String senderId,
-      final boolean isRead, final Continuation<? super Unit> continuation) {
+      final boolean isRead, final Continuation<? super Unit> arg3) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -201,12 +200,12 @@ public final class MessageDao_Impl implements MessageDao {
           __preparedStmtOfUpdateReadStatus.release(_stmt);
         }
       }
-    }, continuation);
+    }, arg3);
   }
 
   @Override
   public Object deleteSessionMessages(final String sessionId,
-      final Continuation<? super Unit> continuation) {
+      final Continuation<? super Unit> arg1) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -231,11 +230,11 @@ public final class MessageDao_Impl implements MessageDao {
           __preparedStmtOfDeleteSessionMessages.release(_stmt);
         }
       }
-    }, continuation);
+    }, arg1);
   }
 
   @Override
-  public Object deleteAllMessages(final Continuation<? super Unit> continuation) {
+  public Object deleteAllMessages(final Continuation<? super Unit> arg0) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -254,7 +253,7 @@ public final class MessageDao_Impl implements MessageDao {
           __preparedStmtOfDeleteAllMessages.release(_stmt);
         }
       }
-    }, continuation);
+    }, arg0);
   }
 
   @Override
@@ -357,7 +356,7 @@ public final class MessageDao_Impl implements MessageDao {
 
   @Override
   public Object getMessagesForSessionSync(final String sessionId,
-      final Continuation<? super List<MessageEntity>> continuation) {
+      final Continuation<? super List<MessageEntity>> arg1) {
     final String _sql = "SELECT * FROM messages WHERE sessionId = ? ORDER BY timestamp ASC";
     final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 1);
     int _argIndex = 1;
@@ -448,11 +447,11 @@ public final class MessageDao_Impl implements MessageDao {
           _statement.release();
         }
       }
-    }, continuation);
+    }, arg1);
   }
 
   @Override
-  public Object getAllSessionIds(final Continuation<? super List<String>> continuation) {
+  public Object getAllSessionIds(final Continuation<? super List<String>> arg0) {
     final String _sql = "SELECT DISTINCT sessionId FROM messages";
     final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 0);
     final CancellationSignal _cancellationSignal = DBUtil.createCancellationSignal();
@@ -478,12 +477,12 @@ public final class MessageDao_Impl implements MessageDao {
           _statement.release();
         }
       }
-    }, continuation);
+    }, arg0);
   }
 
   @Override
   public Object getLastMessagesForAllSessions(
-      final Continuation<? super List<MessageEntity>> continuation) {
+      final Continuation<? super List<MessageEntity>> arg0) {
     final String _sql = "SELECT `messages`.`id` AS `id`, `messages`.`senderId` AS `senderId`, `messages`.`senderName` AS `senderName`, `messages`.`recipientId` AS `recipientId`, `messages`.`content` AS `content`, `messages`.`timestamp` AS `timestamp`, `messages`.`isRead` AS `isRead`, `messages`.`sessionId` AS `sessionId`, `messages`.`messageType` AS `messageType` FROM messages WHERE id IN (SELECT id FROM messages GROUP BY sessionId HAVING MAX(timestamp))";
     final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 0);
     final CancellationSignal _cancellationSignal = DBUtil.createCancellationSignal();
@@ -568,12 +567,12 @@ public final class MessageDao_Impl implements MessageDao {
           _statement.release();
         }
       }
-    }, continuation);
+    }, arg0);
   }
 
   @Override
   public Object getUnreadCountForSession(final String sessionId, final String currentUserJid,
-      final Continuation<? super Integer> continuation) {
+      final Continuation<? super Integer> arg2) {
     final String _sql = "SELECT COUNT(*) FROM messages WHERE sessionId = ? AND senderId != ? AND isRead = 0";
     final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 2);
     int _argIndex = 1;
@@ -613,7 +612,7 @@ public final class MessageDao_Impl implements MessageDao {
           _statement.release();
         }
       }
-    }, continuation);
+    }, arg2);
   }
 
   @NonNull

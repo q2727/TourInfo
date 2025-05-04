@@ -35,14 +35,14 @@ public final class ChatDatabase_Impl extends ChatDatabase {
   @Override
   @NonNull
   protected SupportSQLiteOpenHelper createOpenHelper(@NonNull final DatabaseConfiguration config) {
-    final SupportSQLiteOpenHelper.Callback _openCallback = new RoomOpenHelper(config, new RoomOpenHelper.Delegate(3) {
+    final SupportSQLiteOpenHelper.Callback _openCallback = new RoomOpenHelper(config, new RoomOpenHelper.Delegate(4) {
       @Override
       public void createAllTables(@NonNull final SupportSQLiteDatabase db) {
         db.execSQL("CREATE TABLE IF NOT EXISTS `messages` (`id` TEXT NOT NULL, `senderId` TEXT NOT NULL, `senderName` TEXT NOT NULL, `recipientId` TEXT, `content` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `isRead` INTEGER NOT NULL, `sessionId` TEXT NOT NULL, `messageType` TEXT NOT NULL, PRIMARY KEY(`id`))");
         db.execSQL("CREATE TABLE IF NOT EXISTS `group_chats` (`roomJid` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `memberCount` INTEGER NOT NULL, `isPrivate` INTEGER NOT NULL, `joinTime` INTEGER NOT NULL, `lastActivityTime` INTEGER NOT NULL, `unreadCount` INTEGER NOT NULL, `lastMessage` TEXT, PRIMARY KEY(`roomJid`))");
-        db.execSQL("CREATE TABLE IF NOT EXISTS `group_chat_messages` (`id` TEXT NOT NULL, `roomJid` TEXT NOT NULL, `senderJid` TEXT, `senderNickname` TEXT NOT NULL, `content` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `isFromMe` INTEGER NOT NULL, `messageType` TEXT NOT NULL, PRIMARY KEY(`id`))");
+        db.execSQL("CREATE TABLE IF NOT EXISTS `group_chat_messages` (`id` TEXT NOT NULL, `roomJid` TEXT NOT NULL, `senderJid` TEXT, `senderNickname` TEXT NOT NULL, `content` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `messageType` TEXT NOT NULL, PRIMARY KEY(`id`))");
         db.execSQL("CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)");
-        db.execSQL("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '04db70711011322357604facb7d49a40')");
+        db.execSQL("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'afe0c9a7c6a0c22bb87ea113fcc4de21')");
       }
 
       @Override
@@ -131,14 +131,13 @@ public final class ChatDatabase_Impl extends ChatDatabase {
                   + " Expected:\n" + _infoGroupChats + "\n"
                   + " Found:\n" + _existingGroupChats);
         }
-        final HashMap<String, TableInfo.Column> _columnsGroupChatMessages = new HashMap<String, TableInfo.Column>(8);
+        final HashMap<String, TableInfo.Column> _columnsGroupChatMessages = new HashMap<String, TableInfo.Column>(7);
         _columnsGroupChatMessages.put("id", new TableInfo.Column("id", "TEXT", true, 1, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsGroupChatMessages.put("roomJid", new TableInfo.Column("roomJid", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsGroupChatMessages.put("senderJid", new TableInfo.Column("senderJid", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsGroupChatMessages.put("senderNickname", new TableInfo.Column("senderNickname", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsGroupChatMessages.put("content", new TableInfo.Column("content", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsGroupChatMessages.put("timestamp", new TableInfo.Column("timestamp", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
-        _columnsGroupChatMessages.put("isFromMe", new TableInfo.Column("isFromMe", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
         _columnsGroupChatMessages.put("messageType", new TableInfo.Column("messageType", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
         final HashSet<TableInfo.ForeignKey> _foreignKeysGroupChatMessages = new HashSet<TableInfo.ForeignKey>(0);
         final HashSet<TableInfo.Index> _indicesGroupChatMessages = new HashSet<TableInfo.Index>(0);
@@ -151,7 +150,7 @@ public final class ChatDatabase_Impl extends ChatDatabase {
         }
         return new RoomOpenHelper.ValidationResult(true, null);
       }
-    }, "04db70711011322357604facb7d49a40", "889a41a3090c2451d96f3052ecedbecf");
+    }, "afe0c9a7c6a0c22bb87ea113fcc4de21", "aa8c2ca1eda9fe4878145fa0e0385681");
     final SupportSQLiteOpenHelper.Configuration _sqliteConfig = SupportSQLiteOpenHelper.Configuration.builder(config.context).name(config.name).callback(_openCallback).build();
     final SupportSQLiteOpenHelper _helper = config.sqliteOpenHelperFactory.create(_sqliteConfig);
     return _helper;

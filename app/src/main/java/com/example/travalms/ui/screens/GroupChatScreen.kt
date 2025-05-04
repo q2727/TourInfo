@@ -273,36 +273,19 @@ fun MessageBubble(
     message: com.example.travalms.model.GroupChatMessage,
     timeFormatter: DateTimeFormatter
 ) {
-    // 获取当前用户的JID，并提取用户名部分
+    // 获取当前用户名用于判断
     val currentUserJid = remember { 
         XMPPManager.getInstance().currentConnection?.user?.asEntityBareJidString() ?: ""
     }
-    
-    // 从JID中提取用户名（本地用户）
     val currentUsername = remember(currentUserJid) {
-        if (currentUserJid.contains("@")) {
-            currentUserJid.substringBefore("@")
-        } else {
-            currentUserJid
-        }
+        currentUserJid.substringBefore("@")
     }
     
-    // 参考ChatRoomScreen.kt实现的消息来源判断逻辑
-    // 使用更简单、直接的比较方式
-    val isFromMe = remember(message.senderJid, currentUserJid) {
-        // 获取干净的JID用于比较 (去除resource部分)
-        val cleanSenderJid = message.senderJid?.substringBefore("/") ?: ""
-        val cleanCurrentJid = currentUserJid.substringBefore("/")
-        
-        // 简单直接的比较：检查发送者JID是否等于当前用户JID
-        val isFromCurrentUser = cleanSenderJid == cleanCurrentJid
-        
-        // 添加调试日志
-        Log.d("GroupChat", "消息判断 - 内容: ${message.content}")
-        Log.d("GroupChat", "消息判断 - 发送者: $cleanSenderJid | 当前用户: $cleanCurrentJid")
-        Log.d("GroupChat", "消息判断 - 结果: $isFromCurrentUser | 原始标志: ${message.isFromMe}")
-        
-        isFromCurrentUser || message.isFromMe
+    // 最简单直接的判断：检查消息发送者是否与当前用户相符
+    val isFromMe = remember(message.senderNickname, currentUsername) {
+        // 如果发送者昵称匹配当前用户名，则认为是自己发送的消息
+        message.senderNickname == currentUsername || 
+        message.id.startsWith("outgoing_") // 临时消息ID是自己发出的标记
     }
     
     Column(
@@ -349,9 +332,7 @@ fun MessageBubble(
                 // 普通消息
                 if (!isFromMe) {
                     // 获取头像用户名 - 简化提取逻辑
-                    val avatarUsername = remember(message.senderNickname) {
-                        message.senderNickname.substringBefore("@")
-                    }
+                    val avatarUsername = message.senderNickname.substringBefore("@")
                     
                     // 使用UserAvatar组件显示发送者头像
                     Box(
@@ -405,7 +386,7 @@ fun MessageBubble(
                 if (isFromMe) {
                     Spacer(modifier = Modifier.width(8.dp))
                     
-                    // 使用UserAvatar组件显示自己的头像 - 简化用户名提取逻辑
+                    // 使用UserAvatar组件显示自己的头像
                     Box(
                         modifier = Modifier
                             .size(40.dp)
