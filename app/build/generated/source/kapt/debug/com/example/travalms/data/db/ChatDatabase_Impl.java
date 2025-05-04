@@ -30,22 +30,26 @@ public final class ChatDatabase_Impl extends ChatDatabase {
 
   private volatile GroupChatDao _groupChatDao;
 
+  private volatile GroupChatMessageDao _groupChatMessageDao;
+
   @Override
   @NonNull
   protected SupportSQLiteOpenHelper createOpenHelper(@NonNull final DatabaseConfiguration config) {
-    final SupportSQLiteOpenHelper.Callback _openCallback = new RoomOpenHelper(config, new RoomOpenHelper.Delegate(2) {
+    final SupportSQLiteOpenHelper.Callback _openCallback = new RoomOpenHelper(config, new RoomOpenHelper.Delegate(3) {
       @Override
       public void createAllTables(@NonNull final SupportSQLiteDatabase db) {
         db.execSQL("CREATE TABLE IF NOT EXISTS `messages` (`id` TEXT NOT NULL, `senderId` TEXT NOT NULL, `senderName` TEXT NOT NULL, `recipientId` TEXT, `content` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `isRead` INTEGER NOT NULL, `sessionId` TEXT NOT NULL, `messageType` TEXT NOT NULL, PRIMARY KEY(`id`))");
         db.execSQL("CREATE TABLE IF NOT EXISTS `group_chats` (`roomJid` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `memberCount` INTEGER NOT NULL, `isPrivate` INTEGER NOT NULL, `joinTime` INTEGER NOT NULL, `lastActivityTime` INTEGER NOT NULL, `unreadCount` INTEGER NOT NULL, `lastMessage` TEXT, PRIMARY KEY(`roomJid`))");
+        db.execSQL("CREATE TABLE IF NOT EXISTS `group_chat_messages` (`id` TEXT NOT NULL, `roomJid` TEXT NOT NULL, `senderJid` TEXT, `senderNickname` TEXT NOT NULL, `content` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `isFromMe` INTEGER NOT NULL, `messageType` TEXT NOT NULL, PRIMARY KEY(`id`))");
         db.execSQL("CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)");
-        db.execSQL("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6bdd59448c9488a4ae2fe87d7728fdf9')");
+        db.execSQL("INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '04db70711011322357604facb7d49a40')");
       }
 
       @Override
       public void dropAllTables(@NonNull final SupportSQLiteDatabase db) {
         db.execSQL("DROP TABLE IF EXISTS `messages`");
         db.execSQL("DROP TABLE IF EXISTS `group_chats`");
+        db.execSQL("DROP TABLE IF EXISTS `group_chat_messages`");
         final List<? extends RoomDatabase.Callback> _callbacks = mCallbacks;
         if (_callbacks != null) {
           for (RoomDatabase.Callback _callback : _callbacks) {
@@ -127,9 +131,27 @@ public final class ChatDatabase_Impl extends ChatDatabase {
                   + " Expected:\n" + _infoGroupChats + "\n"
                   + " Found:\n" + _existingGroupChats);
         }
+        final HashMap<String, TableInfo.Column> _columnsGroupChatMessages = new HashMap<String, TableInfo.Column>(8);
+        _columnsGroupChatMessages.put("id", new TableInfo.Column("id", "TEXT", true, 1, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsGroupChatMessages.put("roomJid", new TableInfo.Column("roomJid", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsGroupChatMessages.put("senderJid", new TableInfo.Column("senderJid", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsGroupChatMessages.put("senderNickname", new TableInfo.Column("senderNickname", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsGroupChatMessages.put("content", new TableInfo.Column("content", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsGroupChatMessages.put("timestamp", new TableInfo.Column("timestamp", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsGroupChatMessages.put("isFromMe", new TableInfo.Column("isFromMe", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsGroupChatMessages.put("messageType", new TableInfo.Column("messageType", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        final HashSet<TableInfo.ForeignKey> _foreignKeysGroupChatMessages = new HashSet<TableInfo.ForeignKey>(0);
+        final HashSet<TableInfo.Index> _indicesGroupChatMessages = new HashSet<TableInfo.Index>(0);
+        final TableInfo _infoGroupChatMessages = new TableInfo("group_chat_messages", _columnsGroupChatMessages, _foreignKeysGroupChatMessages, _indicesGroupChatMessages);
+        final TableInfo _existingGroupChatMessages = TableInfo.read(db, "group_chat_messages");
+        if (!_infoGroupChatMessages.equals(_existingGroupChatMessages)) {
+          return new RoomOpenHelper.ValidationResult(false, "group_chat_messages(com.example.travalms.data.db.GroupChatMessageEntity).\n"
+                  + " Expected:\n" + _infoGroupChatMessages + "\n"
+                  + " Found:\n" + _existingGroupChatMessages);
+        }
         return new RoomOpenHelper.ValidationResult(true, null);
       }
-    }, "6bdd59448c9488a4ae2fe87d7728fdf9", "85422941b736bd66a749c0a4c5a1eecb");
+    }, "04db70711011322357604facb7d49a40", "889a41a3090c2451d96f3052ecedbecf");
     final SupportSQLiteOpenHelper.Configuration _sqliteConfig = SupportSQLiteOpenHelper.Configuration.builder(config.context).name(config.name).callback(_openCallback).build();
     final SupportSQLiteOpenHelper _helper = config.sqliteOpenHelperFactory.create(_sqliteConfig);
     return _helper;
@@ -140,7 +162,7 @@ public final class ChatDatabase_Impl extends ChatDatabase {
   protected InvalidationTracker createInvalidationTracker() {
     final HashMap<String, String> _shadowTablesMap = new HashMap<String, String>(0);
     final HashMap<String, Set<String>> _viewTables = new HashMap<String, Set<String>>(0);
-    return new InvalidationTracker(this, _shadowTablesMap, _viewTables, "messages","group_chats");
+    return new InvalidationTracker(this, _shadowTablesMap, _viewTables, "messages","group_chats","group_chat_messages");
   }
 
   @Override
@@ -151,6 +173,7 @@ public final class ChatDatabase_Impl extends ChatDatabase {
       super.beginTransaction();
       _db.execSQL("DELETE FROM `messages`");
       _db.execSQL("DELETE FROM `group_chats`");
+      _db.execSQL("DELETE FROM `group_chat_messages`");
       super.setTransactionSuccessful();
     } finally {
       super.endTransaction();
@@ -167,6 +190,7 @@ public final class ChatDatabase_Impl extends ChatDatabase {
     final HashMap<Class<?>, List<Class<?>>> _typeConvertersMap = new HashMap<Class<?>, List<Class<?>>>();
     _typeConvertersMap.put(MessageDao.class, MessageDao_Impl.getRequiredConverters());
     _typeConvertersMap.put(GroupChatDao.class, GroupChatDao_Impl.getRequiredConverters());
+    _typeConvertersMap.put(GroupChatMessageDao.class, GroupChatMessageDao_Impl.getRequiredConverters());
     return _typeConvertersMap;
   }
 
@@ -209,6 +233,20 @@ public final class ChatDatabase_Impl extends ChatDatabase {
           _groupChatDao = new GroupChatDao_Impl(this);
         }
         return _groupChatDao;
+      }
+    }
+  }
+
+  @Override
+  public GroupChatMessageDao groupChatMessageDao() {
+    if (_groupChatMessageDao != null) {
+      return _groupChatMessageDao;
+    } else {
+      synchronized(this) {
+        if(_groupChatMessageDao == null) {
+          _groupChatMessageDao = new GroupChatMessageDao_Impl(this);
+        }
+        return _groupChatMessageDao;
       }
     }
   }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -27,6 +28,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import androidx.navigation.NavController
+import com.example.travalms.ui.components.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -239,6 +241,13 @@ fun ChatSessionItem(
     session: ChatSession,
     onClick: () -> Unit
 ) {
+    // 提取用户名（从targetId或targetName）
+    val username = if (session.targetId.contains("@")) {
+        session.targetId.substringBefore("@")
+    } else {
+        session.targetId.takeIf { it.isNotEmpty() } ?: session.targetName
+    }
+    
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -246,26 +255,12 @@ fun ChatSessionItem(
             .padding(vertical = 12.dp, horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 头像 - 使用系统主题色
-        val avatarBackgroundColor = when (session.targetType) {
-            "person" -> PrimaryColor.copy(alpha = 0.7f)  // 使用系统主题色
-            "company" -> PrimaryColor.copy(alpha = 0.7f) // 旅行社也使用系统主题色
-            else -> PrimaryColor.copy(alpha = 0.7f)      // 默认也使用系统主题色
-        }
-
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(avatarBackgroundColor),
-            contentAlignment = Alignment.Center
-        ) {
-            androidx.compose.material3.Text(
-                text = session.targetName.first().toString(),
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        // 使用UserAvatar组件显示用户真实头像
+        UserAvatar(
+            username = username,
+            size = 48.dp,
+            backgroundColor = PrimaryColor.copy(alpha = 0.7f)
+        )
 
         Spacer(modifier = Modifier.width(16.dp))
 

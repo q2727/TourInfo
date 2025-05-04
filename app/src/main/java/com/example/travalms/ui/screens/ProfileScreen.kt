@@ -41,6 +41,15 @@ import kotlinx.coroutines.launch
 import com.example.travalms.data.remote.XMPPManager
 import androidx.navigation.NavController
 import com.example.travalms.ui.navigation.AppRoutes
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
+import com.example.travalms.R
+import android.content.Context
+import android.util.Log
+import androidx.compose.ui.layout.ContentScale
+import com.example.travalms.data.api.NetworkModule
+import com.example.travalms.data.api.UserApiService
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,18 +66,43 @@ fun ProfileScreen(
 ) {
     var nickname by remember { mutableStateOf<String?>("加载中...") }
     var username by remember { mutableStateOf<String?>("用户") }
-
+    var avatarUrl by remember { mutableStateOf<String?>(null) }
+    
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val userApiService = NetworkModule.provideUserApiService()
 
     LaunchedEffect(Unit) {
         scope.launch {
-            val result = XMPPManager.getInstance().getUserProfile()
-            if (result.isSuccess) {
-                val profileData = result.getOrNull()
-                nickname = profileData?.get("name") ?: profileData?.get("username")
-                username = profileData?.get("username") ?: "用户"
+            // 从SharedPreferences获取当前登录的用户名
+            val currentUsername = getCurrentUsername(context)
+            if (currentUsername.isNotEmpty()) {
+                try {
+                    // 使用UserApiService获取用户信息
+                    val response = userApiService.getUserInfo(currentUsername)
+                    if (response.isSuccessful && response.body() != null) {
+                        val userData = response.body()!!
+                        username = currentUsername
+                        nickname = userData["nickname"]?.toString() ?: currentUsername
+                        // 替换头像URL中的localhost为实际IP地址
+                        var avatarUrlStr = userData["avatarUrl"]?.toString()
+                        if (avatarUrlStr != null && avatarUrlStr.contains("localhost")) {
+                            avatarUrlStr = avatarUrlStr.replace("localhost", "192.168.100.6")
+                            Log.d("ProfileScreen", "修正后的头像URL: $avatarUrlStr")
+                        }
+                        avatarUrl = avatarUrlStr
+                        Log.d("ProfileScreen", "获取到用户头像: $avatarUrl")
+                    } else {
+                        Log.e("ProfileScreen", "获取用户信息失败: ${response.code()}")
+                        nickname = "加载失败"
+                    }
+                } catch (e: Exception) {
+                    Log.e("ProfileScreen", "获取用户信息异常", e)
+                    nickname = "加载失败"
+                }
             } else {
-                nickname = "加载失败"
+                Log.e("ProfileScreen", "未获取到当前用户名")
+                nickname = "未登录"
             }
         }
     }
@@ -160,7 +194,29 @@ fun ProfileScreen(
                             .clip(CircleShape)
                             .background(Color.White.copy(alpha = 0.3f))
                             .clickable(onClick = onProfileEditClick)
-                    )
+                    ) {
+                        if (avatarUrl != null) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(avatarUrl)
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = "用户头像",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            // 默认头像
+                            Icon(
+                                Icons.Filled.Person,
+                                contentDescription = "默认头像",
+                                tint = Color.White,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .align(Alignment.Center)
+                            )
+                        }
+                    }
                     
                     Spacer(modifier = Modifier.width(16.dp))
                     
@@ -395,4 +451,14 @@ fun ProfileScreen(
             }
         }
     }
+}
+
+/**
+ * 从SharedPreferences获取当前登录的用户名
+ * @param context 上下文
+ * @return 当前登录的用户名，如果未登录则返回空字符串
+ */
+private fun getCurrentUsername(context: Context): String {
+    val prefs = context.getSharedPreferences("xmpp_prefs", Context.MODE_PRIVATE)
+    return prefs.getString("username", "") ?: ""
 } 

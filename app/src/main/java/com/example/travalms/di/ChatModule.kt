@@ -1,9 +1,11 @@
 package com.example.travalms.di
 
+import com.example.travalms.data.api.GroupChatApiClient
 import com.example.travalms.data.remote.GroupChatJoinHandler
 import com.example.travalms.data.remote.GroupChatManager
 import com.example.travalms.data.remote.XMPPGroupChatManager
 import com.example.travalms.data.remote.XMPPManager
+import com.example.travalms.data.remote.XMPPServiceLocator
 import com.example.travalms.data.repository.GroupChatRepository
 import dagger.Module
 import dagger.Provides
@@ -51,14 +53,36 @@ object ChatModule {
     }
     
     /**
+     * 提供XMPPServiceLocator实例
+     */
+    @Provides
+    @Singleton
+    fun provideXMPPServiceLocator(): XMPPServiceLocator {
+        return XMPPServiceLocator.getInstance()
+    }
+    
+    /**
      * 提供GroupChatJoinHandler实例
      */
     @Provides
     @Singleton
     fun provideGroupChatJoinHandler(
         groupChatRepository: GroupChatRepository,
-        xmppManager: XMPPManager
+        xmppManager: XMPPManager,
+        groupChatApiClient: GroupChatApiClient  // 添加API客户端依赖
     ): GroupChatJoinHandler {
-        return GroupChatJoinHandler(groupChatRepository, xmppManager)
+        val handler = GroupChatJoinHandler(groupChatRepository, xmppManager, groupChatApiClient)
+        // 将GroupChatJoinHandler实例设置到XMPPServiceLocator中，以便在非注入环境中访问
+        XMPPServiceLocator.getInstance().setGroupChatJoinHandler(handler)
+        return handler
+    }
+    
+    /**
+     * 提供GroupChatApiClient实例
+     */
+    @Provides
+    @Singleton
+    fun provideGroupChatApiClient(): GroupChatApiClient {
+        return GroupChatApiClient()
     }
 } 

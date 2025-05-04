@@ -37,9 +37,6 @@ class XMPPService : Service() {
         private const val CHANNEL_ID = "XMPPServiceChannel"
         private const val WAKE_LOCK_TAG = "XMPPService:WakeLock"
         
-        // Intent actions
-        const val ACTION_JOIN_GROUP_CHATS = "com.example.travalms.action.JOIN_GROUP_CHATS"
-        
         // 用于确保服务仅开始一次
         private val isServiceRunning = AtomicBoolean(false)
         
@@ -109,7 +106,7 @@ class XMPPService : Service() {
             serviceScope.launch {
                 try {
                     delay(1000) // 稍微延迟，确保所有群聊已正确加入
-                    groupChatJoinHandler.syncGroupChatList()
+                    groupChatJoinHandler.syncGroupChatsFromServer()
                 } catch (e: Exception) {
                     Log.e(TAG, "同步群聊列表失败: ${e.message}", e)
                 }
@@ -140,16 +137,6 @@ class XMPPService : Service() {
         // 处理intent actions
         intent?.let { 
             when (it.action) {
-                ACTION_JOIN_GROUP_CHATS -> {
-                    Log.d(TAG, "收到加入群聊的命令")
-                    // 确保此时已经连接和认证
-                    if (xmppManager.isAuthenticated()) {
-                        Log.d(TAG, "用户已认证，立即执行加入群聊操作")
-                        joinSavedGroupChats(forceJoin = true)
-                    } else {
-                        Log.d(TAG, "用户未认证，无法加入群聊")
-                    }
-                }
                 else -> {
                     // 处理其他意图动作或无动作的情况
                     Log.d(TAG, "收到其他命令或无指定命令: ${it.action ?: "无action"}")
@@ -287,12 +274,6 @@ class XMPPService : Service() {
                 }
                 updateNotification(statusText)
                 
-                // 如果连接已认证，加入保存的群聊
-                if (state == ConnectionState.AUTHENTICATED) {
-                    Log.d(TAG, "用户已登录，尝试加入保存的群聊")
-                    joinSavedGroupChats(forceJoin = false)
-                }
-                
                 // 如果连接断开，尝试重新连接
                 if (state == ConnectionState.DISCONNECTED || 
                     state == ConnectionState.ERROR || 
@@ -307,23 +288,6 @@ class XMPPService : Service() {
             while (true) {
                 delay(monitorInterval * 1000)
                 checkConnection()
-            }
-        }
-    }
-    
-    /**
-     * 加入已保存的群聊
-     */
-    private fun joinSavedGroupChats(forceJoin: Boolean) {
-        serviceScope.launch {
-            try {
-                // 延迟一小段时间，确保其他初始化已完成
-                delay(3000)
-                Log.d(TAG, "开始加入已保存的群聊")
-                groupChatManager.joinSavedGroupChats(forceJoin)
-                // 回调函数会负责同步群聊列表
-            } catch (e: Exception) {
-                Log.e(TAG, "加入群聊时出错: ${e.message}", e)
             }
         }
     }

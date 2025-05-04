@@ -324,7 +324,7 @@ class XMPPManager private constructor() {
                     enableAutomaticReconnection()
                     setReconnectionPolicy(ReconnectionManager.ReconnectionPolicy.FIXED_DELAY)
                     // 使用较短的重连间隔，防止长时间无法恢复连接
-                    setFixedDelay(15) // 15秒尝试一次重连
+                    setFixedDelay(15) // 15秒尝试一次重连202.108.22.5
                 }
 
                 // 连接到服务器
@@ -397,6 +397,7 @@ class XMPPManager private constructor() {
      * @param businessLicensePath 营业执照文件路径 (可选)
      * @param idCardFrontPath 负责人身份证正面文件路径 (可选)
      * @param idCardBackPath 负责人身份证反面文件路径 (可选)
+     * @param avatarPath 头像路径 (可选)
      * @return 注册结果，表示成功或失败
      */
     suspend fun register(
@@ -410,7 +411,8 @@ class XMPPManager private constructor() {
         city: String,
         businessLicensePath: String? = null,
         idCardFrontPath: String? = null,
-        idCardBackPath: String? = null
+        idCardBackPath: String? = null,
+        avatarPath: String? = null
     ): Result<Unit> = withContext(Dispatchers.IO) {
         var connection: XMPPTCPConnection? = null
         try {
@@ -447,6 +449,7 @@ class XMPPManager private constructor() {
             businessLicensePath?.let { attributes["businessLicensePath"] = it }
             idCardFrontPath?.let { attributes["idCardFrontPath"] = it }
             idCardBackPath?.let { attributes["idCardBackPath"] = it }
+            avatarPath?.let { attributes["avatarPath"] = it }
 
             Log.d(TAG, "开始创建账户，属性: $attributes")
             accountManager.createAccount(Localpart.from(username), password, attributes)

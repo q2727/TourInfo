@@ -10,8 +10,8 @@ import androidx.room.TypeConverters
  * 聊天应用数据库类
  */
 @Database(
-    entities = [MessageEntity::class, GroupChatEntity::class], 
-    version = 2, 
+    entities = [MessageEntity::class, GroupChatEntity::class, GroupChatMessageEntity::class],
+    version = 3,
     exportSchema = true // 修改为true以导出schema
 )
 @TypeConverters(DateConverters::class)
@@ -25,6 +25,11 @@ abstract class ChatDatabase : RoomDatabase() {
      * 获取群聊DAO
      */
     abstract fun groupChatDao(): GroupChatDao
+    
+    /**
+     * 获取群聊消息DAO
+     */
+    abstract fun groupChatMessageDao(): GroupChatMessageDao
     
     companion object {
         @Volatile

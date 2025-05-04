@@ -22,24 +22,29 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.example.travalms.data.model.GroupChatMessage
+import com.example.travalms.model.GroupChatMessage
 import com.example.travalms.data.model.GroupMember
 import com.example.travalms.data.model.GroupRoom
 import com.example.travalms.ui.viewmodels.GroupChatViewModel
+import com.example.travalms.ui.components.UserAvatar
+import com.example.travalms.data.remote.XMPPManager
+import androidx.compose.foundation.border
 import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
+import android.util.Log
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupChatScreen(navController: NavController, roomJid: String) {
-    val groupChatViewModel: GroupChatViewModel = viewModel()
+    val groupChatViewModel: GroupChatViewModel = hiltViewModel()
     val currentRoom by groupChatViewModel.currentRoom.collectAsState()
-    val roomMessages = groupChatViewModel.getRoomMessages(roomJid)
-    val roomMembers = groupChatViewModel.getRoomMembers(roomJid)
+    val roomMessagesFlow = remember(roomJid) { groupChatViewModel.getRoomMessagesFlow(roomJid) }
+    val roomMessages by roomMessagesFlow.collectAsState()
+    val roomMembers = remember(roomJid) { groupChatViewModel.getRoomMembers(roomJid) }
     val loading by groupChatViewModel.loading.collectAsState()
     val errorMessage by groupChatViewModel.errorMessage.collectAsState()
     
@@ -52,6 +57,30 @@ fun GroupChatScreen(navController: NavController, roomJid: String) {
     // 时间格式化器
     val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd") }
+    
+    // 获取当前用户的JID，用于记录日志
+    val currentUserJid = remember { 
+        XMPPManager.getInstance().currentConnection?.user?.asEntityBareJidString() ?: ""
+    }
+    
+    // 记录当前会话和用户信息，用于调试
+    LaunchedEffect(roomJid, currentUserJid) {
+        Log.d("GroupChatScreen", "=== 群聊界面初始化 ===")
+        Log.d("GroupChatScreen", "当前用户JID: $currentUserJid")
+        Log.d("GroupChatScreen", "当前群聊JID: $roomJid")
+        Log.d("GroupChatScreen", "当前群聊名称: ${currentRoom?.name ?: "未知"}")
+    }
+    
+    // 当消息列表更新时记录日志
+    LaunchedEffect(roomMessages.size) {
+        Log.d("GroupChatScreen", "消息列表更新: 共 ${roomMessages.size} 条消息")
+        if (roomMessages.isNotEmpty()) {
+            val firstMsg = roomMessages.first()
+            val lastMsg = roomMessages.last()
+            Log.d("GroupChatScreen", "第一条: ${firstMsg.content} 从 ${firstMsg.senderNickname}")
+            Log.d("GroupChatScreen", "最后一条: ${lastMsg.content} 从 ${lastMsg.senderNickname}")
+        }
+    }
     
     // 加载房间信息和消息
     LaunchedEffect(roomJid) {
@@ -132,6 +161,8 @@ fun GroupChatScreen(navController: NavController, roomJid: String) {
                     Button(
                         onClick = {
                             if (messageText.isNotBlank()) {
+                                // 记录发送消息的尝试
+                                Log.d("GroupChatScreen", "正在发送消息: '$messageText' 到群聊: $roomJid")
                                 groupChatViewModel.sendMessage(roomJid, messageText)
                                 messageText = ""
                             }
@@ -173,7 +204,7 @@ fun GroupChatScreen(navController: NavController, roomJid: String) {
                     var currentDate = ""
                     
                     items(roomMessages) { message ->
-                        val messageDate = message.timestamp.format(dateFormatter)
+                        val messageDate = dateFormatter.format(message.timestamp)
                         
                         // 如果日期变了，显示日期分割线
                         if (messageDate != currentDate) {
@@ -239,10 +270,40 @@ fun GroupChatScreen(navController: NavController, roomJid: String) {
 
 @Composable
 fun MessageBubble(
-    message: GroupChatMessage,
+    message: com.example.travalms.model.GroupChatMessage,
     timeFormatter: DateTimeFormatter
 ) {
-    val isFromMe = message.isFromMe
+    // 获取当前用户的JID，并提取用户名部分
+    val currentUserJid = remember { 
+        XMPPManager.getInstance().currentConnection?.user?.asEntityBareJidString() ?: ""
+    }
+    
+    // 从JID中提取用户名（本地用户）
+    val currentUsername = remember(currentUserJid) {
+        if (currentUserJid.contains("@")) {
+            currentUserJid.substringBefore("@")
+        } else {
+            currentUserJid
+        }
+    }
+    
+    // 参考ChatRoomScreen.kt实现的消息来源判断逻辑
+    // 使用更简单、直接的比较方式
+    val isFromMe = remember(message.senderJid, currentUserJid) {
+        // 获取干净的JID用于比较 (去除resource部分)
+        val cleanSenderJid = message.senderJid?.substringBefore("/") ?: ""
+        val cleanCurrentJid = currentUserJid.substringBefore("/")
+        
+        // 简单直接的比较：检查发送者JID是否等于当前用户JID
+        val isFromCurrentUser = cleanSenderJid == cleanCurrentJid
+        
+        // 添加调试日志
+        Log.d("GroupChat", "消息判断 - 内容: ${message.content}")
+        Log.d("GroupChat", "消息判断 - 发送者: $cleanSenderJid | 当前用户: $cleanCurrentJid")
+        Log.d("GroupChat", "消息判断 - 结果: $isFromCurrentUser | 原始标志: ${message.isFromMe}")
+        
+        isFromCurrentUser || message.isFromMe
+    }
     
     Column(
         modifier = Modifier
@@ -251,7 +312,7 @@ fun MessageBubble(
         horizontalAlignment = if (isFromMe) Alignment.End else Alignment.Start
     ) {
         // 发送者名称（仅显示他人消息的名称）
-        if (!isFromMe && message.messageType != GroupChatMessage.MessageType.SYSTEM) {
+        if (!isFromMe && message.messageType != com.example.travalms.model.GroupChatMessage.MessageType.SYSTEM) {
             Text(
                 text = message.senderNickname,
                 fontSize = 12.sp,
@@ -265,7 +326,7 @@ fun MessageBubble(
             modifier = Modifier.fillMaxWidth()
         ) {
             // 系统消息居中显示
-            if (message.messageType == GroupChatMessage.MessageType.SYSTEM) {
+            if (message.messageType == com.example.travalms.model.GroupChatMessage.MessageType.SYSTEM) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -287,18 +348,24 @@ fun MessageBubble(
             } else {
                 // 普通消息
                 if (!isFromMe) {
-                    // 头像
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data("https://ui-avatars.com/api/?name=${message.senderNickname}&background=random")
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = "头像",
+                    // 获取头像用户名 - 简化提取逻辑
+                    val avatarUsername = remember(message.senderNickname) {
+                        message.senderNickname.substringBefore("@")
+                    }
+                    
+                    // 使用UserAvatar组件显示发送者头像
+                    Box(
                         modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
+                            .size(40.dp)
+                            .border(1.dp, Color.LightGray, CircleShape)
+                    ) {
+                        UserAvatar(
+                            username = avatarUsername,
+                            size = 40.dp,
+                            backgroundColor = Color(0xFF0288D1),
+                            showInitialsWhenLoading = true
+                        )
+                    }
                     
                     Spacer(modifier = Modifier.width(8.dp))
                 }
@@ -328,7 +395,7 @@ fun MessageBubble(
                     
                     // 时间
                     Text(
-                        text = message.timestamp.format(timeFormatter),
+                        text = timeFormatter.format(message.timestamp),
                         fontSize = 10.sp,
                         color = Color.Gray,
                         modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp)
@@ -338,18 +405,19 @@ fun MessageBubble(
                 if (isFromMe) {
                     Spacer(modifier = Modifier.width(8.dp))
                     
-                    // 自己的头像
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data("https://ui-avatars.com/api/?name=我&background=random")
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = "头像",
+                    // 使用UserAvatar组件显示自己的头像 - 简化用户名提取逻辑
+                    Box(
                         modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
+                            .size(40.dp)
+                            .border(1.dp, Color.LightGray, CircleShape)
+                    ) {
+                        UserAvatar(
+                            username = currentUsername,
+                            size = 40.dp,
+                            backgroundColor = Color(0xFF4CAF50),
+                            showInitialsWhenLoading = true
+                        )
+                    }
                 }
             }
         }
@@ -381,17 +449,27 @@ fun GroupMembersDialog(
                                 .padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current)
-                                    .data("https://ui-avatars.com/api/?name=${member.nickname}&background=random")
-                                    .crossfade(true)
-                                    .build(),
-                                contentDescription = "头像",
+                            // 使用UserAvatar组件显示成员头像
+                            val memberUsername = remember(member.nickname) {
+                                if (member.nickname.contains("@")) {
+                                    member.nickname.substringBefore("@")
+                                } else {
+                                    member.nickname
+                                }
+                            }
+                            
+                            Box(
                                 modifier = Modifier
                                     .size(40.dp)
-                                    .clip(CircleShape),
-                                contentScale = ContentScale.Crop
-                            )
+                                    .border(1.dp, Color.LightGray, CircleShape)
+                            ) {
+                                UserAvatar(
+                                    username = memberUsername,
+                                    size = 40.dp,
+                                    backgroundColor = Color(0xFF0288D1),
+                                    showInitialsWhenLoading = true
+                                )
+                            }
                             
                             Column(
                                 modifier = Modifier

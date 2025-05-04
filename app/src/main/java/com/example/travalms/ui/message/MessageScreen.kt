@@ -28,6 +28,7 @@ import com.example.travalms.data.model.ContactItem
 import com.example.travalms.data.remote.XMPPManager
 import com.example.travalms.data.remote.toBareJidOrNull
 import com.example.travalms.ui.components.LetterIndex
+import com.example.travalms.ui.components.UserAvatar
 import com.example.travalms.ui.navigation.AppRoutes
 import com.example.travalms.ui.theme.PrimaryColor
 import kotlinx.coroutines.CancellationException
@@ -71,6 +72,8 @@ import com.example.travalms.ui.screens.NotificationsScreen
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.DisposableEffect
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 消息列表屏幕
@@ -472,6 +475,13 @@ fun MessageScreen(
                 val currentUser = connection?.user?.asEntityBareJidString()?.substringBefore("@") ?: "未知用户"
                 Log.d("MessageScreen", "当前用户: $currentUser, 连接状态: ${connection?.isAuthenticated == true}")
                 
+                // 触发从服务器同步群聊列表
+                Log.d("MessageScreen", "正在从服务器同步群聊信息...")
+                XMPPManager.getInstance().groupChatManager.syncGroupChatsFromServer()
+                
+                // 短暂延迟，确保同步完成
+                kotlinx.coroutines.delay(1000)
+                
                 // 获取群聊列表
                 Log.d("MessageScreen", "开始获取群聊列表...")
                 val rooms = XMPPManager.getInstance().groupChatManager.getJoinedRooms()
@@ -590,7 +600,7 @@ fun MessageScreen(
         // 在群聊标签中只显示真实数据
         groups
     }
-
+    
     // 根据选中的选项卡显示不同的联系人列表
     val currentList = when (selectedTab) {
         0 -> messages
@@ -1128,54 +1138,7 @@ fun MessageScreen(
                             state = currentListState,
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            // Show loading or error state for directory
-                            if (selectedTab == 3) {
-                                // Add a header showing the number of users found
-                                if (companyDirectoryUsers.isNotEmpty()) {
-                                    Log.d("MessageScreen", "渲染公司黄页: 找到 ${companyDirectoryUsers.size} 个用户")
-                                    item {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Text(
-                                                "找到 ${companyDirectoryUsers.size} 个用户",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = Color.Gray
-                                            )
-                                        }
-                                        Divider()
-                                    }
-                                } else if (directoryLoadingState != null) {
-                                    // 仅当列表为空且有加载状态时，显示加载状态
-                                    Log.d("MessageScreen", "渲染公司黄页加载状态: $directoryLoadingState")
-                                    item {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(16.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Column(
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                                verticalArrangement = Arrangement.Center
-                                            ) {
-                                                if (directoryLoadingState?.startsWith("正在加载") == true) {
-                                                    CircularProgressIndicator(
-                                                        modifier = Modifier.size(24.dp),
-                                                        strokeWidth = 2.dp
-                                                    )
-                                                    Spacer(modifier = Modifier.height(8.dp))
-                                                }
-                                                Text(directoryLoadingState ?: "")
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+
 
                             // 群聊标签页加载状态
                             if (selectedTab == 2) {
@@ -1229,7 +1192,55 @@ fun MessageScreen(
                                                     color = Color.Gray,
                                                     fontSize = 16.sp
                                                 )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
 
+                            // Show loading or error state for directory
+                            if (selectedTab == 3) {
+                                // Add a header showing the number of users found
+                                if (companyDirectoryUsers.isNotEmpty()) {
+                                    Log.d("MessageScreen", "渲染公司黄页: 找到 ${companyDirectoryUsers.size} 个用户")
+                                    item {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                "找到 ${companyDirectoryUsers.size} 个用户",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.Gray
+                                            )
+                                        }
+                                        Divider()
+                                    }
+                                } else if (directoryLoadingState != null) {
+                                    // 仅当列表为空且有加载状态时，显示加载状态
+                                    Log.d("MessageScreen", "渲染公司黄页加载状态: $directoryLoadingState")
+                                    item {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.Center
+                                            ) {
+                                                if (directoryLoadingState?.startsWith("正在加载") == true) {
+                                                    CircularProgressIndicator(
+                                                        modifier = Modifier.size(24.dp),
+                                                        strokeWidth = 2.dp
+                                                    )
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                }
+                                                Text(directoryLoadingState ?: "")
                                             }
                                         }
                                     }
@@ -1238,7 +1249,7 @@ fun MessageScreen(
 
                             items(filteredList, key = { it.id }) { contact ->
                                 // 使用左滑删除组件包装ContactListItem
-                                if (selectedTab == 0) { // 只在消息列表中启用左滑删除
+                                if (selectedTab == 0) {
                                     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
                                     // 删除确认对话框
@@ -1486,9 +1497,14 @@ fun ContactListItem(
     onAddFriend: () -> Unit = {},
     onClick: () -> Unit
 ) {
-    // 获取当前选中的选项卡
-    // 在MessageScreen中作为参数传入
-    val isGroupTab = friend.status.contains("人在线") // 用于判断是否为群聊项
+    // 提取用户名（从JID或名称中）
+    val username = if (friend.jid != null && friend.jid.toString().contains("@")) {
+        friend.jid.toString().substringBefore("@")
+    } else if (friend.originalId?.contains("@") == true) {
+        friend.originalId.substringBefore("@")
+    } else {
+        friend.name // 如果无法从JID提取，则使用名称
+    }
 
     Row(
         modifier = Modifier
@@ -1497,25 +1513,12 @@ fun ContactListItem(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 头像
-        Box(
-            modifier = Modifier
-                .size(50.dp)
-                .clip(CircleShape)
-                .background(Color.LightGray),
-            contentAlignment = Alignment.Center
-        ) {
-            // 如果没有头像图片就显示首字母
-            val firstLetter = friend.name.firstOrNull()?.toString() ?: ""
-            Text(
-                text = firstLetter,
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            // 移除头像上的状态指示器
-        }
+        // 使用UserAvatar组件显示用户真实头像
+        UserAvatar(
+            username = username,
+            size = 50.dp,
+            backgroundColor = PrimaryColor.copy(alpha = 0.7f)
+        )
 
         // 名称和状态
         Column(
@@ -1761,6 +1764,7 @@ fun SwipeToDeleteContactItem(
                 // 消除圆角
                 shape = RoundedCornerShape(0.dp)
             ) {
+                // 使用更新后的ContactListItem组件，它现在会显示真实头像
                 ContactListItem(
                     friend = contact,
                     isCompanyTab = isCompanyTab,

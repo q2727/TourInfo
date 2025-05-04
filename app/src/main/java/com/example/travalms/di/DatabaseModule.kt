@@ -4,6 +4,7 @@ import android.content.Context
 import com.example.travalms.data.db.ChatDatabase
 import com.example.travalms.data.db.GroupChatDao
 import com.example.travalms.data.db.MessageDao
+import com.example.travalms.data.db.GroupChatMessageDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -41,5 +42,13 @@ object DatabaseModule {
     @Provides
     fun provideGroupChatDao(database: ChatDatabase): GroupChatDao {
         return database.groupChatDao()
+    }
+    
+    /**
+     * 提供群聊消息DAO
+     */
+    @Provides
+    fun provideGroupChatMessageDao(database: ChatDatabase): GroupChatMessageDao {
+        return database.groupChatMessageDao()
     }
 } 

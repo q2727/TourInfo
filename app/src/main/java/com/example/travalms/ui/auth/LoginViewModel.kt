@@ -63,18 +63,7 @@ class LoginViewModel : ViewModel() {
                     // 确保XMPPService正在运行
                     XMPPService.startService(context)
                     
-                    // 主动加入用户所在的群聊
-                    try {
-                        // 给一些时间让连接完全建立
-                        delay(1000)
-                        // 主动触发加入群聊
-                        context.startService(Intent(context, XMPPService::class.java).apply {
-                            action = XMPPService.ACTION_JOIN_GROUP_CHATS
-                        })
-                    } catch (e: Exception) {
-                        // 即使加入群聊操作失败，也不影响登录成功
-                        Log.e("LoginViewModel", "触发加入群聊失败: ${e.message}", e)
-                    }
+                    // 不再需要主动加入群聊，现在直接从服务器获取群聊
                 }
                 
                 _uiState.value = LoginUiState.Success // 修改为使用不带参数的Success

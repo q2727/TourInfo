@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.travalms.data.model.ChatMessage
@@ -32,6 +33,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.travalms.ui.viewmodels.ChatViewModel
+import com.example.travalms.ui.components.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -291,120 +293,112 @@ fun MessageItem(
     isFromCurrentUser: Boolean,
     timeFormatter: DateTimeFormatter
 ) {
-    // 调试日志，帮助追踪消息显示位置问题
-    LaunchedEffect(message.id) {
-        Log.d("MessageItem", 
-            "显示消息: ID=${message.id}, 内容=${message.content}, " +
-            "发送者=${message.senderId}, isFromCurrentUser=$isFromCurrentUser"
-        )
+    // 提取用户名（从JID中）
+    val username = remember {
+        if (message.senderId.contains("@")) {
+            message.senderId.substringBefore("@")
+        } else {
+            message.senderId
+        }
     }
 
-    // 是否显示技术细节(长按消息时)
-    var showDetails by remember { mutableStateOf(false) }
-
-    Column {
-        // 如果显示详情，添加一个调试信息框
-        if (showDetails) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(4.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFF0F0F0)
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(8.dp)
-                ) {
-                    Text("消息ID: ${message.id}", fontSize = 10.sp)
-                    Text("发送者: ${message.senderId}", fontSize = 10.sp)
-                    Text("接收者: ${message.recipientId ?: "未知"}", fontSize = 10.sp)
-                    Text("isFromCurrentUser: $isFromCurrentUser", fontSize = 10.sp)
-                }
-            }
-        }
-
+    // 消息整行布局
+    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+        // 每条消息的主体
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp)
-                .clickable(
-                    indication = null, // 移除点击效果
-                    interactionSource = remember { MutableInteractionSource() },
-                    onClick = { showDetails = !showDetails } // 切换显示详情
-                ),
-            horizontalArrangement = if (isFromCurrentUser) Arrangement.End else Arrangement.Start
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = if (isFromCurrentUser) Arrangement.End else Arrangement.Start,
+            verticalAlignment = Alignment.Bottom
         ) {
+            // 对方消息：左侧显示头像
+            if (!isFromCurrentUser) {
+                // 使用UserAvatar组件显示真实头像
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .border(1.dp, Color.LightGray, CircleShape)
+                ) {
+                    UserAvatar(
+                        username = username,
+                        size = 40.dp,
+                        backgroundColor = PrimaryColor,
+                        showInitialsWhenLoading = true
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+
+            // 消息内容和时间
             Column(
                 horizontalAlignment = if (isFromCurrentUser) Alignment.End else Alignment.Start
             ) {
-                // 发送者名称
-                if (!isFromCurrentUser && message.senderName != "我") {
+                // 对方消息：显示发送者名称
+                if (!isFromCurrentUser && message.senderName.isNotEmpty() && message.senderName != "我") {
                     Text(
                         text = message.senderName,
                         fontSize = 12.sp,
                         color = Color.Gray,
-                        modifier = Modifier.padding(start = 8.dp, bottom = 2.dp)
+                        modifier = Modifier.padding(bottom = 4.dp)
                     )
                 }
-                
+
                 // 消息气泡
-                Row(
-                    verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = if (isFromCurrentUser) Arrangement.End else Arrangement.Start,
-                    modifier = Modifier.fillMaxWidth()
+                Box(
+                    modifier = Modifier
+                        .widthIn(max = 260.dp)
+                        .clip(
+                            RoundedCornerShape(
+                                topStart = 12.dp,
+                                topEnd = 12.dp,
+                                bottomStart = if (isFromCurrentUser) 12.dp else 4.dp,
+                                bottomEnd = if (isFromCurrentUser) 4.dp else 12.dp
+                            )
+                        )
+                        .background(if (isFromCurrentUser) PrimaryColor else Color.White)
+                        .border(
+                            width = 1.dp,
+                            color = if (isFromCurrentUser) PrimaryColor else Color.LightGray,
+                            shape = RoundedCornerShape(
+                                topStart = 12.dp,
+                                topEnd = 12.dp,
+                                bottomStart = if (isFromCurrentUser) 12.dp else 4.dp,
+                                bottomEnd = if (isFromCurrentUser) 4.dp else 12.dp
+                            )
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
                 ) {
-                    if (isFromCurrentUser) {
-                        // 时间戳
-                        Text(
-                            text = timeFormatter.format(message.timestamp),
-                            fontSize = 10.sp,
-                            color = Color.Gray,
-                            modifier = Modifier.padding(end = 4.dp)
-                        )
-                    }
-                    
-                    // 消息内容
-                    Box(
-                        modifier = Modifier
-                            .widthIn(max = 280.dp)
-                            .clip(
-                                RoundedCornerShape(
-                                    topStart = 12.dp,
-                                    topEnd = 12.dp,
-                                    bottomStart = if (isFromCurrentUser) 12.dp else 4.dp,
-                                    bottomEnd = if (isFromCurrentUser) 4.dp else 12.dp
-                                )
-                            )
-                            .background(if (isFromCurrentUser) PrimaryColor else Color.White)
-                            .border(
-                                width = 1.dp,
-                                color = if (isFromCurrentUser) PrimaryColor else Color.LightGray,
-                                shape = RoundedCornerShape(
-                                    topStart = 12.dp,
-                                    topEnd = 12.dp,
-                                    bottomStart = if (isFromCurrentUser) 12.dp else 4.dp,
-                                    bottomEnd = if (isFromCurrentUser) 4.dp else 12.dp
-                                )
-                            )
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            text = message.content,
-                            color = if (isFromCurrentUser) Color.White else Color.Black,
-                            fontWeight = FontWeight.Normal
-                        )
-                    }
-                    
-                    if (!isFromCurrentUser) {
-                        // 时间戳
-                        Text(
-                            text = timeFormatter.format(message.timestamp),
-                            fontSize = 10.sp,
-                            color = Color.Gray,
-                            modifier = Modifier.padding(start = 4.dp)
-                        )
-                    }
+                    Text(
+                        text = message.content,
+                        color = if (isFromCurrentUser) Color.White else Color.Black
+                    )
+                }
+
+                // 时间戳
+                Text(
+                    text = timeFormatter.format(message.timestamp),
+                    fontSize = 10.sp,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+
+            // 自己的消息：右侧显示头像
+            if (isFromCurrentUser) {
+                Spacer(modifier = Modifier.width(8.dp))
+                // 使用UserAvatar组件显示真实头像
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .border(1.dp, Color.LightGray, CircleShape)
+                ) {
+                    UserAvatar(
+                        username = username,
+                        size = 40.dp,
+                        backgroundColor = Color(0xFF2196F3),
+                        showInitialsWhenLoading = true
+                    )
                 }
             }
         }

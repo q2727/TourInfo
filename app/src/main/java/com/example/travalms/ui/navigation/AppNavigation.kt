@@ -42,6 +42,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import com.example.travalms.data.remote.XMPPManager
 import kotlinx.coroutines.launch
+import com.example.travalms.ui.screens.EditProfileScreen
 
 // 定义应用中的路由路径
 object AppRoutes {
@@ -251,22 +252,12 @@ fun AppNavigation(
                 navController = navController
             )
         }
-        // Profile Edit Screen
+        
+        // 个人资料编辑页面
         composable(AppRoutes.PROFILE_EDIT) {
-            ProfileEditScreen(
-                onBackClick = { navController.popBackStack() },
-                onSaveClick = { updatedInfo ->
-                    // 处理保存个人资料的操作
-                    // 成功后返回上一页
-                    navController.popBackStack()
-                },
-                onBindCompanyClick = {
-                    navController.navigate(AppRoutes.COMPANY_BINDING)
-                },
-                onVerificationClick = {
-                    navController.navigate(AppRoutes.VERIFICATION)
-                }
-                // ProfileEditViewModel会通过viewModel()自动注入
+            EditProfileScreen(
+                navController = navController,
+                onBackClick = { navController.popBackStack() }
             )
         }
 

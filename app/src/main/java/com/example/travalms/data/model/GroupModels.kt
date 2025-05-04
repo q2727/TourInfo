@@ -54,7 +54,9 @@ data class GroupChatMessage(
     val content: String,
     val timestamp: LocalDateTime,
     val isFromMe: Boolean,
-    val messageType: MessageType = MessageType.NORMAL
+    val messageType: MessageType = MessageType.NORMAL,
+    val id: String,
+    val roomName: String
 ) {
     // 消息类型
     enum class MessageType {

@@ -1,6 +1,11 @@
 package com.example.travalms.ui.auth
 
+import android.app.Activity
+import android.net.Uri
+import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -21,6 +26,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.CircularProgressIndicator
+import com.example.travalms.utils.FileUtil
 
 // Sample data for provinces and cities (add more as needed)
 // In a real app, consider loading this from a resource file (e.g., JSON)
@@ -103,10 +109,52 @@ fun RegisterScreen(
     var provinceDropdownExpanded by remember { mutableStateOf(false) }
     var cityDropdownExpanded by remember { mutableStateOf(false) }
     
-    // File paths (in a real app, these would be set after upload)
-    var businessLicensePath by remember { mutableStateOf<String?>(null) }
-    var idCardFrontPath by remember { mutableStateOf<String?>(null) }
-    var idCardBackPath by remember { mutableStateOf<String?>(null) }
+    // File paths
+    var businessLicenseUri by remember { mutableStateOf<Uri?>(null) }
+    var idCardFrontUri by remember { mutableStateOf<Uri?>(null) }
+    var idCardBackUri by remember { mutableStateOf<Uri?>(null) }
+    var avatarUri by remember { mutableStateOf<Uri?>(null) }
+    
+    // 创建文件选择器
+    val businessLicenseLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri -> 
+            uri?.let { 
+                businessLicenseUri = it 
+                Log.d("RegisterScreen", "已选择营业执照文件: $it")
+            }
+        }
+    )
+    
+    val idCardFrontLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri -> 
+            uri?.let { 
+                idCardFrontUri = it 
+                Log.d("RegisterScreen", "已选择身份证正面文件: $it")
+            }
+        }
+    )
+    
+    val idCardBackLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri -> 
+            uri?.let { 
+                idCardBackUri = it 
+                Log.d("RegisterScreen", "已选择身份证背面文件: $it")
+            }
+        }
+    )
+    
+    val avatarLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri -> 
+            uri?.let { 
+                avatarUri = it 
+                Log.d("RegisterScreen", "已选择头像文件: $it")
+            }
+        }
+    )
     
     val uiState by registerViewModel.uiState.collectAsState()
 
@@ -334,39 +382,65 @@ fun RegisterScreen(
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     
+                    // ============== 个人头像上传 ==============
+                    Text(
+                        text = "个人头像",
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    // 头像选择按钮
+                    Button(
+                        onClick = { avatarLauncher.launch("image/*") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.AccountCircle, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(if (avatarUri != null) "已选择头像" else "上传个人头像")
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    // ============== 企业认证资料 ==============
+                    Text(
+                        text = "企业认证资料",
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        fontWeight = FontWeight.Bold
+                    )
+                    
                     // Business License Upload Button
                     Button(
-                        onClick = { /* Implement upload logic */ },
+                        onClick = { businessLicenseLauncher.launch("image/*") },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(Icons.Default.KeyboardArrowUp, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("上传营业执照")
+                        Text(if (businessLicenseUri != null) "已选择营业执照" else "上传营业执照")
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     // ID Card Front Upload Button
                     Button(
-                        onClick = { /* Implement upload logic */ },
+                        onClick = { idCardFrontLauncher.launch("image/*") },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(Icons.Default.KeyboardArrowUp, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("上传身份证正面")
+                        Text(if (idCardFrontUri != null) "已选择身份证正面" else "上传身份证正面")
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     
                     // ID Card Back Upload Button
                     Button(
-                        onClick = { /* Implement upload logic */ },
+                        onClick = { idCardBackLauncher.launch("image/*") },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(Icons.Default.KeyboardArrowUp, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("上传身份证反面")
+                        Text(if (idCardBackUri != null) "已选择身份证反面" else "上传身份证反面")
                     }
                 }
             }
@@ -379,13 +453,43 @@ fun RegisterScreen(
                     
                     if (password != confirmPassword) {
                         Toast.makeText(context, "两次输入的密码不一致", Toast.LENGTH_SHORT).show()
+                        Log.e("RegisterScreen", "注册失败: 两次输入的密码不一致")
                     } else if (companyName.isBlank()) {
                         Toast.makeText(context, "公司名称不能为空", Toast.LENGTH_SHORT).show()
+                        Log.e("RegisterScreen", "注册失败: 公司名称不能为空")
                     } else if (mobileNumber.isBlank()) {
                         Toast.makeText(context, "手机号不能为空", Toast.LENGTH_SHORT).show()
+                        Log.e("RegisterScreen", "注册失败: 手机号不能为空")
                     } else if (currentProvince == null || currentCity == null) {
                         Toast.makeText(context, "请选择所在地", Toast.LENGTH_SHORT).show()
+                        Log.e("RegisterScreen", "注册失败: 请选择所在地")
                     } else {
+                        Log.d("RegisterScreen", "开始进行文件处理: 头像=${avatarUri}, 营业执照=${businessLicenseUri}, 身份证正面=${idCardFrontUri}, 身份证背面=${idCardBackUri}")
+                        
+                        // 将Uri转换为本地文件路径
+                        val businessLicensePath = businessLicenseUri?.let { 
+                            val path = FileUtil.getRealPathFromUri(context, it)
+                            Log.d("RegisterScreen", "营业执照URI转换为本地路径: $path")
+                            path
+                        }
+                        val idCardFrontPath = idCardFrontUri?.let {
+                            val path = FileUtil.getRealPathFromUri(context, it)
+                            Log.d("RegisterScreen", "身份证正面URI转换为本地路径: $path")
+                            path
+                        }
+                        val idCardBackPath = idCardBackUri?.let {
+                            val path = FileUtil.getRealPathFromUri(context, it)
+                            Log.d("RegisterScreen", "身份证背面URI转换为本地路径: $path")
+                            path
+                        }
+                        
+                        val avatarPath = avatarUri?.let {
+                            val path = FileUtil.getRealPathFromUri(context, it)
+                            Log.d("RegisterScreen", "头像URI转换为本地路径: $path")
+                            path
+                        }
+                        
+                        Log.d("RegisterScreen", "调用注册ViewModel: username=$username, company=$companyName, province=$currentProvince, city=$currentCity")
                         registerViewModel.performRegister(
                             username = username,
                             password = password,
@@ -393,11 +497,12 @@ fun RegisterScreen(
                             email = email.takeIf { it.isNotBlank() },
                             companyName = companyName,
                             mobileNumber = mobileNumber,
-                            province = currentProvince, // Pass selected province
-                            city = currentCity,       // Pass selected city
+                            province = currentProvince,
+                            city = currentCity,
                             businessLicensePath = businessLicensePath,
                             idCardFrontPath = idCardFrontPath,
-                            idCardBackPath = idCardBackPath
+                            idCardBackPath = idCardBackPath,
+                            avatarPath = avatarPath
                         )
                     }
                 },

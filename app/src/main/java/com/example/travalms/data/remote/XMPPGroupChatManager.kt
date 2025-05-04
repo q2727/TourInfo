@@ -1,7 +1,7 @@
 package com.example.travalms.data.remote
 
 import android.util.Log
-import com.example.travalms.data.model.GroupChatMessage
+import com.example.travalms.model.GroupChatMessage
 import com.example.travalms.data.model.GroupMember
 import com.example.travalms.data.model.GroupRoom
 import kotlinx.coroutines.Dispatchers
@@ -12,28 +12,35 @@ import org.jivesoftware.smack.SmackException
 import org.jivesoftware.smack.XMPPConnection
 import org.jivesoftware.smack.packet.Message
 import org.jivesoftware.smackx.disco.ServiceDiscoveryManager
-import org.jivesoftware.smackx.muc.MultiUserChat
 import org.jivesoftware.smackx.muc.MultiUserChatManager
-import org.jivesoftware.smackx.xdata.form.FillableForm
-import org.jivesoftware.smackx.xdata.form.Form
 import org.jxmpp.jid.EntityBareJid
-import org.jxmpp.jid.Jid
 import org.jxmpp.jid.impl.JidCreate
 import org.jxmpp.jid.parts.Resourcepart
 import java.time.LocalDateTime
-import java.util.Collections
 import org.jivesoftware.smack.SmackConfiguration
 import com.example.travalms.data.model.ChatInvitation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import org.jivesoftware.smack.packet.Presence
 import org.jivesoftware.smackx.muc.RoomInfo
 import org.jivesoftware.smack.XMPPException
-import org.jivesoftware.smack.chat2.ChatManager
-import org.jivesoftware.smack.chat2.IncomingChatMessageListener
 import org.jivesoftware.smackx.muc.InvitationListener
+import java.util.UUID
+
+/**
+ * Chat invitation data model (define directly in this file for simplicity)
+ */
+data class ChatInvitation(
+    val id: String = UUID.randomUUID().toString(),
+    val roomJid: String,
+    val roomName: String,
+    val senderJid: String,
+    val reason: String,
+    val timestamp: LocalDateTime = LocalDateTime.now()
+) {
+    val shortDescription: String get() = "$roomName from $senderJid"
+}
 
 /**
  * XMPPGroupChatManager - 专门负责XMPP群聊(MUC)功能的类
@@ -50,7 +57,7 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
     private var _mucManager: MultiUserChatManager? = null
     val mucManager: MultiUserChatManager? get() = _mucManager
 
-    // 群聊消息Flow
+    // 群聊消息Flow - Using correct model type com.example.travalms.model.GroupChatMessage
     private val _groupMessageFlow = MutableSharedFlow<GroupChatMessage>(extraBufferCapacity = 64)
     val groupMessageFlow: SharedFlow<GroupChatMessage> = _groupMessageFlow
 
@@ -75,6 +82,10 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
     fun setOnJoinRoomListener(listener: (GroupRoom) -> Unit) {
         onJoinRoomListener = listener
     }
+
+    // 添加一个集合来存储最近处理过的消息ID，防止重复处理
+    private val recentlyProcessedMessageIds = mutableSetOf<String>()
+    private val MAX_RECENT_IDS = 100 // 限制集合大小
 
     init {
         // 添加连接状态监听
@@ -149,8 +160,25 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
             if (stanza is Message) {
                 val from = stanza.from.toString()
                 // 只处理群聊消息（来自conference域的消息）
-                if (from.contains("conference.")) {
-                    processGroupChatMessage(stanza)
+                if (from.contains("conference.") && 
+                    stanza.type == Message.Type.groupchat && 
+                    stanza.body != null && 
+                    stanza.body.isNotEmpty()) {
+                    
+                    // 避免处理自己发出的回显消息
+                    val currentResource = try {
+                        xmppManager.currentConnection?.user?.getResourceOrNull()?.toString() ?: ""
+                    } catch (e: Exception) {
+                        xmppManager.currentConnection?.user?.toString()?.substringAfter("/", "") ?: ""
+                    }
+                    
+                    val isEchoMessage = from.endsWith("/$currentResource")
+                    
+                    if (!isEchoMessage) {
+                        processGroupChatMessage(stanza)
+                    } else {
+                        Log.d(TAG, "跳过自己发出的回显消息: $from")
+                    }
                 }
             }
         }
@@ -165,41 +193,80 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
      */
     private fun processGroupChatMessage(message: Message) {
         try {
+            // 检查消息ID，如果没有则生成一个
+            val messageId = message.stanzaId ?: UUID.randomUUID().toString()
+            
+            // 检查是否是重复消息
+            synchronized(recentlyProcessedMessageIds) {
+                // 如果是已处理过的消息ID，直接返回
+                if (recentlyProcessedMessageIds.contains(messageId)) {
+                    Log.d(TAG, "跳过重复消息处理: ID=$messageId")
+                    return
+                }
+                
+                // 添加到最近处理的消息ID集合
+                recentlyProcessedMessageIds.add(messageId)
+                
+                // 限制集合大小，移除最早加入的ID
+                if (recentlyProcessedMessageIds.size > MAX_RECENT_IDS) {
+                    recentlyProcessedMessageIds.iterator().let {
+                        it.next()
+                        it.remove()
+                    }
+                }
+            }
+            
             val fromJid = message.from
-            val mucRoom = fromJid.toString().substringBefore("/")
+            val roomJidStr = fromJid.toString().substringBefore("/")
             val senderNickname = fromJid.toString().substringAfter("/", "")
 
-            // 判断是否是自己发送的消息，使用不含资源标识符的基本用户名
+            // 判断是否是自己发送的消息
             val currentUserJid = xmppManager.currentConnection?.user?.asEntityBareJidString() ?: ""
             val currentUserName = currentUserJid.substringBefore('@')
+            
+            // 精确判断消息是否来自当前用户
+            val isFromMe = (fromJid.toString().contains(currentUserJid)) || 
+                          (senderNickname == currentUserName && !currentUserName.isNullOrEmpty())
 
-            // 消息发送者可能是用户的完整JID或者只是昵称
-            val isFromMe = if (senderNickname.contains('@')) {
-                // 如果发送者包含@，说明是JID，比较不含资源的部分
-                senderNickname.substringBefore('/').contains(currentUserName, ignoreCase = true)
-            } else {
-                // 否则直接比较昵称
-                senderNickname == currentUserName
-            }
+            // 尝试获取房间名称
+            val roomName = getRoomNameFromJid(roomJidStr) 
 
-            Log.d(TAG, "处理群聊消息: room=$mucRoom, sender=$senderNickname, currentUser=$currentUserName, isFromMe=$isFromMe")
+            Log.d(TAG, "处理群聊消息: 房间=$roomJidStr, 发送者=$senderNickname, 完整JID=$fromJid, 是否自己发送=$isFromMe")
 
-            // 创建群聊消息对象
+            // 创建GroupChatMessage对象
             val groupMessage = GroupChatMessage(
-                roomJid = mucRoom,
+                id = messageId,
+                roomJid = roomJidStr,
+                roomName = roomName,
                 senderJid = fromJid.toString(),
                 senderNickname = senderNickname,
                 content = message.body ?: "",
                 timestamp = LocalDateTime.now(),
-                isFromMe = isFromMe
+                isFromMe = isFromMe,
+                messageType = GroupChatMessage.MessageType.TEXT
             )
 
             // 发送到Flow
-            _groupMessageFlow.tryEmit(groupMessage)
+            val emitted = _groupMessageFlow.tryEmit(groupMessage)
+            if (!emitted) {
+                Log.w(TAG, "无法发送群聊消息到Flow: 房间=$roomJidStr (缓冲区已满或无接收者)")
+            }
 
-            Log.d(TAG, "处理群聊消息: room=$mucRoom, sender=$senderNickname, body=${message.body}")
+            Log.d(TAG, "已发送群聊消息: 房间=$roomJidStr, 发送者=$senderNickname, 内容=${message.body}, ID=${groupMessage.id}")
         } catch (e: Exception) {
-            Log.e(TAG, "处理群聊消息异常", e)
+            Log.e(TAG, "处理群聊消息时出错", e)
+        }
+    }
+
+    // Helper function to get room name (can be cached or improved)
+    private fun getRoomNameFromJid(roomJidStr: String): String {
+        return try {
+            val jid = JidCreate.entityBareFrom(roomJidStr)
+            // Placeholder: Fetch actual name from cache or server if needed
+            jid.localpart.toString().replace("_", " ") // Default based on JID localpart
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to parse room JID for name: $roomJidStr", e)
+            roomJidStr // Fallback to full JID string
         }
     }
 
@@ -854,7 +921,14 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
 
                 occupants.forEach { occupantJid ->
                     try {
-                        val nickname = occupantJid.resourceOrEmpty.toString()
+                        // 修复获取nickname的方式，使用安全方式获取resource部分
+                        val nickname = try {
+                            // 尝试获取resource部分
+                            occupantJid.getResourceOrNull()?.toString() ?: occupantJid.toString().substringAfter("/", "")
+                        } catch (e: Exception) {
+                            // 如果无法获取resource部分，则使用整个JID的字符串表示
+                            occupantJid.toString().substringAfter("/", "")
+                        }
 
                         // 如果昵称为空，则跳过
                         if (nickname.isEmpty()) {
@@ -1310,6 +1384,49 @@ class XMPPGroupChatManager(private val xmppManager: XMPPManager) {
         // _groupMessageFlow.resetReplayCache() // If it's a SharedFlow with replay
 
         Log.d(TAG, "XMPPGroupChatManager cleanup complete.")
+    }
+
+    /**
+     * 从服务器同步群聊信息
+     * 通过XMPPServiceLocator获取GroupChatJoinHandler实例并调用其同步方法
+     */
+    fun syncGroupChatsFromServer() {
+        try {
+            // 检查连接状态
+            if (xmppManager.currentConnection?.isAuthenticated != true) {
+                Log.e(TAG, "同步群聊失败：XMPP未连接或未认证")
+                return
+            }
+
+            Log.d(TAG, "开始从服务器同步群聊...")
+            
+            // 通过XMPPServiceLocator获取GroupChatJoinHandler实例
+            val serviceLocator = XMPPServiceLocator.getInstance()
+            Log.d(TAG, "获取到XMPPServiceLocator实例: $serviceLocator")
+            
+            val groupChatJoinHandler = serviceLocator.groupChatJoinHandler
+            Log.d(TAG, "从XMPPServiceLocator获取到GroupChatJoinHandler实例: $groupChatJoinHandler")
+            
+            if (groupChatJoinHandler != null) {
+                Log.d(TAG, "调用GroupChatJoinHandler.syncGroupChatsFromServer()...")
+                groupChatJoinHandler.syncGroupChatsFromServer()
+                Log.d(TAG, "GroupChatJoinHandler.syncGroupChatsFromServer()调用完成")
+            } else {
+                Log.e(TAG, "无法获取GroupChatJoinHandler实例，请检查依赖注入是否正常工作")
+                
+                // 尝试通过反射方式从Hilt组件中获取实例
+                try {
+                    Log.d(TAG, "尝试通过其他方式获取GroupChatJoinHandler...")
+                    // 记录包含关键类名称的所有加载的类，帮助调试
+                    val loadedClasses = Class.forName("com.example.travalms.data.remote.GroupChatJoinHandler")
+                    Log.d(TAG, "找到GroupChatJoinHandler类: $loadedClasses")
+                } catch (e: Exception) {
+                    Log.e(TAG, "尝试获取GroupChatJoinHandler类信息失败", e)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "同步群聊异常", e)
+        }
     }
 
 }
