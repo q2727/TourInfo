@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.travalms.data.api.NetworkModule.userApiService
 import com.example.travalms.data.remote.XMPPManager
 import com.example.travalms.data.remote.PubSubNotification
 import com.example.travalms.data.repository.TailOrderRepository
@@ -57,6 +58,9 @@ class TailListViewModel(
         
         // 监听新的尾单通知
         monitorNewTailLists()
+        
+        // 将实例存储到伴生对象
+        instance = this
     }
     
     /**
@@ -195,6 +199,10 @@ class TailListViewModel(
                 return null
             }
             
+            // 获取发布者JID
+            val publisherJid = taillistElement.select("publisher").firstOrNull()?.text() ?: ""
+            Log.d(TAG, "获取到发布者JID: $publisherJid")
+            
             // 尝试获取content元素
             val contentElement = taillistElement.select("content").firstOrNull()
             
@@ -202,10 +210,10 @@ class TailListViewModel(
             if (contentElement != null && contentElement.hasAttr("type") && contentElement.attr("type") == "application/json") {
                 // 如果有content且类型为JSON，解析完整内容
                 val jsonText = contentElement.text()
-                return parseFullTailOrder(itemId, notification.nodeId, jsonText)
+                return parseFullTailOrder(itemId, notification.nodeId, jsonText, publisherJid)
             } else {
                 // 否则，尝试解析简化版本
-                return parseSimpleTailOrder(itemId, notification.nodeId, taillistElement)
+                return parseSimpleTailOrder(itemId, notification.nodeId, taillistElement, publisherJid)
             }
         } catch (e: Exception) {
             Log.e(TAG, "解析尾单通知失败", e)
@@ -216,7 +224,7 @@ class TailListViewModel(
     /**
      * 解析完整版尾单（从JSON）
      */
-    private fun parseFullTailOrder(itemId: String, nodeId: String, jsonText: String): TailOrder? {
+    private fun parseFullTailOrder(itemId: String, nodeId: String, jsonText: String, publisherJid: String = ""): TailOrder? {
         try {
             val json = JSONObject(jsonText)
             
@@ -230,6 +238,9 @@ class TailListViewModel(
             val tourGuide = json.optString("tourGuide", "")
             val location = json.optString("location", "")
             val company = json.optString("company", "未知公司")
+            
+            // 如果JSON中有publisherJid，优先使用JSON中的值
+            val finalPublisherJid = json.optString("publisherJid", publisherJid)
             
             // 解析日期
             val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -284,21 +295,29 @@ class TailListViewModel(
             // 生成随机ID，确保唯一性
             val uniqueId = UUID.fromString(itemId).hashCode()
             
+            // 获取发布者JID的用户名部分
+            val publisherUsername = if (finalPublisherJid.contains("@")) {
+                finalPublisherJid.substringBefore("@")
+            } else {
+                finalPublisherJid
+            }
+            
             // 创建尾单对象
             val tailOrder = TailOrder(
                 id = uniqueId,
                 title = title,
                 company = company,
                 companyId = "company_${abs(company.hashCode())}",
-                contactPerson = contactPerson,
-                contactPersonId = "person_${abs(contactPerson.hashCode())}",
+                contactPerson = contactPerson.ifEmpty { publisherUsername },
+                contactPersonId = finalPublisherJid,  // 使用完整JID作为联系人ID
                 contactPhone = contactPhone,
                 price = "¥${price.toInt()}",
                 remainingDays = diffDays.toString(),
                 remainingHours = String.format("%d:%02d", remainingHours, Random.nextInt(60)),
                 content = if (contentList.isNotEmpty()) contentList else listOf(description),
                 summary = description,
-                isFavorite = _state.value.favoriteOrderIds.contains(itemId)
+                isFavorite = _state.value.favoriteOrderIds.contains(itemId),
+                publisherJid = finalPublisherJid  // 添加发布者JID
             )
             
             // 添加到缓存
@@ -314,7 +333,7 @@ class TailListViewModel(
     /**
      * 解析简化版尾单（从XML）
      */
-    private fun parseSimpleTailOrder(itemId: String, nodeId: String, element: org.jsoup.nodes.Element): TailOrder? {
+    private fun parseSimpleTailOrder(itemId: String, nodeId: String, element: org.jsoup.nodes.Element, publisherJid: String = ""): TailOrder? {
         try {
             // 提取基本信息
             val title = element.select("title").firstOrNull()?.text() ?: "未知标题"
@@ -323,21 +342,29 @@ class TailListViewModel(
             // 生成随机ID
             val uniqueId = UUID.fromString(itemId).hashCode()
             
+            // 获取发布者JID的用户名部分
+            val publisherUsername = if (publisherJid.contains("@")) {
+                publisherJid.substringBefore("@")
+            } else {
+                publisherJid
+            }
+            
             // 创建尾单对象，使用默认值
             val tailOrder = TailOrder(
                 id = uniqueId,
                 title = title,
                 company = "来自节点: $nodeId",
                 companyId = "node_$nodeId",
-                contactPerson = "未知联系人",
-                contactPersonId = "unknown",
+                contactPerson = publisherUsername.ifEmpty { "未知联系人" },
+                contactPersonId = publisherJid,  // 使用完整JID作为联系人ID
                 contactPhone = "",
                 price = "¥${price.toInt()}",
                 remainingDays = "3", // 默认3天
                 remainingHours = "0:00",
                 content = listOf("此尾单没有详细描述"),
                 summary = "此尾单没有详细描述",
-                isFavorite = _state.value.favoriteOrderIds.contains(itemId)
+                isFavorite = _state.value.favoriteOrderIds.contains(itemId),
+                publisherJid = publisherJid  // 添加发布者JID
             )
             
             // 添加到缓存
@@ -396,17 +423,44 @@ class TailListViewModel(
     }
     
     /**
+     * 获取用户信息
+     */
+    suspend fun getUserInfo(username: String): Map<String, Any>? {
+        return try {
+            val response = userApiService.getUserInfo(username)
+            if (response.isSuccessful) {
+                response.body()
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+    
+    /**
      * ViewModel工厂类，用于创建ViewModel的实例
      */
     class Factory : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(TailListViewModel::class.java)) {
-                return TailListViewModel(
-                    repository = TailOrderRepositoryImpl.getInstance()
-                ) as T
-            }
+            return TailListViewModel(
+                repository = TailOrderRepositoryImpl.getInstance()
+            ) as T
+        }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
+    }
+    
+    companion object {
+        @Volatile
+        private var instance: TailListViewModel? = null
+        
+        fun getInstance(): TailListViewModel {
+
+            return instance ?: throw IllegalStateException("TailListViewModel尚未初始化")
+        }
+
     }
 } 

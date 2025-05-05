@@ -28,7 +28,7 @@ import com.example.travalms.ui.theme.PrimaryColor
 fun PostDetailScreen(
     postId: String,
     onBackClick: () -> Unit,
-    onChatClick: () -> Unit,
+    onChatClick: (String) -> Unit,
     onCompanyClick: (String) -> Unit,
     onPersonClick: (String) -> Unit
 ) {
@@ -72,7 +72,7 @@ fun PostDetailScreen(
         bottomBar = {
             // 底部咨询按钮
             Button(
-                onClick = onChatClick,
+                onClick = { onChatClick("publisher123") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)

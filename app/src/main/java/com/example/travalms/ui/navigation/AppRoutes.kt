@@ -23,4 +23,6 @@ object AppRoutes {
     const val TAIL_LIST = "tail_list"
     const val GROUP_LIST = "group_list"
     const val GROUP_CHAT = "group_chat/{roomJid}"
+    const val TAIL_ORDER_DETAIL = "tail_order_detail/{tailOrderId}"
+    const val FRIEND_DETAIL = "friend_detail/{username}"
 } 

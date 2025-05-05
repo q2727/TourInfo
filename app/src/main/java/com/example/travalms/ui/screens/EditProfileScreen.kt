@@ -32,6 +32,7 @@ import com.example.travalms.data.api.NetworkModule
 import com.example.travalms.ui.theme.PrimaryColor
 import com.example.travalms.ui.theme.BackgroundColor
 import kotlinx.coroutines.launch
+import com.example.travalms.config.AppConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -359,11 +360,13 @@ fun ImageCard(
     }
 }
 
-// 处理图片URL，将localhost替换为实际IP
+/**
+ * 处理图片URL，将localhost替换为实际IP
+ */
 private fun processImageUrl(url: String?): String? {
     if (url == null || url.isEmpty()) return null
     return if (url.contains("localhost")) {
-        url.replace("localhost", "192.168.100.6")
+        url.replace("localhost", AppConfig.AVATAR_SERVER_ADDRESS)
     } else {
         url
     }

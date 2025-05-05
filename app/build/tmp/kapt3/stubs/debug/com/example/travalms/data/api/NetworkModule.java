@@ -1,6 +1,7 @@
 package com.example.travalms.data.api;
 
 import android.util.Log;
+import com.example.travalms.config.AppConfig;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import okhttp3.Interceptor;
@@ -18,16 +19,23 @@ import java.util.concurrent.TimeUnit;
 /**
  * 提供网络相关的单例实例
  */
-@kotlin.Metadata(mv = {1, 8, 0}, k = 1, d1 = {"\u0000<\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0002\b\u0002\n\u0002\u0010\u000e\n\u0002\b\u0002\n\u0002\u0010\t\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0018\u0002\n\u0002\b\u0002\b\u00c7\u0002\u0018\u00002\u00020\u0001:\u0001\u0014B\u0007\b\u0002\u00a2\u0006\u0002\u0010\u0002J\u0006\u0010\b\u001a\u00020\tJ\b\u0010\n\u001a\u00020\u000bH\u0002J\b\u0010\f\u001a\u00020\rH\u0002J\u0018\u0010\u000e\u001a\u00020\u000f2\u0006\u0010\u0010\u001a\u00020\r2\u0006\u0010\u0011\u001a\u00020\u000bH\u0002J\u0006\u0010\u0012\u001a\u00020\u0013R\u000e\u0010\u0003\u001a\u00020\u0004X\u0082T\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u0005\u001a\u00020\u0004X\u0082T\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u0006\u001a\u00020\u0007X\u0082T\u00a2\u0006\u0002\n\u0000\u00a8\u0006\u0015"}, d2 = {"Lcom/example/travalms/data/api/NetworkModule;", "", "()V", "BASE_URL", "", "TAG", "TIMEOUT", "", "provideGroupChatApiService", "Lcom/example/travalms/data/api/GroupChatApiService;", "provideGson", "Lcom/google/gson/Gson;", "provideOkHttpClient", "Lokhttp3/OkHttpClient;", "provideRetrofit", "Lretrofit2/Retrofit;", "okHttpClient", "gson", "provideUserApiService", "Lcom/example/travalms/data/api/UserApiService;", "LoggingInterceptor", "app_debug"})
+@kotlin.Metadata(mv = {1, 8, 0}, k = 1, d1 = {"\u0000<\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0002\b\u0002\n\u0002\u0010\u000e\n\u0002\b\u0002\n\u0002\u0010\t\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0005\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0005\b\u00c7\u0002\u0018\u00002\u00020\u0001:\u0001\u0019B\u0007\b\u0002\u00a2\u0006\u0002\u0010\u0002J\u0006\u0010\u000e\u001a\u00020\u000fJ\b\u0010\u0010\u001a\u00020\u0011H\u0002J\b\u0010\u0012\u001a\u00020\u0013H\u0002J\u0018\u0010\u0014\u001a\u00020\u00152\u0006\u0010\u0016\u001a\u00020\u00132\u0006\u0010\u0017\u001a\u00020\u0011H\u0002J\u0006\u0010\u0018\u001a\u00020\tR\u000e\u0010\u0003\u001a\u00020\u0004X\u0082T\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u0005\u001a\u00020\u0004X\u0082T\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u0006\u001a\u00020\u0007X\u0082T\u00a2\u0006\u0002\n\u0000R\u001b\u0010\b\u001a\u00020\t8FX\u0086\u0084\u0002\u00a2\u0006\f\n\u0004\b\f\u0010\r\u001a\u0004\b\n\u0010\u000b\u00a8\u0006\u001a"}, d2 = {"Lcom/example/travalms/data/api/NetworkModule;", "", "()V", "BASE_URL", "", "TAG", "TIMEOUT", "", "userApiService", "Lcom/example/travalms/data/api/UserApiService;", "getUserApiService", "()Lcom/example/travalms/data/api/UserApiService;", "userApiService$delegate", "Lkotlin/Lazy;", "provideGroupChatApiService", "Lcom/example/travalms/data/api/GroupChatApiService;", "provideGson", "Lcom/google/gson/Gson;", "provideOkHttpClient", "Lokhttp3/OkHttpClient;", "provideRetrofit", "Lretrofit2/Retrofit;", "okHttpClient", "gson", "provideUserApiService", "LoggingInterceptor", "app_debug"})
 public final class NetworkModule {
     @org.jetbrains.annotations.NotNull
     public static final com.example.travalms.data.api.NetworkModule INSTANCE = null;
-    private static final java.lang.String BASE_URL = "http://192.168.100.6:8080/";
+    private static final java.lang.String BASE_URL = "http://192.168.1.3:8080/";
     private static final long TIMEOUT = 60L;
     private static final java.lang.String TAG = "NetworkAPI";
+    @org.jetbrains.annotations.NotNull
+    private static final kotlin.Lazy userApiService$delegate = null;
     
     private NetworkModule() {
         super();
+    }
+    
+    @org.jetbrains.annotations.NotNull
+    public final com.example.travalms.data.api.UserApiService getUserApiService() {
+        return null;
     }
     
     /**

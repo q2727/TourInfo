@@ -31,6 +31,13 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import com.example.travalms.ui.navigation.AppRoutes
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -43,13 +50,14 @@ fun TailListScreen(
     onCompanyClick: (String) -> Unit,
     onContactClick: (String) -> Unit,
     onPersonClick: (String) -> Unit,
-    onReportItem: (Int, String) -> Unit,
-    onDeleteItem: (Int) -> Unit,
+    onReportItem: (String, String) -> Unit,
+    onDeleteItem: (String) -> Unit,
     navController: NavController,
     viewModel: TailListViewModel = viewModel(factory = TailListViewModel.Factory())
 ) {
     val state by viewModel.state.collectAsState()
     val refreshState = rememberPullRefreshState(state.isLoading, { viewModel.refreshTailLists() })
+    val context = LocalContext.current
 
     // 添加状态跟踪当前选择的标签
     var selectedTab by remember { mutableStateOf(0) }
@@ -223,17 +231,42 @@ fun TailListScreen(
                         items(displayedTailOrders) { tailOrder ->
                             TailOrderItem(
                                 tailOrder = tailOrder,
-                                onClick = { onTailOrderClick(tailOrder) },
-                                onCompanyClick = { onCompanyClick(tailOrder.companyId) },
-                                onContactClick = { onContactClick(tailOrder.contactPhone) },
-                                onPersonClick = { onPersonClick(tailOrder.contactPersonId) },
-                                onReportItem = { reason -> onReportItem(tailOrder.id, reason) },
-                                onDeleteItem = {
-                                    onDeleteItem(tailOrder.id)
+                                onClick = {
+                                    // 添加日志记录尾单信息
+                                    android.util.Log.d("TailListScreen", "点击尾单: ID=${tailOrder.id}, 标题=${tailOrder.title}, 发布者JID=${tailOrder.publisherJid}")
+                                    // 使用传入的回调函数处理尾单点击
+                                    onTailOrderClick(tailOrder)
                                 },
+                                onCompanyClick = { onCompanyClick(tailOrder.companyId) },
+                                onContactClick = {
+                                    // 获取发布者信息并显示拨号对话框
+                                    viewModel.viewModelScope.launch {
+                                        val username = tailOrder.publisherJid.substringBefore("@")
+                                        val publisherInfo = viewModel.getUserInfo(username)
+                                        val phoneNumber = publisherInfo?.get("phoneNumber")?.toString()
+                                        val publisherName = publisherInfo?.get("nickname")?.toString() 
+                                            ?: publisherInfo?.get("username")?.toString()
+                                            ?: "未知用户"
+
+                                        if (phoneNumber != null && phoneNumber.isNotEmpty()) {
+                                            val intent = Intent(Intent.ACTION_DIAL).apply {
+                                                data = Uri.parse("tel:${phoneNumber}")
+                                            }
+                                            context.startActivity(intent)
+                                        } else {
+                                            // 如果没有电话号码，可以显示一个Toast提示
+                                            Toast.makeText(context, "${publisherName}未设置联系电话", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                onPersonClick = { onPersonClick(tailOrder.contactPersonId) },
+                                onReportItem = { reason -> onReportItem(tailOrder.id.toString(), reason) },
+                                onDeleteItem = { onDeleteItem(tailOrder.id.toString()) },
                                 onFavoriteClick = { isFavorite ->
                                     viewModel.toggleFavorite(tailOrder.id)
-                                }
+                                },
+                                navController = navController,
+                                viewModel = viewModel
                             )
                         }
                     }
@@ -276,12 +309,25 @@ fun TailOrderItem(
     onPersonClick: () -> Unit,
     onReportItem: (String) -> Unit,
     onDeleteItem: () -> Unit,
-    onFavoriteClick: (Boolean) -> Unit
+    onFavoriteClick: (Boolean) -> Unit,
+    navController: NavController,
+    viewModel: TailListViewModel
 ) {
     var isFavorite by remember { mutableStateOf(tailOrder.isFavorite) }
     var showMenu by remember { mutableStateOf(false) }
     var showReportDialog by remember { mutableStateOf(false) }
     var reportReason by remember { mutableStateOf("") }
+    
+    // 添加拨号对话框状态
+    var showPhoneDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    
+    // 获取发布者信息
+    var publisherInfo by remember { mutableStateOf<Map<String, Any>?>(null) }
+    LaunchedEffect(tailOrder.publisherJid) {
+        val username = tailOrder.publisherJid.substringBefore("@")
+        publisherInfo = viewModel.getUserInfo(username)
+    }
 
     // 举报对话框
     if (showReportDialog) {
@@ -574,11 +620,15 @@ fun TailOrderItem(
                     // 公司信息（可点击）
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable(onClick = onCompanyClick)
+                        modifier = Modifier.clickable {
+                            // 提取用户名并导航到用户详情页
+                            val username = tailOrder.publisherJid.substringBefore("@")
+                            navController.navigate("friend_detail/$username")
+                        }
                     ) {
                         Icon(
                             imageVector = Icons.Filled.AccountCircle,
-                            contentDescription = "公司",
+                            contentDescription = "发布者",
                             tint = PrimaryColor,
                             modifier = Modifier.size(16.dp)
                         )
@@ -586,7 +636,8 @@ fun TailOrderItem(
                         Spacer(modifier = Modifier.width(8.dp))
 
                         Text(
-                            text = tailOrder.company,
+                            // 显示发布者用户名
+                            text = tailOrder.publisherJid.substringBefore("@"),
                             color = PrimaryColor,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold
@@ -603,12 +654,21 @@ fun TailOrderItem(
                                 .clip(CircleShape)
                                 .background(PrimaryColor.copy(alpha = 0.1f))
                                 .border(1.dp, PrimaryColor, CircleShape)
-                                .clickable(onClick = onPersonClick),
+                                .clickable {
+                                    // 使用发布者的JID作为聊天对象
+                                    val username = tailOrder.publisherJid.substringBefore("@")
+                                    navController.navigate(
+                                        AppRoutes.CHAT_ROOM
+                                            .replace("{sessionId}", username)  // 使用纯用户名作为sessionId
+                                            .replace("{targetName}", username) // 使用纯用户名作为targetName
+                                            .replace("{targetType}", "chat")  // 类型改为chat
+                                    )
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.MailOutline,
-                                contentDescription = "联系人头像",
+                                contentDescription = "发送消息",
                                 tint = PrimaryColor,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -618,7 +678,7 @@ fun TailOrderItem(
 
                         // 电话图标（可点击拨打电话）
                         IconButton(
-                            onClick = onContactClick,
+                            onClick = onContactClick,  // 直接使用传入的 onContactClick 回调
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
@@ -630,6 +690,62 @@ fun TailOrderItem(
                     }
                 }
             }
+        }
+    }
+
+    // 添加拨号确认对话框
+    if (showPhoneDialog && publisherInfo != null) {
+        val phoneNumber = publisherInfo?.get("phoneNumber")?.toString()
+        val publisherName = publisherInfo?.get("nickname")?.toString() 
+            ?: publisherInfo?.get("username")?.toString()
+            ?: "未知用户"
+            
+        if (phoneNumber != null && phoneNumber.isNotEmpty()) {
+            AlertDialog(
+                onDismissRequest = { showPhoneDialog = false },
+                title = null,
+                text = {
+                    Text(
+                        text = "${phoneNumber}可能是一个电话号码，你可以",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showPhoneDialog = false
+                            val intent = Intent(Intent.ACTION_DIAL).apply {
+                                data = Uri.parse("tel:${phoneNumber}")
+                            }
+                            context.startActivity(intent)
+                        }
+                    ) {
+                        Text("呼叫", color = MaterialTheme.colorScheme.primary)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showPhoneDialog = false }) {
+                        Text("取消")
+                    }
+                }
+            )
+        } else {
+            // 如果没有电话号码，显示提示对话框
+            AlertDialog(
+                onDismissRequest = { showPhoneDialog = false },
+                title = null,
+                text = {
+                    Text(
+                        text = "${publisherName}未设置联系电话",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { showPhoneDialog = false }) {
+                        Text("确定")
+                    }
+                }
+            )
         }
     }
 }

@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.travalms.config.AppConfig
 import com.example.travalms.data.api.NetworkModule
 import kotlinx.coroutines.launch
 
@@ -52,7 +53,7 @@ fun UserAvatar(
                         // 处理头像URL，将localhost替换为实际IP
                         if (url != null && url.isNotEmpty()) {
                             if (url.contains("localhost")) {
-                                url = url.replace("localhost", "192.168.100.6")
+                                url = url.replace("localhost", AppConfig.AVATAR_SERVER_ADDRESS)
                             }
                             avatarUrl = url
                             Log.d("UserAvatar", "获取到用户头像: $avatarUrl")

@@ -16,5 +16,6 @@ data class TailOrder(
     val remainingHours: String,
     val content: List<String>,  // 行程内容列表
     val summary: String,  // 行程概要
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    val publisherJid: String = ""  // 发布者的XMPP JID
 ) 

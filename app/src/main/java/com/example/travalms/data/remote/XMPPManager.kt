@@ -6,6 +6,7 @@ import com.example.travalms.data.model.ChatInvitation
 import com.example.travalms.data.model.ChatMessage
 import com.example.travalms.data.model.ContactItem
 import com.example.travalms.data.model.Message
+import com.example.travalms.config.AppConfig
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.jivesoftware.smack.*
@@ -82,7 +83,7 @@ class XMPPManager private constructor() {
     companion object {
         private const val TAG = "XMPPManager"
         const val SERVER_DOMAIN = "localhost"
-        private const val SERVER_HOST = "120.46.26.49"
+        private const val SERVER_HOST = AppConfig.XMPP_SERVER_HOST
         private const val SERVER_PORT = 5222
         private const val RESOURCE = "AndroidClient"
         private const val PUBSUB_SERVICE = SERVER_DOMAIN
@@ -320,12 +321,7 @@ class XMPPManager private constructor() {
                 connection.addConnectionListener(connectionListener)
 
                 // 配置自动重连 - 使用更保守的设置
-                ReconnectionManager.getInstanceFor(connection).apply {
-                    enableAutomaticReconnection()
-                    setReconnectionPolicy(ReconnectionManager.ReconnectionPolicy.FIXED_DELAY)
-                    // 使用较短的重连间隔，防止长时间无法恢复连接
-                    setFixedDelay(15) // 15秒尝试一次重连202.108.22.5
-                }
+                setupReconnectionManager(connection)
 
                 // 连接到服务器
                 Log.d(TAG, "开始连接...")
@@ -762,18 +758,32 @@ class XMPPManager private constructor() {
             val itemId = UUID.randomUUID().toString()
 
             try {
+                // 获取当前用户的JID
+                val publisherJid = currentConnection?.user?.asBareJid()?.toString() ?: ""
+                if (publisherJid.isEmpty()) {
+                    Log.w(TAG, "无法获取发布者JID，使用空值")
+                }
+                
+                // 解析原始JSON
+                val jsonObject = org.json.JSONObject(content)
+                
+                // 添加发布者JID
+                jsonObject.put("publisherJid", publisherJid)
+                
                 // 对 JSON 内容进行 XML 转义，避免特殊字符导致的解析问题
-                val escapedContent = content.replace("&", "&amp;")
+                val updatedContent = jsonObject.toString()
+                val escapedContent = updatedContent.replace("&", "&amp;")
                     .replace("<", "&lt;")
                     .replace(">", "&gt;")
                     .replace("\"", "&quot;")
                     .replace("'", "&apos;")
 
-                // 创建包含完整内容的 XML 负载
+                // 创建包含完整内容的 XML 负载，包括发布者信息
                 val xmlContent = """
                     <taillist xmlns='urn:xmpp:taillist:0'>
                         <id>${itemId}</id>
                         <timestamp>${System.currentTimeMillis()}</timestamp>
+                        <publisher>${publisherJid}</publisher>
                         <content type='application/json'>${escapedContent}</content>
                     </taillist>
                 """.trimIndent()
@@ -798,6 +808,9 @@ class XMPPManager private constructor() {
                 // 如果发布完整内容失败，尝试发布简化版本
                 try {
                     Log.d(TAG, "尝试发布简化版本...")
+                    // 获取当前用户的JID用于简化版本
+                    val publisherJid = currentConnection?.user?.asBareJid()?.toString() ?: ""
+                    
                     // 从 JSON 中提取基本信息
                     val jsonObject = org.json.JSONObject(content)
                     val title = jsonObject.optString("title", "未知标题")
@@ -2772,6 +2785,26 @@ class XMPPManager private constructor() {
         } else {
             Log.d(TAG, "连接已为null，无需断开")
             _connectionState.value = ConnectionState.DISCONNECTED
+        }
+    }
+
+    private fun setupReconnectionManager(connection: XMPPTCPConnection? = null) {
+        val conn = connection ?: currentConnection
+        if (conn == null) {
+            Log.e(TAG, "setupReconnectionManager: 无可用连接")
+            return
+        }
+        
+        try {
+            val reconnectionManager = ReconnectionManager.getInstanceFor(conn)
+            reconnectionManager.apply {
+                enableAutomaticReconnection()
+                setReconnectionPolicy(ReconnectionManager.ReconnectionPolicy.FIXED_DELAY)
+                setFixedDelay(15) // 15秒尝试一次重连
+            }
+            Log.d(TAG, "自动重连设置完成")
+        } catch (e: Exception) {
+            Log.e(TAG, "设置自动重连失败: ${e.message}", e)
         }
     }
 }

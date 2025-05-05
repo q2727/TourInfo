@@ -50,6 +50,7 @@ import android.util.Log
 import androidx.compose.ui.layout.ContentScale
 import com.example.travalms.data.api.NetworkModule
 import com.example.travalms.data.api.UserApiService
+import com.example.travalms.config.AppConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,7 +88,7 @@ fun ProfileScreen(
                         // 替换头像URL中的localhost为实际IP地址
                         var avatarUrlStr = userData["avatarUrl"]?.toString()
                         if (avatarUrlStr != null && avatarUrlStr.contains("localhost")) {
-                            avatarUrlStr = avatarUrlStr.replace("localhost", "192.168.100.6")
+                            avatarUrlStr = avatarUrlStr.replace("localhost", AppConfig.AVATAR_SERVER_ADDRESS)
                             Log.d("ProfileScreen", "修正后的头像URL: $avatarUrlStr")
                         }
                         avatarUrl = avatarUrlStr

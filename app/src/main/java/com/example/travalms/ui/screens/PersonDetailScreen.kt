@@ -40,7 +40,7 @@ data class PersonInfo(
 fun PersonDetailScreen(
     personId: String?,
     onBackClick: () -> Unit,
-    onChatClick: () -> Unit,
+    onChatClick: (String) -> Unit,
     onCompanyClick: (String) -> Unit
 ) {
     // 状态管理
@@ -359,7 +359,7 @@ fun PersonDetailScreen(
                     
                     // 底部聊天按钮
                     Button(
-                        onClick = onChatClick,
+                        onClick = { onChatClick(personId ?: "") },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(16.dp)

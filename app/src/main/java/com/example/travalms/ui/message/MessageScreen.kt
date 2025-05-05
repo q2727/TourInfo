@@ -367,31 +367,46 @@ fun MessageScreen(
                         emptyMap()
                     }
 
-                    // 转换为ContactItem，并更新为真实状态
-                    val friendItems = fetchedFriends.mapIndexed { index, pair ->
-                        val jid = pair.first
-                        val name = pair.second ?: jid?.localpartOrNull?.toString() ?: jid?.toString() ?: "未知用户"
-
-                        // 获取此好友的在线状态
-                        val status = if (jid != null && statusMap.containsKey(jid)) {
-                            val rawStatus = statusMap[jid]
-                            Log.d("MessageScreen", "获取到好友[$name]的原始状态: $rawStatus")
-                            rawStatus ?: "未知状态"
-                        } else {
-                            Log.d("MessageScreen", "好友[$name]在状态Map中未找到，设置为离线")
-                            "离线" // 默认为离线
-                        }
-
-                        ContactItem(
-                            id = jid?.hashCode()?.plus(index) ?: index,
-                            name = name,
-                            status = status,
-                            jid = jid
-                        )
-                    }.sortedBy { item ->
-                        // 按照拼音首字母排序
-                        extractFirstLetter(item.name) ?: "?"
+                    // 获取当前用户JID用于过滤
+                    val currentUserJid = getCurrentUserJid()
+                    val currentUserLocalPart = if (currentUserJid.contains('@')) {
+                        currentUserJid.substringBefore('@')
+                    } else {
+                        currentUserJid
                     }
+
+                    // 转换为ContactItem，并更新为真实状态，过滤掉自己
+                    val friendItems = fetchedFriends
+                        .filter { pair ->
+                            // 过滤掉自己
+                            val jid = pair.first?.toString() ?: ""
+                            val username = if (jid.contains('@')) jid.substringBefore('@') else jid
+                            username != currentUserLocalPart
+                        }
+                        .mapIndexed { index, pair ->
+                            val jid = pair.first
+                            val name = pair.second ?: jid?.localpartOrNull?.toString() ?: jid?.toString() ?: "未知用户"
+
+                            // 获取此好友的在线状态
+                            val status = if (jid != null && statusMap.containsKey(jid)) {
+                                val rawStatus = statusMap[jid]
+                                Log.d("MessageScreen", "获取到好友[$name]的原始状态: $rawStatus")
+                                rawStatus ?: "未知状态"
+                            } else {
+                                Log.d("MessageScreen", "好友[$name]在状态Map中未找到，设置为离线")
+                                "离线" // 默认为离线
+                            }
+
+                            ContactItem(
+                                id = jid?.hashCode()?.plus(index) ?: index,
+                                name = name,
+                                status = status,
+                                jid = jid
+                            )
+                        }.sortedBy { item ->
+                            // 按照拼音首字母排序
+                            extractFirstLetter(item.name) ?: "?"
+                        }
 
                     realFriendsList = friendItems
                     Log.d("MessageScreen", "好友列表加载完成，共 ${realFriendsList.size} 个好友")
@@ -689,14 +704,20 @@ fun MessageScreen(
     fun onContactSelected(contact: ContactItem) {
         when (selectedTab) {
             0 -> {
-                // 全部消息选项卡导航到聊天室
+                // 全部消息选项卡 - 检查是否是群聊
                 val sessionId = contact.originalId ?: contact.id.toString()
-                navController.navigate(
-                    AppRoutes.CHAT_ROOM
-                        .replace("{sessionId}", sessionId)
-                        .replace("{targetName}", contact.name)
-                        .replace("{targetType}", "message")
-                )
+                if (sessionId.contains("@conference.")) {
+                    // 如果是群聊，直接导航到群聊界面
+                    navController.navigate(AppRoutes.GROUP_CHAT.replace("{roomJid}", sessionId))
+                } else {
+                    // 如果是普通消息，导航到聊天室
+                    navController.navigate(
+                        AppRoutes.CHAT_ROOM
+                            .replace("{sessionId}", sessionId)
+                            .replace("{targetName}", contact.name)
+                            .replace("{targetType}", "message")
+                    )
+                }
             }
             1 -> {
                 // 如果有JID，导航到聊天界面
@@ -710,24 +731,18 @@ fun MessageScreen(
                 }
             }
             2 -> {
-                // 群聊选项卡
-                val targetId = contact.jid?.toString() ?: contact.id.toString()
-                navController.navigate(
-                    AppRoutes.GROUP_CHAT.replace("{roomJid}", targetId)
-                )
+                // 群聊选项卡 - 直接导航到群聊界面
+                val roomJid = contact.originalId ?: contact.jid?.toString() ?: contact.id.toString()
+                navController.navigate(AppRoutes.GROUP_CHAT.replace("{roomJid}", roomJid))
             }
             3 -> {
-                // 公司黄页选项卡 - 使用JID而不是ID
-                val targetType = "message" // 修改为message类型以确保一致性
-
-                // 从status中获取JID（在ContactItem映射时我们将JID存储在status中）
+                // 公司黄页选项卡
+                val targetType = "message"
                 val sessionId = if (contact.jid != null) {
                     contact.jid.toString()
                 } else if (contact.status.contains("@")) {
-                    // 备选方案：如果JID字段为空但status包含完整JID
                     contact.status
                 } else {
-                    // 回退到ID（不应该发生）
                     contact.id.toString()
                 }
 
@@ -1284,7 +1299,6 @@ fun MessageScreen(
                                     SwipeToDeleteContactItem(
                                         contact = contact,
                                         onDelete = {
-                                            // 显示确认对话框
                                             showDeleteConfirmDialog = true
                                         },
                                         isCompanyTab = selectedTab == 3,
@@ -1314,7 +1328,42 @@ fun MessageScreen(
                                                 }
                                             }
                                         },
-                                        onClick = { onContactSelected(contact) }
+                                        onClick = {
+                                            when (selectedTab) {
+                                                0 -> {
+                                                    // 全部消息标签：直接跳转到聊天室
+                                                    val isGroupChat = contact.originalId?.contains("@conference.") == true || 
+                                                                    contact.jid?.toString()?.contains("@conference.") == true
+                                                    
+                                                    if (isGroupChat) {
+                                                        val roomJid = contact.originalId ?: contact.jid?.toString() ?: contact.id.toString()
+                                                        navController.navigate(AppRoutes.GROUP_CHAT.replace("{roomJid}", roomJid))
+                                                    } else {
+                                                        val sessionId = contact.originalId ?: contact.jid?.toString() ?: contact.id.toString()
+                                                        navController.navigate(
+                                                            AppRoutes.CHAT_ROOM
+                                                                .replace("{sessionId}", sessionId)
+                                                                .replace("{targetName}", contact.name)
+                                                                .replace("{targetType}", "message")
+                                                        )
+                                                    }
+                                                }
+                                                1, 3 -> {
+                                                    // 好友和公司黄页标签：跳转到个人详情页
+                                                    val username = if (contact.jid != null) {
+                                                        contact.jid.toString().substringBefore("@")
+                                                    } else {
+                                                        contact.originalId?.substringBefore("@") ?: contact.name
+                                                    }
+                                                    navController.navigate("friend_detail/${username}")
+                                                }
+                                                2 -> {
+                                                    // 群聊标签：直接跳转到群聊界面
+                                                    val roomJid = contact.originalId ?: contact.jid?.toString() ?: contact.id.toString()
+                                                    navController.navigate(AppRoutes.GROUP_CHAT.replace("{roomJid}", roomJid))
+                                                }
+                                            }
+                                        }
                                     )
                                 } else {
                                     ContactListItem(
@@ -1346,7 +1395,42 @@ fun MessageScreen(
                                                 }
                                             }
                                         },
-                                        onClick = { onContactSelected(contact) }
+                                        onClick = {
+                                            when (selectedTab) {
+                                                0 -> {
+                                                    // 全部消息标签：直接跳转到聊天室
+                                                    val isGroupChat = contact.originalId?.contains("@conference.") == true || 
+                                                                    contact.jid?.toString()?.contains("@conference.") == true
+                                                    
+                                                    if (isGroupChat) {
+                                                        val roomJid = contact.originalId ?: contact.jid?.toString() ?: contact.id.toString()
+                                                        navController.navigate(AppRoutes.GROUP_CHAT.replace("{roomJid}", roomJid))
+                                                    } else {
+                                                        val sessionId = contact.originalId ?: contact.jid?.toString() ?: contact.id.toString()
+                                                        navController.navigate(
+                                                            AppRoutes.CHAT_ROOM
+                                                                .replace("{sessionId}", sessionId)
+                                                                .replace("{targetName}", contact.name)
+                                                                .replace("{targetType}", "message")
+                                                        )
+                                                    }
+                                                }
+                                                1, 3 -> {
+                                                    // 好友和公司黄页标签：跳转到个人详情页
+                                                    val username = if (contact.jid != null) {
+                                                        contact.jid.toString().substringBefore("@")
+                                                    } else {
+                                                        contact.originalId?.substringBefore("@") ?: contact.name
+                                                    }
+                                                    navController.navigate("friend_detail/${username}")
+                                                }
+                                                2 -> {
+                                                    // 群聊标签：直接跳转到群聊界面
+                                                    val roomJid = contact.originalId ?: contact.jid?.toString() ?: contact.id.toString()
+                                                    navController.navigate(AppRoutes.GROUP_CHAT.replace("{roomJid}", roomJid))
+                                                }
+                                            }
+                                        }
                                     )
                                 }
                                 Divider(color = Color(0xFFEEEEEE), thickness = 1.dp)
@@ -1497,23 +1581,30 @@ fun ContactListItem(
     onAddFriend: () -> Unit = {},
     onClick: () -> Unit
 ) {
-    // 提取用户名（从JID或名称中）
-    val username = if (friend.jid != null && friend.jid.toString().contains("@")) {
-        friend.jid.toString().substringBefore("@")
-    } else if (friend.originalId?.contains("@") == true) {
-        friend.originalId.substringBefore("@")
-    } else {
-        friend.name // 如果无法从JID提取，则使用名称
-    }
+    // 检查是否是群聊
+    val isGroupChat = friend.originalId?.contains("@conference.") == true || 
+                     friend.jid?.toString()?.contains("@conference.") == true
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick)  // 点击事件保持不变，由父组件决定导航逻辑
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 使用UserAvatar组件显示用户真实头像
+        // 提取用户名（从JID或名称中）
+        val username = if (isGroupChat) {
+            // 如果是群聊，直接使用群名
+            friend.name
+        } else if (friend.jid != null && friend.jid.toString().contains("@")) {
+            friend.jid.toString().substringBefore("@")
+        } else if (friend.originalId?.contains("@") == true) {
+            friend.originalId.substringBefore("@")
+        } else {
+            friend.name
+        }
+
+        // 使用UserAvatar组件显示头像
         UserAvatar(
             username = username,
             size = 50.dp,

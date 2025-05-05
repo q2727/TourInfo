@@ -1,6 +1,7 @@
 package com.example.travalms.data.api
 
 import android.util.Log
+import com.example.travalms.config.AppConfig
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import okhttp3.Interceptor
@@ -20,9 +21,12 @@ import java.util.concurrent.TimeUnit
  */
 object NetworkModule {
     // 请确认这个IP地址是否正确，并且服务器在这个端口上运行
-    private const val BASE_URL = "http://192.168.100.6:8080/"
+    private const val BASE_URL = AppConfig.API_BASE_URL
     private const val TIMEOUT = 60L // 增加超时时间到60秒
     private const val TAG = "NetworkAPI"
+    
+    // 延迟初始化userApiService
+    val userApiService: UserApiService by lazy { provideUserApiService() }
     
     /**
      * 自定义拦截器，用于记录请求和响应日志

@@ -43,6 +43,8 @@ import androidx.compose.ui.platform.LocalContext
 import com.example.travalms.data.remote.XMPPManager
 import kotlinx.coroutines.launch
 import com.example.travalms.ui.screens.EditProfileScreen
+import com.example.travalms.ui.screens.TailOrderDetailScreen
+import com.example.travalms.ui.screens.FriendDetailScreen
 
 // 定义应用中的路由路径
 object AppRoutes {
@@ -70,6 +72,8 @@ object AppRoutes {
     const val GROUP_LIST = "group_list"
     const val GROUP_CHAT = "group_chat/{roomJid}"
     const val CREATE_GROUP = "create_group"
+    const val TAIL_ORDER_DETAIL = "tail_order_detail/{tailOrderId}"
+    const val FRIEND_DETAIL = "friend_detail/{username}"
 }
 
 /**
@@ -217,7 +221,7 @@ fun AppNavigation(
             // 获取上下文以便退出登录时使用
             val context = LocalContext.current
             val scope = rememberCoroutineScope()
-            
+
             ProfileScreen(
                 onLogoutClick = {
                     // 调用XMPPManager的logout函数进行退出登录
@@ -229,7 +233,7 @@ fun AppNavigation(
                             // 即使logout失败也继续导航到登录页面
                             e.printStackTrace()
                         }
-                        
+
                         // 退出登录后，导航到登录页面
                         navController.navigate(AppRoutes.LOGIN) {
                             // 清除整个回退栈，防止用户返回到需要登录的页面
@@ -252,7 +256,7 @@ fun AppNavigation(
                 navController = navController
             )
         }
-        
+
         // 个人资料编辑页面
         composable(AppRoutes.PROFILE_EDIT) {
             EditProfileScreen(
@@ -282,14 +286,9 @@ fun AppNavigation(
                 PostDetailScreen(
                     postId = postId,
                     onBackClick = { navController.popBackStack() },
-                    onChatClick = {
-                        // 导航到与企业的聊天室
-                        navController.navigate(
-                            AppRoutes.CHAT_ROOM
-                                .replace("{sessionId}", "1")  // 使用"上海旅行社"的会话ID
-                                .replace("{targetName}", "上海旅行社")
-                                .replace("{targetType}", "company")
-                        )
+                    onChatClick = { username ->
+                        // 导航到好友详情页面
+                        navController.navigate(AppRoutes.FRIEND_DETAIL.replace("{username}", username))
                     },
                     onCompanyClick = { companyId ->
                         navController.navigate(AppRoutes.COMPANY_DETAIL.replace("{companyId}", companyId))
@@ -354,13 +353,9 @@ fun AppNavigation(
             PersonDetailScreen(
                 personId = personId,
                 onBackClick = { navController.popBackStack() },
-                onChatClick = {
-                    navController.navigate(
-                        AppRoutes.CHAT_ROOM
-                            .replace("{sessionId}", "2")  // 使用曾圆圆的会话ID
-                            .replace("{targetName}", personId ?: "用户")
-                            .replace("{targetType}", "person")
-                    )
+                onChatClick = { username ->
+                    // 导航到好友详情页面
+                    navController.navigate(AppRoutes.FRIEND_DETAIL.replace("{username}", username))
                 },
                 onCompanyClick = { companyId ->
                     navController.navigate(AppRoutes.COMPANY_DETAIL.replace("{companyId}", companyId))
@@ -402,10 +397,10 @@ fun AppNavigation(
         // 尾单页面
         composable(AppRoutes.TAIL_LIST) {
             TailListScreen(
-                onTailOrderClick = { tailOrder -> 
-                    navController.navigate(AppRoutes.POST_DETAIL.replace("{postId}", tailOrder.id.toString()))
+                onTailOrderClick = { tailOrder ->
+                    navController.navigate(AppRoutes.TAIL_ORDER_DETAIL.replace("{tailOrderId}", tailOrder.id.toString()))
                 },
-                onHomeClick = { 
+                onHomeClick = {
                     navController.navigate(AppRoutes.HOME) {
                         popUpTo(AppRoutes.HOME) { inclusive = true }
                     }
@@ -431,14 +426,13 @@ fun AppNavigation(
                 navController = navController
             )
         }
-        
 
         // 添加创建群聊的路由目标
-        composable(AppRoutes.CREATE_GROUP) { 
+        composable(AppRoutes.CREATE_GROUP) {
             // 将占位符替换为我们的CreateGroupScreen
             CreateGroupScreen(navController = navController)
         }
-        
+
         // 添加群聊页面路由目标
         composable(
             route = AppRoutes.GROUP_CHAT,
@@ -446,6 +440,45 @@ fun AppNavigation(
         ) { backStackEntry ->
             val roomJid = backStackEntry.arguments?.getString("roomJid") ?: ""
             GroupChatScreen(navController = navController, roomJid = roomJid)
+        }
+
+        // 添加尾单详情页面
+        composable(
+            route = AppRoutes.TAIL_ORDER_DETAIL,
+            arguments = listOf(navArgument("tailOrderId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val tailOrderId = backStackEntry.arguments?.getString("tailOrderId") ?: ""
+            TailOrderDetailScreen(
+                tailOrderId = tailOrderId,
+                onBack = { navController.popBackStack() },
+                navigateToChatRoom = { sessionId, nickname ->
+                    navController.navigate("chat_room/$sessionId/$nickname/chat")
+                },
+                navigateToFriendDetail = { username ->
+                    navController.navigate("friend_detail/$username")
+                }
+            )
+        }
+
+        // 添加好友详情页面
+        composable(
+            route = AppRoutes.FRIEND_DETAIL,
+            arguments = listOf(navArgument("username") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val username = backStackEntry.arguments?.getString("username") ?: ""
+            FriendDetailScreen(
+                username = username,
+                onBack = { navController.popBackStack() },
+                onSendMessage = { targetUsername, targetNickname ->
+                    // 导航到聊天界面
+                    navController.navigate(
+                        AppRoutes.CHAT_ROOM
+                            .replace("{sessionId}", targetUsername)
+                            .replace("{targetName}", targetNickname)
+                            .replace("{targetType}", "person")
+                    )
+                }
+            )
         }
     }
 } 

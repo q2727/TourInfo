@@ -6,6 +6,7 @@ import com.example.travalms.data.model.ChatInvitation;
 import com.example.travalms.data.model.ChatMessage;
 import com.example.travalms.data.model.ContactItem;
 import com.example.travalms.data.model.Message;
+import com.example.travalms.config.AppConfig;
 import kotlinx.coroutines.*;
 import kotlinx.coroutines.flow.*;
 import org.jivesoftware.smack.*;
