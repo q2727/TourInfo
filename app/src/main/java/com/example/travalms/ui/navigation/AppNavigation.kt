@@ -156,21 +156,18 @@ fun AppNavigation(
                         popUpTo(AppRoutes.HOME) { inclusive = true }
                     }
                 },
-                // 已经在我的发布页面，点击不做导航
                 onPublishClick = { /* 已在我的发布页面，不执行导航 */ },
                 onMessageClick = { navController.navigate(AppRoutes.MESSAGE) },
                 onProfileClick = { navController.navigate(AppRoutes.PROFILE) },
                 onTailListClick = navigateToTailList,
-                onItemClick = { post ->
-                    navController.navigate(AppRoutes.POST_DETAIL.replace("{postId}", post.id.toString()))
-                },
-                // 只有点击"发布新信息"按钮才导航到发布页面
                 onPublishNewClick = {
                     navController.navigate(AppRoutes.PUBLISH)
                 },
-                // 重新发布 - 导航到编辑界面
                 onEditPost = { post ->
                     navController.navigate(AppRoutes.POST_EDIT.replace("{postId}", post.id.toString()))
+                },
+                onTailOrderClick = { post ->
+                    navController.navigate(AppRoutes.TAIL_ORDER_DETAIL.replace("{tailOrderId}", post.id.toString()))
                 }
             )
         }
@@ -445,17 +442,25 @@ fun AppNavigation(
         // 添加尾单详情页面
         composable(
             route = AppRoutes.TAIL_ORDER_DETAIL,
-            arguments = listOf(navArgument("tailOrderId") { type = NavType.StringType })
+            arguments = listOf(
+                navArgument("tailOrderId") { type = NavType.StringType }
+            )
         ) { backStackEntry ->
-            val tailOrderId = backStackEntry.arguments?.getString("tailOrderId") ?: ""
+            val tailOrderId = backStackEntry.arguments?.getString("tailOrderId") ?: "0"
+            
             TailOrderDetailScreen(
                 tailOrderId = tailOrderId,
                 onBack = { navController.popBackStack() },
-                navigateToChatRoom = { sessionId, nickname ->
-                    navController.navigate("chat_room/$sessionId/$nickname/chat")
+                navigateToChatRoom = { targetId, targetName ->
+                    navController.navigate(
+                        AppRoutes.CHAT_ROOM
+                            .replace("{sessionId}", targetId)
+                            .replace("{targetName}", targetName)
+                            .replace("{targetType}", "chat")
+                    )
                 },
                 navigateToFriendDetail = { username ->
-                    navController.navigate("friend_detail/$username")
+                    navController.navigate(AppRoutes.FRIEND_DETAIL.replace("{username}", username))
                 }
             )
         }

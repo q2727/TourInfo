@@ -102,7 +102,7 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
 
   @Override
   public Object insertMessage(final GroupChatMessageEntity message,
-      final Continuation<? super Unit> arg1) {
+      final Continuation<? super Unit> continuation) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -116,12 +116,12 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
           __db.endTransaction();
         }
       }
-    }, arg1);
+    }, continuation);
   }
 
   @Override
   public Object insertMessages(final List<GroupChatMessageEntity> messages,
-      final Continuation<? super Unit> arg1) {
+      final Continuation<? super Unit> continuation) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -135,11 +135,12 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
           __db.endTransaction();
         }
       }
-    }, arg1);
+    }, continuation);
   }
 
   @Override
-  public Object deleteMessagesForRoom(final String roomJid, final Continuation<? super Unit> arg1) {
+  public Object deleteMessagesForRoom(final String roomJid,
+      final Continuation<? super Unit> continuation) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -164,7 +165,7 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
           __preparedStmtOfDeleteMessagesForRoom.release(_stmt);
         }
       }
-    }, arg1);
+    }, continuation);
   }
 
   @Override
@@ -255,7 +256,7 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
 
   @Override
   public Object getMessagesForRoom(final String roomJid,
-      final Continuation<? super List<GroupChatMessageEntity>> arg1) {
+      final Continuation<? super List<GroupChatMessageEntity>> continuation) {
     final String _sql = "SELECT * FROM group_chat_messages WHERE roomJid = ? ORDER BY timestamp ASC";
     final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 1);
     int _argIndex = 1;
@@ -334,12 +335,12 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
           _statement.release();
         }
       }
-    }, arg1);
+    }, continuation);
   }
 
   @Override
   public Object getLatestMessageForRoom(final String roomJid,
-      final Continuation<? super GroupChatMessageEntity> arg1) {
+      final Continuation<? super GroupChatMessageEntity> continuation) {
     final String _sql = "SELECT * FROM group_chat_messages WHERE roomJid = ? ORDER BY timestamp DESC LIMIT 1";
     final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 1);
     int _argIndex = 1;
@@ -418,7 +419,7 @@ public final class GroupChatMessageDao_Impl implements GroupChatMessageDao {
           _statement.release();
         }
       }
-    }, arg1);
+    }, continuation);
   }
 
   @NonNull

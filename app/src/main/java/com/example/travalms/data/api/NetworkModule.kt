@@ -27,6 +27,9 @@ object NetworkModule {
     
     // 延迟初始化userApiService
     val userApiService: UserApiService by lazy { provideUserApiService() }
+    val groupChatApiService: GroupChatApiService by lazy { provideGroupChatApiService() }
+    val tailOrderApiService: TailOrderApiService by lazy { provideTailOrderApiService() }
+    val productApiService: ProductApiService by lazy { provideProductApiService() }
     
     /**
      * 自定义拦截器，用于记录请求和响应日志
@@ -150,5 +153,29 @@ object NetworkModule {
         val gson = provideGson()
         val retrofit = provideRetrofit(okHttpClient, gson)
         return retrofit.create(GroupChatApiService::class.java)
+    }
+
+    /**
+     * 提供尾单API服务
+     */
+    fun provideTailOrderApiService(): TailOrderApiService {
+        val okHttpClient = provideOkHttpClient()
+        val gson = provideGson()
+        val retrofit = provideRetrofit(okHttpClient, gson)
+        return retrofit.create(TailOrderApiService::class.java)
+    }
+
+    /**
+     * 提供产品API服务
+     */
+    fun provideProductApiService(): ProductApiService {
+        val okHttpClient = provideOkHttpClient()
+        val gson = provideGson()
+        val retrofit = Retrofit.Builder()
+            .baseUrl(AppConfig.PROD_API_BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+        return retrofit.create(ProductApiService::class.java)
     }
 }

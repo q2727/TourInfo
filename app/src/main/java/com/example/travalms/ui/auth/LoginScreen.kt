@@ -133,7 +133,7 @@ fun LoginScreen(
             
             // 系统名称
             Text(
-                text = "TravalIP",
+                text = "TravelMS",
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = PrimaryColor
@@ -206,7 +206,7 @@ fun LoginScreen(
             Button(
                 onClick = {
                     // 调用ViewModel中的登录方法
-                    loginViewModel.performLogin(username, password)
+                    loginViewModel.Login(username, password)
                 },
                 // 根据加载状态禁用按钮
                 enabled = uiState != LoginUiState.Loading, 
@@ -262,7 +262,7 @@ fun LoginScreen(
             
             // 版权信息
             Text(
-                text = "© 2025 TravalIP 旅游信息交换平台",
+                text = "© 2025 TravelMS 旅游信息交换平台",
                 fontSize = 12.sp,
                 color = Color.Gray,
                 textAlign = TextAlign.Center,

@@ -790,7 +790,7 @@ class XMPPManager private constructor() {
 
                 Log.d(TAG, "准备发布完整内容到节点: $nodeId")
 
-                // 创建 SimplePayload，使用我们的自定义 XML
+                // 创建 SimplePayload，使用自定义 XML
                 val payload = SimplePayload(
                     "taillist",
                     "urn:xmpp:taillist:0",

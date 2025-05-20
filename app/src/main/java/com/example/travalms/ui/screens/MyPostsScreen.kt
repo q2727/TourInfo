@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,7 +32,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.travalms.ui.theme.PrimaryColor
+import com.example.travalms.ui.viewmodels.MyPublishedTailsViewModel
+import com.example.travalms.util.CityNameMapping
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,48 +45,19 @@ fun MyPostsScreen(
     onPublishClick: () -> Unit,
     onMessageClick: () -> Unit,
     onProfileClick: () -> Unit,
-    onItemClick: (PostItem) -> Unit,
     onPublishNewClick: () -> Unit,
     onTailListClick: () -> Unit,
-    onEditPost: (PostItem) -> Unit = {}
+    onEditPost: (PostItem) -> Unit = {},
+    onTailOrderClick: (PostItem) -> Unit,
+    viewModel: MyPublishedTailsViewModel = viewModel()
 ) {
     var searchText by remember { mutableStateOf("") }
     
-    // 模拟数据 - 改为可变状态以支持删除和置顶操作
-    var postItems by remember { mutableStateOf(
-        listOf(
-            PostItem(
-                id = 1,
-                title = "上海外国语大学体验+迪士尼6日夏令营",
-                dates = "7月25日8月7、9、11、13、15、17、19、21、23、25日",
-                feature = "1.在上海外国语大学浸入式英语环境中",
-                remainingSlots = 10,
-                price = 2580,
-                daysExpired = 5
-            ),
-            PostItem(
-                id = 2,
-                title = "北京清华北大文化探访3日游",
-                dates = "8月1、3、5、7、9、11日",
-                feature = "1.参访中国顶尖学府清华大学和北京大学",
-                remainingSlots = 8,
-                price = 2180,
-                daysExpired = 3
-            ),
-            PostItem(
-                id = 3,
-                title = "杭州西湖+乌镇4日文化之旅",
-                dates = "8月15、17、19、21、23、25日",
-                feature = "1.游览西湖十景，欣赏上有天堂，下有苏杭的美景",
-                remainingSlots = 12,
-                price = 3280,
-                daysExpired = 7
-            )
-        )
-    )}
+    // 使用ViewModel获取真实数据
+    val uiState by viewModel.uiState.collectAsState()
     
     // 根据搜索文本筛选发布项目
-    val filteredPostItems = postItems.filter { postItem ->
+    val filteredPostItems = uiState.publishedTails.filter { postItem ->
         if (searchText.isEmpty()) {
             true // 如果搜索文本为空，显示所有项目
         } else {
@@ -99,20 +74,15 @@ fun MyPostsScreen(
         onEditPost(post)
     }
     
-    val handlePinToTop = { post: PostItem ->
-        // 将选中的项目移至列表顶部
-        postItems = postItems.toMutableList().apply {
-            val item = find { it.id == post.id }
-            if (item != null) {
-                remove(item)
-                add(0, item)
-            }
-        }
+    val handleRefresh = {
+        // 刷新数据
+        viewModel.loadUserPublishedTails()
     }
     
-    val handleDelete = { post: PostItem ->
-        // 从列表中删除选中的项目
-        postItems = postItems.filter { it.id != post.id }
+    // 尾单点击处理函数
+    val handleItemClick: (PostItem) -> Unit = { post ->
+        // 调用导航回调
+        onTailOrderClick(post)
     }
     
     Scaffold(
@@ -275,21 +245,96 @@ fun MyPostsScreen(
                 }
             }
             
-            // 发布列表
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(filteredPostItems) { postItem ->
-                    PostItemCard(
-                        post = postItem,
-                        onItemClick = onItemClick,
-                        onRepost = handleRepost,
-                        onRefresh = { /* 刷新逻辑 */ },
-                        onPinToTop = handlePinToTop,
-                        onDelete = handleDelete
-                    )
+            // 显示加载状态、错误信息或列表
+            Box(modifier = Modifier.fillMaxSize()) {
+                when {
+                    // 加载中
+                    uiState.isLoading -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.align(Alignment.Center),
+                            color = PrimaryColor
+                        )
+                    }
+                    
+                    // 出现错误
+                    uiState.errorMessage != null -> {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = "错误",
+                                tint = Color.Red,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            
+                            Text(
+                                text = uiState.errorMessage ?: "加载失败",
+                                color = Color.Gray,
+                                fontSize = 16.sp,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                            
+                            Button(
+                                onClick = { viewModel.loadUserPublishedTails() },
+                                modifier = Modifier.padding(top = 16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = PrimaryColor
+                                )
+                            ) {
+                                Text("重新加载")
+                            }
+                        }
+                    }
+                    
+                    // 列表为空
+                    filteredPostItems.isEmpty() -> {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "暂无发布记录",
+                                color = Color.Gray,
+                                fontSize = 16.sp
+                            )
+                            
+                            Button(
+                                onClick = onPublishNewClick,
+                                modifier = Modifier.padding(top = 16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = PrimaryColor
+                                )
+                            ) {
+                                Text("去发布")
+                            }
+                        }
+                    }
+                    
+                    // 显示数据列表
+                    else -> {
+                        // 发布列表
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(filteredPostItems) { postItem ->
+                                PostItemCard(
+                                    post = postItem,
+                                    onItemClick = handleItemClick,
+                                    onRepost = handleRepost,
+                                    onRefresh = { handleRefresh() },
+                                    onDelete = {  /* 后续实现删除 */ }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -303,7 +348,6 @@ fun PostItemCard(
     onItemClick: (PostItem) -> Unit = {},
     onRepost: (PostItem) -> Unit = {},
     onRefresh: (PostItem) -> Unit = {},
-    onPinToTop: (PostItem) -> Unit = {},
     onDelete: (PostItem) -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -404,37 +448,6 @@ fun PostItemCard(
                             
                             TextButton(
                                 onClick = {
-                                    onPinToTop(post)
-                                    showMenu = false
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = Color.White
-                                )
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.KeyboardArrowUp,
-                                        contentDescription = "置顶",
-                                        tint = Color.White
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "置顶",
-                                        color = Color.White,
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                            
-                            Divider(color = Color(0xFF4E5359))
-                            
-                            TextButton(
-                                onClick = {
                                     onDelete(post)
                                     showMenu = false
                                 },
@@ -488,22 +501,14 @@ fun PostItemCard(
                     modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                 )
                 
-                // 分条展示特色（这里我们将单行文本拆分为多行展示）
-                val features = listOf(
-                    "1.在上海外国语大学浸入式英语环境中学习英语，培养孩子良好的英语语感及口语运用能力。",
-                    "2.上海淮景点畅游、博物馆、知名大学参访，展开真正的上海文化寻根游学之旅。",
-                    "3.上海迪斯尼乐园畅游，学习游乐两不误。"
+                // 显示实际的行程特色内容
+                Text(
+                    text = post.feature,
+                    fontSize = 14.sp,
+                    color = Color.DarkGray,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.padding(vertical = 2.dp)
                 )
-                
-                features.forEach { feature ->
-                    Text(
-                        text = feature,
-                        fontSize = 14.sp,
-                        color = Color.DarkGray,
-                        lineHeight = 20.sp,
-                        modifier = Modifier.padding(vertical = 2.dp)
-                    )
-                }
                 
                 // 有效期
                 Row(
@@ -547,7 +552,7 @@ fun PostItemCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Start
                 ) {
-                    listOf("北京", "上海", "海淀").forEach { location ->
+                    post.publishLocations.forEach { location ->
                         Box(
                             modifier = Modifier
                                 .padding(end = 8.dp)
@@ -558,7 +563,7 @@ fun PostItemCard(
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = location,
+                                text = CityNameMapping.pinyinToChineseName(location),
                                 fontSize = 12.sp,
                                 color = PrimaryColor
                             )

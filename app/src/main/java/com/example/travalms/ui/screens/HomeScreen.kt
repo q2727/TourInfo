@@ -30,6 +30,20 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Placeable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.res.painterResource
+import coil.compose.AsyncImage
+import com.example.travalms.data.api.NetworkModule
+import com.example.travalms.data.api.ProductResponseItem
+import kotlinx.coroutines.launch
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.navigation.compose.rememberNavController
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,25 +73,37 @@ fun HomeScreen(
     // 搜索框状态
     var searchQuery by remember { mutableStateOf("") }
 
-    // 模拟旅游项目数据 - 增加更多数据用于测试滚动
-    val travelItems = listOf(
-        TravelItem(1, "桂林山水5日游", "广西旅游集团", "¥2580", hasImage = true, isFavorite = false),
-        TravelItem(2, "北京故宫+长城3日游", "北京旅行社", "¥1980", hasImage = true, isFavorite = true),
-        TravelItem(3, "云南大理丽江7日游", "云南旅游集团", "¥3680", hasImage = true, isFavorite = false),
-        TravelItem(4, "海南三亚5日度假", "海南旅游公司", "¥3280", hasImage = true, isFavorite = false),
-        TravelItem(5, "上海迪士尼2日游", "上海旅游集团", "¥1280", hasImage = true, isFavorite = true),
-        // 新增测试数据
-        TravelItem(6, "西藏拉萨6日深度游", "西藏旅行社", "¥4980", hasImage = true, isFavorite = false),
-        TravelItem(7, "成都熊猫基地3日游", "四川旅游公司", "¥1680", hasImage = true, isFavorite = true),
-        TravelItem(8, "青岛海滨4日度假", "山东旅游集团", "¥2280", hasImage = true, isFavorite = false),
-        TravelItem(9, "厦门鼓浪屿3日游", "福建旅游公司", "¥1980", hasImage = true, isFavorite = true),
-        TravelItem(10, "哈尔滨冰雪5日游", "黑龙江旅行社", "¥3280", hasImage = true, isFavorite = false),
-        TravelItem(11, "九寨沟黄龙6日游", "四川旅游集团", "¥3580", hasImage = true, isFavorite = true),
-        TravelItem(12, "张家界玻璃桥4日游", "湖南旅游公司", "¥2480", hasImage = true, isFavorite = false),
-        TravelItem(13, "香港迪士尼3日游", "香港旅行社", "¥3980", hasImage = true, isFavorite = true),
-        TravelItem(14, "澳门威尼斯人2日游", "澳门旅游公司", "¥2380", hasImage = true, isFavorite = false),
-        TravelItem(15, "内蒙古草原4日游", "内蒙古旅游集团", "¥2680", hasImage = true, isFavorite = true)
-    )
+    // 产品数据状态
+    var travelItems by remember { mutableStateOf<List<TravelItem>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // 新增：产品详情WebView页面
+    var showWebView by remember { mutableStateOf<Pair<Boolean, Int>>(false to 0) }
+
+    // 拉取产品数据
+    LaunchedEffect(Unit) {
+        loading = true
+        error = null
+        try {
+            val api = NetworkModule.productApiService
+            val products = api.getProducts()
+            travelItems = products.map { it.toTravelItem() }
+        } catch (e: Exception) {
+            error = e.message ?: "加载失败"
+        } finally {
+            loading = false
+        }
+    }
+
+    // 优先判断是否显示WebView，直接return页面
+    if (showWebView.first) {
+        ProductWebViewScreen(productId = showWebView.second) {
+            showWebView = false to 0
+        }
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -333,41 +359,71 @@ fun HomeScreen(
             }
             
             // 内容列表部分
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = 8.dp)
-            ) {
-                // 根据筛选条件和选项卡过滤项目
-                val filteredItems = if (!showAllProducts) {
-                    // 只显示收藏的产品
-                    travelItems.filter { it.isFavorite }
-                } else if (selectedFilters.isEmpty()) {
-                    // 显示所有产品
-                    travelItems
-                } else {
-                    // 根据筛选条件过滤
-                    travelItems.filter { item ->
-                        selectedFilters.contains(item.agency) || 
-                        (item.isFavorite && selectedFilters.contains("关注")) ||
-                        false
-                    }
+            if (loading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
                 }
-                
-                items(filteredItems) { item ->
-                    TravelItemCard(
-                        item = item, 
-                        onItemClick = onItemClick,
-                        onCompanyClick = { onCompanyClick(item.agency) }
-                    )
+            } else if (error != null) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("加载失败: $error", color = Color.Red)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(vertical = 8.dp)
+                ) {
+                    // 根据筛选条件和选项卡过滤项目
+                    val filteredItems = if (!showAllProducts) {
+                        // 只显示收藏的产品
+                        travelItems.filter { it.isFavorite }
+                    } else if (selectedFilters.isEmpty()) {
+                        // 显示所有产品
+                        travelItems
+                    } else {
+                        // 根据筛选条件过滤
+                        travelItems.filter { item ->
+                            selectedFilters.contains(item.agency) || 
+                            (item.isFavorite && selectedFilters.contains("关注")) ||
+                            false
+                        }
+                    }
+                    
+                    items(filteredItems) { item ->
+                        TravelItemCard(
+                            item = item,
+                            onItemClick = { id -> showWebView = true to id },
+                            onCompanyClick = { onCompanyClick(item.agency) }
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+// API数据转TravelItem
+fun ProductResponseItem.toTravelItem(): TravelItem {
+    // duration: "6天5晚" -> days=6, nights=5
+    val regex = Regex("(\\d+)天(\\d+)晚")
+    val match = regex.find(duration)
+    val days = match?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+    val nights = match?.groupValues?.getOrNull(2)?.toIntOrNull() ?: 0
+    return TravelItem(
+        id = productId,
+        title = title,
+        agency = provider,
+        price = "¥${price}",
+        hasImage = image.isNotBlank(),
+        isFavorite = false,
+        imageUrl = getImageUrl(),
+        days = days,
+        nights = nights
+    )
+}
+
 @Composable
 fun TravelItemCard(
-    item: TravelItem, 
+    item: TravelItem,
     onItemClick: (Int) -> Unit,
     onCompanyClick: () -> Unit
 ) {
@@ -384,104 +440,81 @@ fun TravelItemCard(
             defaultElevation = 0.5.dp
         )
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp)
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // 标题
-            Text(
-                text = item.title,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth()
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            // 商品图片、详情区域和价格在同一行
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            // 图片自适应填充且无灰色底框，加载失败才显示灰色+icon
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(RoundedCornerShape(6.dp)),
+                contentAlignment = Alignment.Center
             ) {
-                // 图片
-                if (item.hasImage) {
+                if (item.imageUrl != null) {
+                    SubcomposeAsyncImage(
+                        model = item.imageUrl,
+                        contentDescription = item.title,
+                        modifier = Modifier.matchParentSize(),
+                        contentScale = ContentScale.Crop,
+                        loading = {
+                            Box(
+                                Modifier
+                                    .matchParentSize()
+                                    .background(Color.LightGray)
+                            )
+                        },
+                        error = {
+                            Box(
+                                Modifier
+                                    .matchParentSize()
+                                    .background(Color.LightGray),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Face, contentDescription = "无图片", tint = Color.White)
+                            }
+                        }
+                    )
+                } else {
                     Box(
                         modifier = Modifier
-                            .size(80.dp)
-                            .clip(RoundedCornerShape(4.dp))
+                            .matchParentSize()
                             .background(Color.LightGray),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("图片", color = Color.White)
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                }
-                
-                // 中间详情
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    // 旅行社信息 - 可点击
-                    Text(
-                        text = item.agency,
-                        fontSize = 14.sp,
-                        color = PrimaryColor,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable(onClick = onCompanyClick)
-                    )
-                    
-                    Spacer(modifier = Modifier.height(6.dp))
-                    
-                    // 电话信息
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Phone,
-                            contentDescription = "电话",
-                            tint = Color.Gray,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "139-1234-5678", // 模拟电话号码
-                            fontSize = 12.sp,
-                            color = Color.Gray
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.height(6.dp))
-                    
-                    // 发布时间
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.DateRange,
-                            contentDescription = "发布时间",
-                            tint = Color.Gray,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "2023-06-15", // 模拟发布时间
-                            fontSize = 12.sp,
-                            color = Color.Gray
-                        )
+                        Icon(Icons.Default.Face, contentDescription = "无图片", tint = Color.White)
                     }
                 }
-                
-                // 价格显示在最右侧垂直居中
-                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            // 右侧信息
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                // 标题
+                Text(
+                    text = item.title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                // 天数晚数
+                Text(
+                    text = "${item.days}天${item.nights}晚",
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                // 价格
                 Text(
                     text = item.price,
                     fontSize = 16.sp,
                     color = Color(0xFFE91E63),
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.CenterVertically)
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
@@ -601,5 +634,37 @@ fun FlowRow(
                 y += rowHeight + verticalArrangement.spacing.roundToPx()
             }
         }
+    }
+}
+
+// 新增：产品详情WebView页面
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ProductWebViewScreen(productId: Int, onBack: () -> Unit) {
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("产品详情", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        val url = "http://42.193.112.197/#/pages/user/singleProductPage?productId=$productId"
+        AndroidView(
+            factory = { context ->
+                WebView(context).apply {
+                    webViewClient = WebViewClient()
+                    settings.javaScriptEnabled = true
+                    loadUrl(url)
+                }
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        )
     }
 } 

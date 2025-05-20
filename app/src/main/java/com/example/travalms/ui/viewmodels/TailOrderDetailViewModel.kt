@@ -9,6 +9,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.travalms.data.api.NetworkModule
 import com.example.travalms.data.api.UserApiService
 import com.example.travalms.ui.screens.TailOrder
+import com.example.travalms.ui.screens.PostItem
+import com.example.travalms.ui.viewmodels.MyPublishedTailsViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -56,28 +58,65 @@ class TailOrderDetailViewModel(
             try {
                 _state.update { it.copy(isLoading = true) }
                 
-                // 尝试从TailListViewModel获取尾单详情
+                // 首先尝试从MyPublishedTailsViewModel获取尾单详情
                 var tailOrder: TailOrder? = null
                 try {
-                    val tailListViewModel = TailListViewModel.getInstance()
-                    val tailOrders = tailListViewModel.state.value.tailOrders
+                    val myPublishedTailsViewModel = MyPublishedTailsViewModel.getInstance()
+                    val publishedTails = myPublishedTailsViewModel.uiState.value.publishedTails
                     
-                    Log.d(TAG, "尝试从TailListViewModel获取尾单，ID: $tailOrderId, 可用尾单数量: ${tailOrders.size}")
+                    Log.d(TAG, "尝试从MyPublishedTailsViewModel获取尾单，ID: $tailOrderId, 可用尾单数量: ${publishedTails.size}")
                     
                     // 查找匹配ID的尾单
-                    tailOrder = tailOrders.find { it.id == tailOrderId.toInt() }
+                    val publishedTail = publishedTails.find { it.id == tailOrderId.toInt() }
                     
-                    if (tailOrder != null) {
-                        Log.d(TAG, "从TailListViewModel找到尾单: ${tailOrder.title}, 发布者JID: ${tailOrder.publisherJid}")
-                    } else {
-                        Log.w(TAG, "在TailListViewModel中找不到ID为 $tailOrderId 的尾单，尝试回退到模拟数据")
-                        // 如果在TailListViewModel中找不到，使用模拟数据作为备用
-                        tailOrder = getBackupTailOrderData(tailOrderId.toInt())
+                    if (publishedTail != null) {
+                        Log.d(TAG, "从MyPublishedTailsViewModel找到尾单: ${publishedTail.title}, 发布者: ${publishedTail.publisher}")
+                        
+                        // 将PostItem转换为TailOrder
+                        tailOrder = TailOrder(
+                            id = publishedTail.id,
+                            title = publishedTail.title,
+                            company = "我的发布",
+                            companyId = "my_publish",
+                            contactPerson = publishedTail.publisher,
+                            contactPersonId = publishedTail.publisher,
+                            contactPhone = "",  // 从用户信息中获取
+                            price = "¥${publishedTail.price}",
+                            remainingDays = publishedTail.daysExpired.toString(),
+                            remainingHours = "0:00",
+                            content = listOf(publishedTail.feature),
+                            summary = publishedTail.feature,
+                            isFavorite = false,
+                            publisherJid = publishedTail.publisher // 使用发布者用户名
+                        )
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "获取TailListViewModel实例失败，使用备用数据", e)
-                    // 如果获取TailListViewModel实例失败，使用模拟数据作为备用
-                    tailOrder = getBackupTailOrderData(tailOrderId.toInt())
+                    Log.e(TAG, "获取MyPublishedTailsViewModel实例失败", e)
+                }
+                
+                // 如果在MyPublishedTailsViewModel中找不到，尝试从TailListViewModel获取
+                if (tailOrder == null) {
+                    try {
+                        val tailListViewModel = TailListViewModel.getInstance()
+                        val tailOrders = tailListViewModel.state.value.tailOrders
+                        
+                        Log.d(TAG, "尝试从TailListViewModel获取尾单，ID: $tailOrderId, 可用尾单数量: ${tailOrders.size}")
+                        
+                        // 查找匹配ID的尾单
+                        tailOrder = tailOrders.find { it.id == tailOrderId.toInt() }
+                        
+                        if (tailOrder != null) {
+                            Log.d(TAG, "从TailListViewModel找到尾单: ${tailOrder.title}, 发布者JID: ${tailOrder.publisherJid}")
+                        } else {
+                            Log.w(TAG, "在TailListViewModel中找不到ID为 $tailOrderId 的尾单，尝试回退到模拟数据")
+                            // 如果在TailListViewModel中找不到，使用模拟数据作为备用
+                            tailOrder = getBackupTailOrderData(tailOrderId.toInt())
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "获取TailListViewModel实例失败，使用备用数据", e)
+                        // 如果获取TailListViewModel实例失败，使用模拟数据作为备用
+                        tailOrder = getBackupTailOrderData(tailOrderId.toInt())
+                    }
                 }
                 
                 if (tailOrder != null) {

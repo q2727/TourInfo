@@ -198,7 +198,7 @@ public final class GroupChatDao_Impl implements GroupChatDao {
 
   @Override
   public Object insertGroupChat(final GroupChatEntity groupChat,
-      final Continuation<? super Unit> arg1) {
+      final Continuation<? super Unit> continuation) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -212,12 +212,12 @@ public final class GroupChatDao_Impl implements GroupChatDao {
           __db.endTransaction();
         }
       }
-    }, arg1);
+    }, continuation);
   }
 
   @Override
   public Object insertGroupChats(final List<GroupChatEntity> groupChats,
-      final Continuation<? super Unit> arg1) {
+      final Continuation<? super Unit> continuation) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -231,12 +231,12 @@ public final class GroupChatDao_Impl implements GroupChatDao {
           __db.endTransaction();
         }
       }
-    }, arg1);
+    }, continuation);
   }
 
   @Override
   public Object deleteGroupChat(final GroupChatEntity groupChat,
-      final Continuation<? super Unit> arg1) {
+      final Continuation<? super Unit> continuation) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -250,12 +250,12 @@ public final class GroupChatDao_Impl implements GroupChatDao {
           __db.endTransaction();
         }
       }
-    }, arg1);
+    }, continuation);
   }
 
   @Override
   public Object updateGroupChat(final GroupChatEntity groupChat,
-      final Continuation<? super Unit> arg1) {
+      final Continuation<? super Unit> continuation) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -269,11 +269,12 @@ public final class GroupChatDao_Impl implements GroupChatDao {
           __db.endTransaction();
         }
       }
-    }, arg1);
+    }, continuation);
   }
 
   @Override
-  public Object deleteGroupChatByJid(final String roomJid, final Continuation<? super Unit> arg1) {
+  public Object deleteGroupChatByJid(final String roomJid,
+      final Continuation<? super Unit> continuation) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -298,12 +299,13 @@ public final class GroupChatDao_Impl implements GroupChatDao {
           __preparedStmtOfDeleteGroupChatByJid.release(_stmt);
         }
       }
-    }, arg1);
+    }, continuation);
   }
 
   @Override
   public Object updateGroupChatActivity(final String roomJid, final LocalDateTime lastActivityTime,
-      final int incrementUnread, final String lastMessage, final Continuation<? super Unit> arg4) {
+      final int incrementUnread, final String lastMessage,
+      final Continuation<? super Unit> continuation) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -343,11 +345,12 @@ public final class GroupChatDao_Impl implements GroupChatDao {
           __preparedStmtOfUpdateGroupChatActivity.release(_stmt);
         }
       }
-    }, arg4);
+    }, continuation);
   }
 
   @Override
-  public Object clearUnreadCount(final String roomJid, final Continuation<? super Unit> arg1) {
+  public Object clearUnreadCount(final String roomJid,
+      final Continuation<? super Unit> continuation) {
     return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
       @Override
       @NonNull
@@ -372,7 +375,7 @@ public final class GroupChatDao_Impl implements GroupChatDao {
           __preparedStmtOfClearUnreadCount.release(_stmt);
         }
       }
-    }, arg1);
+    }, continuation);
   }
 
   @Override
@@ -463,7 +466,7 @@ public final class GroupChatDao_Impl implements GroupChatDao {
 
   @Override
   public Object getGroupChatByJid(final String roomJid,
-      final Continuation<? super GroupChatEntity> arg1) {
+      final Continuation<? super GroupChatEntity> continuation) {
     final String _sql = "SELECT * FROM group_chats WHERE roomJid = ?";
     final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 1);
     int _argIndex = 1;
@@ -548,11 +551,12 @@ public final class GroupChatDao_Impl implements GroupChatDao {
           _statement.release();
         }
       }
-    }, arg1);
+    }, continuation);
   }
 
   @Override
-  public Object isGroupChatJoined(final String roomJid, final Continuation<? super Integer> arg1) {
+  public Object isGroupChatJoined(final String roomJid,
+      final Continuation<? super Integer> continuation) {
     final String _sql = "SELECT COUNT(*) FROM group_chats WHERE roomJid = ?";
     final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 1);
     int _argIndex = 1;
@@ -586,7 +590,7 @@ public final class GroupChatDao_Impl implements GroupChatDao {
           _statement.release();
         }
       }
-    }, arg1);
+    }, continuation);
   }
 
   @Override

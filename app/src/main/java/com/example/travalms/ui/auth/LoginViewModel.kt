@@ -1,18 +1,14 @@
 package com.example.travalms.ui.auth
 
 import android.content.Context
-import android.content.Intent
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.travalms.data.remote.XMPPManager
 import com.example.travalms.data.remote.XMPPService
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.jivesoftware.smack.tcp.XMPPTCPConnection
 
 // 定义登录界面的不同状态
 sealed interface LoginUiState {
@@ -44,9 +40,8 @@ class LoginViewModel : ViewModel() {
 
     /**
      * 执行登录操作
-     * 强制重新登录，即使已经登录了相同账号
      */
-    fun performLogin(username: String, password: String) {
+    fun Login(username: String, password: String) {
         // 防止重复登录请求
         if (_uiState.value == LoginUiState.Loading) return
 
@@ -62,8 +57,7 @@ class LoginViewModel : ViewModel() {
                     
                     // 确保XMPPService正在运行
                     XMPPService.startService(context)
-                    
-                    // 不再需要主动加入群聊，现在直接从服务器获取群聊
+
                 }
                 
                 _uiState.value = LoginUiState.Success // 修改为使用不带参数的Success
