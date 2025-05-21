@@ -17,5 +17,7 @@ data class TailOrder(
     val content: List<String>,  // 行程内容列表
     val summary: String,  // 行程概要
     val isFavorite: Boolean = false,
-    val publisherJid: String = ""  // 发布者的XMPP JID
+    val publisherJid: String = "",  // 发布者的XMPP JID
+    val productId: Long? = null,  // 关联的产品ID
+    val productTitle: String? = null  // 关联的产品标题
 ) 

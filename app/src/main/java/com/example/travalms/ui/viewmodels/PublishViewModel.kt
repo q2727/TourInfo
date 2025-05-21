@@ -51,7 +51,9 @@ data class TailListItem(
     val contactPhone: String,
     val tourGuide: String? = null,
     val location: String? = null,
-    val tags: List<String> = emptyList()
+    val tags: List<String> = emptyList(),
+    val productId: Long? = null,
+    val productTitle: String? = null
 )
 
 /**
@@ -276,6 +278,8 @@ class PublishViewModel : ViewModel() {
                             
                             tailListItem.tourGuide?.let { put("tourGuide", it) }
                             tailListItem.location?.let { put("location", it) }
+                            tailListItem.productId?.let { put("productId", it) }
+                            tailListItem.productTitle?.let { put("productTitle", it) }
                             
                             if (tailListItem.tags.isNotEmpty()) {
                                 put("tags", JSONObject().apply {
@@ -293,7 +297,9 @@ class PublishViewModel : ViewModel() {
                             itinerary = tailListItem.description, // 将description映射到后端的itinerary字段
                             expiryDate = apiDateFormat.format(tailListItem.endDate), // 将endDate映射到后端的expiryDate字段
                             publishingNodes = _uiState.value.selectedNodeIds,
-                            productDetails = productDetailsJson
+                            productDetails = productDetailsJson,
+                            productId = tailListItem.productId,
+                            productTitle = tailListItem.productTitle
                         )
                         
                         // 调用后端API
@@ -363,6 +369,8 @@ class PublishViewModel : ViewModel() {
             
             item.tourGuide?.let { put("tourGuide", it) }
             item.location?.let { put("location", it) }
+            item.productId?.let { put("productId", it) }
+            item.productTitle?.let { put("productTitle", it) }
             
             if (item.tags.isNotEmpty()) {
                 put("tags", JSONObject().apply {

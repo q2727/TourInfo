@@ -34,7 +34,9 @@ data class TailListState(
     val isLoading: Boolean = false,
     val tailOrders: List<TailOrder> = emptyList(),
     val error: String? = null,
-    val favoriteOrderIds: List<String> = emptyList()
+    val favoriteOrderIds: List<String> = emptyList(),
+    val searchQuery: String = "",
+    val filteredTailOrders: List<TailOrder> = emptyList()
 )
 
 /**
@@ -70,6 +72,8 @@ class TailListViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
             
+            Log.d(TAG, "开始获取尾单列表数据...")
+            
             try {
                 val subscriptionsResult = xmppManager.getUserSubscriptions()
                 if (subscriptionsResult.isSuccess) {
@@ -81,6 +85,7 @@ class TailListViewModel(
                         // 如果没有订阅，显示默认数据
                         val fallbackOrders = repository.getTailOrders()
                         _state.update { it.copy(tailOrders = fallbackOrders, isLoading = false) }
+                        Log.d(TAG, "没有订阅节点，显示默认数据 ${fallbackOrders.size} 条")
                         return@launch
                     }
                     
@@ -96,10 +101,16 @@ class TailListViewModel(
                             val nodeItemsResult = xmppManager.getNodeItems(nodeId)
                             if (nodeItemsResult.isSuccess) {
                                 val notifications = nodeItemsResult.getOrThrow()
+                                Log.d(TAG, "节点 $nodeId 找到 ${notifications.size} 个通知项目")
+                                
                                 for (notification in notifications) {
+                                    // 强制重新解析，忽略缓存
+                                    tailOrderCache.remove(notification.itemId)
+                                    
                                     val tailOrder = parseTailListNotification(notification)
                                     if (tailOrder != null) {
                                         allTailOrders.add(tailOrder)
+                                        Log.d(TAG, "添加尾单: ${tailOrder.title}, ID=${tailOrder.id}")
                                     }
                                 }
                             } else {
@@ -117,8 +128,10 @@ class TailListViewModel(
                         // 如果从XMPP获取不到数据，使用仓库中的备用数据
                         val fallbackOrders = repository.getTailOrders()
                         _state.update { it.copy(tailOrders = fallbackOrders, isLoading = false) }
+                        Log.d(TAG, "XMPP未获取到数据，使用备用数据 ${fallbackOrders.size} 条")
                     } else {
                         _state.update { it.copy(tailOrders = allTailOrders, isLoading = false) }
+                        Log.d(TAG, "成功从XMPP加载 ${allTailOrders.size} 条尾单数据")
                     }
                 } else {
                     val error = subscriptionsResult.exceptionOrNull()?.message ?: "获取订阅失败"
@@ -153,6 +166,11 @@ class TailListViewModel(
         viewModelScope.launch {
             xmppManager.pubsubItemsFlow.collect { notification ->
                 try {
+                    Log.d(TAG, "收到新的尾单通知: ${notification.itemId}")
+                    
+                    // 强制从通知中解析尾单，而不是从缓存中获取
+                    tailOrderCache.remove(notification.itemId) // 移除缓存以确保重新解析
+                    
                     val tailOrder = parseTailListNotification(notification)
                     if (tailOrder != null) {
                         // 添加新的尾单到列表首位
@@ -167,7 +185,7 @@ class TailListViewModel(
                             }
                             state.copy(tailOrders = updatedList)
                         }
-                        Log.d(TAG, "收到新的尾单通知: ${tailOrder.title}")
+                        Log.d(TAG, "成功添加/更新尾单: ${tailOrder.title}")
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "处理尾单通知时出错", e)
@@ -208,9 +226,24 @@ class TailListViewModel(
             
             // 根据找到的元素决定如何解析
             if (contentElement != null && contentElement.hasAttr("type") && contentElement.attr("type") == "application/json") {
-                // 如果有content且类型为JSON，解析完整内容
+                // 如果有content且类型为JSON，解析JSON内容
                 val jsonText = contentElement.text()
-                return parseFullTailOrder(itemId, notification.nodeId, jsonText, publisherJid)
+                
+                try {
+                    val json = JSONObject(jsonText)
+                    
+                    // 检查是否是后端API格式（包含itinerary和productDetails）
+                    if (json.has("itinerary") && json.has("productDetails")) {
+                        return parseAPIFormatTailOrder(itemId, notification.nodeId, json, publisherJid)
+                    } else {
+                        // 常规格式
+                        return parseFullTailOrder(itemId, notification.nodeId, jsonText, publisherJid)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "解析JSON内容失败", e)
+                    // 如果JSON解析失败，尝试常规解析
+                    return parseFullTailOrder(itemId, notification.nodeId, jsonText, publisherJid)
+                }
             } else {
                 // 否则，尝试解析简化版本
                 return parseSimpleTailOrder(itemId, notification.nodeId, taillistElement, publisherJid)
@@ -239,6 +272,10 @@ class TailListViewModel(
             val location = json.optString("location", "")
             val company = json.optString("company", "未知公司")
             
+            // 提取产品信息 - 直接从JSON中提取
+            val productId = json.optLong("productId", 0L)
+            val productTitle = json.optString("productTitle", "")
+            
             // 如果JSON中有publisherJid，优先使用JSON中的值
             val finalPublisherJid = json.optString("publisherJid", publisherJid)
             
@@ -263,9 +300,8 @@ class TailListViewModel(
             // 计算剩余有效期
             val currentTime = System.currentTimeMillis()
             val endTime = endDate.time
-            val diffMillis = abs(endTime - currentTime)
-            val diffDays = TimeUnit.MILLISECONDS.toDays(diffMillis)
-            val remainingHours = TimeUnit.MILLISECONDS.toHours(diffMillis) % 24
+            val diffMillis = endTime - currentTime
+            val diffDays = if (diffMillis > 0) TimeUnit.MILLISECONDS.toDays(diffMillis) else 0
             
             // 提取行程内容
             val contentJsonStr = json.optString("content", "")
@@ -313,15 +349,20 @@ class TailListViewModel(
                 contactPhone = contactPhone,
                 price = "¥${price.toInt()}",
                 remainingDays = diffDays.toString(),
-                remainingHours = String.format("%d:%02d", remainingHours, Random.nextInt(60)),
+                remainingHours = "0:00",
                 content = if (contentList.isNotEmpty()) contentList else listOf(description),
                 summary = description,
                 isFavorite = _state.value.favoriteOrderIds.contains(itemId),
-                publisherJid = finalPublisherJid  // 添加发布者JID
+                publisherJid = finalPublisherJid,  // 添加发布者JID
+                productId = if (productId > 0) productId else null,  // 只有当productId大于0时才设置
+                productTitle = if (productTitle.isNotEmpty()) productTitle else null  // 只有当productTitle不为空时才设置
             )
             
             // 添加到缓存
             tailOrderCache[itemId] = tailOrder
+            
+            // 记录产品信息到日志
+            Log.d(TAG, "成功解析尾单: ID=${tailOrder.id}, 标题=${tailOrder.title}, 产品ID=${tailOrder.productId}, 产品标题=${tailOrder.productTitle}")
             
             return tailOrder
         } catch (e: Exception) {
@@ -338,6 +379,10 @@ class TailListViewModel(
             // 提取基本信息
             val title = element.select("title").firstOrNull()?.text() ?: "未知标题"
             val price = element.select("price").firstOrNull()?.text()?.toDoubleOrNull() ?: 0.0
+            
+            // 尝试提取产品信息
+            val productId = element.select("productId").firstOrNull()?.text()?.toLongOrNull()
+            val productTitle = element.select("productTitle").firstOrNull()?.text()
             
             // 生成随机ID
             val uniqueId = UUID.fromString(itemId).hashCode()
@@ -364,7 +409,9 @@ class TailListViewModel(
                 content = listOf("此尾单没有详细描述"),
                 summary = "此尾单没有详细描述",
                 isFavorite = _state.value.favoriteOrderIds.contains(itemId),
-                publisherJid = publisherJid  // 添加发布者JID
+                publisherJid = publisherJid,  // 添加发布者JID
+                productId = productId,  // 添加产品ID
+                productTitle = productTitle  // 添加产品标题
             )
             
             // 添加到缓存
@@ -378,9 +425,112 @@ class TailListViewModel(
     }
     
     /**
+     * 解析后端API格式的尾单（包含itinerary和嵌套的productDetails）
+     */
+    private fun parseAPIFormatTailOrder(itemId: String, nodeId: String, json: JSONObject, publisherJid: String = ""): TailOrder? {
+        try {
+            // 提取基本信息
+            val title = json.optString("title", "未知标题")
+            val itinerary = json.optString("itinerary", "")
+            val expiryDateStr = json.optString("expiryDate", "")
+            val productDetailsStr = json.optString("productDetails", "")
+            
+            // 如果JSON中有publisherJid，优先使用JSON中的值
+            val finalPublisherJid = json.optString("publisherJid", publisherJid)
+            
+            // 提取产品信息 - 直接从JSON中提取
+            var productId = json.optLong("productId", 0L)
+            var productTitle = json.optString("productTitle", "")
+            
+            // 解析嵌套的productDetails JSON
+            if (productDetailsStr.isNotEmpty() && (productId == 0L || productTitle.isEmpty())) {
+                try {
+                    val productDetailsJson = JSONObject(productDetailsStr)
+                    
+                    // 从嵌套JSON中提取产品信息
+                    if (productId == 0L) {
+                        productId = productDetailsJson.optLong("productId", 0L)
+                    }
+                    
+                    if (productTitle.isEmpty()) {
+                        productTitle = productDetailsJson.optString("productTitle", "")
+                    }
+                    
+                    Log.d(TAG, "从嵌套productDetails中提取了产品信息: ID=$productId, 标题=$productTitle")
+                } catch (e: Exception) {
+                    Log.e(TAG, "解析嵌套productDetails JSON失败", e)
+                }
+            }
+            
+            // 生成随机ID，确保唯一性
+            val uniqueId = UUID.fromString(itemId).hashCode()
+            
+            // 获取发布者JID的用户名部分
+            val publisherUsername = if (finalPublisherJid.contains("@")) {
+                finalPublisherJid.substringBefore("@")
+            } else {
+                finalPublisherJid
+            }
+            
+            // 计算剩余天数
+            val diffDays = try {
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault())
+                val expiryDate = dateFormat.parse(expiryDateStr)
+                val currentDate = Date()
+                val diffInMillis = expiryDate.time - currentDate.time
+                if (diffInMillis > 0) {
+                    TimeUnit.MILLISECONDS.toDays(diffInMillis).toString()
+                } else {
+                    "0" // 如果已经过期，显示为0天
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "解析尾单过期时间失败: $expiryDateStr", e)
+                "0" // 默认值
+            }
+            
+            // 创建尾单对象
+            val tailOrder = TailOrder(
+                id = uniqueId,
+                title = title,
+                company = "我的发布",
+                companyId = "my_publish",
+                contactPerson = publisherUsername,
+                contactPersonId = finalPublisherJid,
+                contactPhone = "",
+                price = "¥0", // 价格通常在productDetails中，这里设置默认值
+                remainingDays = diffDays,
+                remainingHours = "0:00",
+                content = listOf(itinerary),
+                summary = itinerary,
+                isFavorite = _state.value.favoriteOrderIds.contains(itemId),
+                publisherJid = finalPublisherJid,
+                productId = if (productId > 0) productId else null,
+                productTitle = if (productTitle.isNotEmpty()) productTitle else null
+            )
+            
+            // 添加到缓存
+            tailOrderCache[itemId] = tailOrder
+            
+            Log.d(TAG, "成功解析后端API格式尾单: ID=${tailOrder.id}, 标题=${tailOrder.title}, 产品ID=${tailOrder.productId}, 产品标题=${tailOrder.productTitle}")
+            
+            return tailOrder
+        } catch (e: Exception) {
+            Log.e(TAG, "解析后端API格式尾单失败", e)
+            return null
+        }
+    }
+    
+    /**
      * 刷新数据
      */
     fun refreshTailLists() {
+        // 清除缓存，确保获取最新数据
+        tailOrderCache.clear()
+        
+        // 重置加载状态并开始获取数据
+        _state.update { it.copy(isLoading = true, error = null) }
+        
+        // 调用获取尾单数据的方法
         fetchTailOrders()
     }
     
@@ -436,6 +586,26 @@ class TailListViewModel(
         } catch (e: Exception) {
             null
         }
+    }
+    
+    /**
+     * 设置搜索关键词并过滤尾单列表
+     */
+    fun setSearchQuery(query: String) {
+        val filtered = if (query.isEmpty()) {
+            _state.value.tailOrders
+        } else {
+            _state.value.tailOrders.filter { 
+                it.title.contains(query, ignoreCase = true) 
+            }
+        }
+        
+        _state.update { it.copy(
+            searchQuery = query,
+            filteredTailOrders = filtered
+        ) }
+        
+        Log.d(TAG, "搜索查询: '$query', 过滤后剩余 ${filtered.size} 个结果")
     }
     
     /**

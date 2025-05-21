@@ -6,7 +6,7 @@ import com.example.travalms.api.dto.TailOrderResponse;
 import com.example.travalms.data.api.NetworkModule;
 import com.example.travalms.data.remote.ConnectionState;
 import com.example.travalms.data.remote.XMPPManager;
-import com.example.travalms.ui.screens.PostItem;
+import com.example.travalms.ui.model.PostItem;
 import kotlinx.coroutines.flow.StateFlow;
 import org.json.JSONObject;
 import java.text.SimpleDateFormat;

@@ -16,4 +16,8 @@ interface TailOrderApiService {
     // 获取指定用户JID的尾单发布历史
     @GET("api/tail-orders/user")
     suspend fun getUserTailOrders(@Query("jid") jid: String): Response<List<TailOrderResponse>>
+    
+    // 删除尾单
+    @retrofit2.http.DELETE("api/tail-orders/{id}")
+    suspend fun deleteTailOrder(@Path("id") id: Long): Response<Void>
 } 

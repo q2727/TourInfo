@@ -43,8 +43,13 @@ import androidx.compose.material.icons.filled.Check
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.travalms.ui.viewmodels.PublishViewModel
 import android.util.Log
+import androidx.compose.ui.focus.onFocusChanged
 import com.example.travalms.data.remote.ConnectionState
 import kotlinx.coroutines.launch
+import com.example.travalms.data.api.NetworkModule
+import com.example.travalms.data.api.ProductResponseItem
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.text.style.TextAlign
 
 /**
  * 发布页面
@@ -60,18 +65,40 @@ fun PublishScreen(
     navController: NavHostController
 ) {
     // 表单状态
-    var title by remember { mutableStateOf("") }
-    var content by remember { mutableStateOf("") }
-    var validUntilDate by remember { mutableStateOf(LocalDate.now().plusDays(15).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))) }
-    var publishNode by remember { mutableStateOf("点击选择") }
-    var product by remember { mutableStateOf("未选择") }
+    var title by rememberSaveable { mutableStateOf("") }
+    var content by rememberSaveable { mutableStateOf("") }
+    var validUntilDate by rememberSaveable { mutableStateOf(LocalDate.now().plusDays(15).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))) }
+    var publishNode by rememberSaveable { mutableStateOf("点击选择") }
     
+    // 产品列表状态
+    var products by remember { mutableStateOf<List<ProductResponseItem>>(emptyList()) }
+    var loadingProducts by remember { mutableStateOf(true) }
+    var errorProducts by remember { mutableStateOf<String?>(null) }
+    
+    // 使用remember而不是rememberSaveable来存储产品对象
+    var selectedProduct by remember { mutableStateOf<ProductResponseItem?>(null) }
+    // 使用rememberSaveable存储产品标题
+    var selectedProductTitle by rememberSaveable { mutableStateOf<String?>(null) }
+
+    // 当selectedProductTitle改变时，更新selectedProduct
+    LaunchedEffect(selectedProductTitle, products) {
+        if (selectedProductTitle != null) {
+            selectedProduct = products.find { it.title == selectedProductTitle }
+        }
+    }
+
+    // 产品选择时同时更新两个状态
+    fun updateSelectedProduct(product: ProductResponseItem) {
+        selectedProduct = product
+        selectedProductTitle = product.title
+    }
+
     // 日期选择器状态
     var showValidUntilDatePicker by remember { mutableStateOf(false) }
-    
+
     // 产品下拉菜单控制
     var showProductDropdown by remember { mutableStateOf(false) }
-    
+
     val scrollState = rememberScrollState()
 
     // 解析日期的格式
@@ -88,7 +115,7 @@ fun PublishScreen(
     // 添加这段代码，以便从节点选择器返回时获取选定的节点
     val selectedNodesResult = navController.currentBackStackEntry?.savedStateHandle?.get<String>("selected_nodes")
     val selectedNodeIdsResult = navController.currentBackStackEntry?.savedStateHandle?.get<ArrayList<String>>("selected_node_ids")
-    
+
     // 当获取结果时更新publishNode
     LaunchedEffect(selectedNodesResult, selectedNodeIdsResult) {
         if (selectedNodesResult != null && selectedNodeIdsResult != null) {
@@ -107,13 +134,25 @@ fun PublishScreen(
     // 使用LaunchedEffect清除之前的发布状态
     LaunchedEffect(Unit) {
         viewModel.resetPublishState()
-        
+
         // 添加日志显示当前连接状态
         val currentState = viewModel.connectionState.value
         Log.d("PublishScreen", "当前XMPP连接状态: $currentState, 是否已认证: ${currentState == ConnectionState.AUTHENTICATED}")
-        
+
         // 强制刷新登录状态，确保与XMPPManager同步
         viewModel.refreshLoginState()
+    }
+
+    // 获取产品列表
+    LaunchedEffect(Unit) {
+        try {
+            val api = NetworkModule.productApiService
+            products = api.getProducts()
+            loadingProducts = false
+        } catch (e: Exception) {
+            errorProducts = e.message
+            loadingProducts = false
+        }
     }
 
     // 发布完成后显示成功消息并导航
@@ -186,6 +225,7 @@ fun PublishScreen(
                     value = title,
                     onValueChange = { title = it },
                     placeholder = "输入标题",
+                    defaultContent = selectedProduct?.title ?: "",
                     label = "标题",
                     backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 )
@@ -197,6 +237,7 @@ fun PublishScreen(
                     value = content,
                     onValueChange = { content = it },
                     placeholder = "输入行程内容（每条特色用换行分隔）",
+                    defaultContent = selectedProduct?.description ?: "",
                     label = "行程内容:",
                     backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                     singleLine = false,
@@ -246,7 +287,7 @@ fun PublishScreen(
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
-                
+
                 // 发布节点
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -263,9 +304,15 @@ fun PublishScreen(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
-                            .clickable { 
-                                // 导航到PublishNodeSelectorScreen，而不是显示对话框
-                                navController.navigate(AppRoutes.PUBLISH_NODE_SELECTOR)
+                            .clickable {
+                                // 检查XMPP连接状态
+                                if (viewModel.connectionState.value == ConnectionState.AUTHENTICATED) {
+                                    // 已认证，导航到节点选择器
+                                    navController.navigate(AppRoutes.PUBLISH_NODE_SELECTOR)
+                                } else {
+                                    // 未认证，先尝试刷新连接状态
+                                    viewModel.refreshLoginState()
+                                }
                             },
                         shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -283,9 +330,9 @@ fun PublishScreen(
                             ) {
                                 Text(
                                     text = publishNode,
-                                    color = if (publishNode == "点击选择") 
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) 
-                                    else 
+                                    color = if (publishNode == "点击选择")
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    else
                                         MaterialTheme.colorScheme.onSurface
                                 )
 
@@ -301,7 +348,7 @@ fun PublishScreen(
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
-                
+
                 // 产品
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -327,11 +374,11 @@ fun PublishScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = product,
+                                text = selectedProduct?.title ?: "未选择",
                                 fontSize = 14.sp,
-                                color = if (product == "未选择") 
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) 
-                                else 
+                                color = if (selectedProduct == null)
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                else
                                     MaterialTheme.colorScheme.onSurface
                             )
 
@@ -347,24 +394,38 @@ fun PublishScreen(
                 DropdownMenu(
                     expanded = showProductDropdown,
                     onDismissRequest = { showProductDropdown = false },
-                    modifier = Modifier.fillMaxWidth(0.9f)
+                    modifier = Modifier
+                        .fillMaxWidth(0.9f)
+                        .heightIn(max = 300.dp)
                 ) {
-                    listOf("跟团游", "自由行", "当地游", "定制游", "签证", "门票", "酒店", "机票").forEach { type ->
-                        DropdownMenuItem(
-                            text = { Text(type) },
-                            onClick = {
-                                product = type
-                                showProductDropdown = false
-                            }
+                    if (loadingProducts) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    } else if (errorProducts != null) {
+                        Text(
+                            text = "加载失败: $errorProducts",
+                            color = Color.Red,
+                            modifier = Modifier.padding(16.dp)
                         )
+                    } else {
+                        products.forEach { product ->
+                            DropdownMenuItem(
+                                text = { Text(product.title) },
+                                onClick = {
+                                    updateSelectedProduct(product)
+                                    showProductDropdown = false
+                                }
+                            )
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // 消息预览部分
-                MessagePreviewSection(title, content)
-                
                 Spacer(modifier = Modifier.height(32.dp))
 
                 // 提交按钮
@@ -372,14 +433,10 @@ fun PublishScreen(
                     onClick = {
                         // 创建尾单数据并发布
                         val tailListItem = TailListItem(
-                            title = title.ifEmpty { "上海外国语大学体验+迪士尼6日夏令营" },
-                            description = content.ifEmpty { 
-                                "1.在上海外国语大学浸入式英语环境中学习英语，培养孩子良好的英语语感及口语运用能力。\n" +
-                                "2.上海淮景点畅游、博物馆、知名大学参访，展开真正的上海文化寻根游学之旅。\n" +
-                                "3.上海迪斯尼乐园畅游，学习游乐两不误。" 
-                            },
-                            price = 2999.0,
-                            originalPrice = 3999.0,
+                            title = if (title.isNotEmpty()) title else selectedProduct?.title ?: "未选择产品",
+                            description = if (content.isNotEmpty()) content else selectedProduct?.description ?: "",
+                            price = selectedProduct?.price ?: 0.0,
+                            originalPrice = selectedProduct?.price?.times(1.2) ?: 0.0,
                             startDate = LocalDate.now().plusDays(7).let { 
                                 Date.from(it.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant()) 
                             },
@@ -389,7 +446,9 @@ fun PublishScreen(
                             contactPerson = "客服中心",
                             contactPhone = "13800138000",
                             location = "上海",
-                            tags = listOf(product)
+                            tags = listOf(selectedProduct?.title ?: "未知产品"),
+                            productId = selectedProduct?.productId?.toLong(),
+                            productTitle = selectedProduct?.title ?: ""
                         )
                         
                         // 调用ViewModel发布尾单
@@ -398,19 +457,11 @@ fun PublishScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                    enabled = !publishState.isPublishing // 发布中禁用按钮
+                    enabled = selectedProduct != null // 必须选择产品才能发布
                 ) {
-                    Text(
-                        text = if (publishState.isPublishing) "发布中..." else "发布信息",
-                        fontSize = 16.sp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
+                    Text("发布")
                 }
-                
+
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
@@ -501,12 +552,20 @@ fun FormTextField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
+    defaultContent: String = "",
     label: String,
     backgroundColor: Color = Color.White,
     singleLine: Boolean = true,
     maxLines: Int = 1,
     height: Dp = 48.dp
 ) {
+    var isFocused by remember { mutableStateOf(false) }
+    var showDefaultContent by remember { mutableStateOf(true) }
+
+    LaunchedEffect(defaultContent) {
+        showDefaultContent = true
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Top
@@ -517,7 +576,7 @@ fun FormTextField(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 14.sp
         )
-        
+
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -535,13 +594,37 @@ fun FormTextField(
         ) {
             BasicTextField(
                 value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.fillMaxWidth(),
+                onValueChange = { newValue ->
+                    if (newValue.isNotEmpty()) {
+                        showDefaultContent = false
+                    }
+                    else if (newValue.isEmpty() && !isFocused) {
+                        showDefaultContent = true
+                    }
+                    onValueChange(newValue)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { focusState ->
+                        isFocused = focusState.isFocused
+                        if (focusState.isFocused) {
+                            showDefaultContent = false
+                        }
+                        else if (!focusState.isFocused && value.isEmpty()) {
+                            showDefaultContent = true
+                        }
+                    },
                 singleLine = singleLine,
                 maxLines = maxLines,
                 decorationBox = { innerTextField ->
                     Box(modifier = Modifier.fillMaxWidth()) {
-                        if (value.isEmpty()) {
+                        if (value.isEmpty() && showDefaultContent && defaultContent.isNotEmpty()) {
+                            Text(
+                                text = defaultContent,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
+                                fontSize = 14.sp
+                            )
+                        } else if (value.isEmpty() && !showDefaultContent) {
                             Text(
                                 text = placeholder,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
@@ -701,7 +784,7 @@ fun CustomDatePicker(
                 Text(
                     text = day,
                     modifier = Modifier.weight(1f),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    textAlign = TextAlign.Center,
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

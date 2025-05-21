@@ -9,7 +9,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.travalms.data.api.NetworkModule
 import com.example.travalms.data.api.UserApiService
 import com.example.travalms.ui.screens.TailOrder
-import com.example.travalms.ui.screens.PostItem
 import com.example.travalms.ui.viewmodels.MyPublishedTailsViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -87,7 +86,9 @@ class TailOrderDetailViewModel(
                             content = listOf(publishedTail.feature),
                             summary = publishedTail.feature,
                             isFavorite = false,
-                            publisherJid = publishedTail.publisher // 使用发布者用户名
+                            publisherJid = publishedTail.publisher, // 使用发布者用户名
+                            productId = publishedTail.productId?.toLong(),  // 添加产品ID
+                            productTitle = publishedTail.productTitle  // 添加产品标题
                         )
                     }
                 } catch (e: Exception) {
@@ -107,6 +108,7 @@ class TailOrderDetailViewModel(
                         
                         if (tailOrder != null) {
                             Log.d(TAG, "从TailListViewModel找到尾单: ${tailOrder.title}, 发布者JID: ${tailOrder.publisherJid}")
+                            Log.d(TAG, "尾单产品信息: ID=${tailOrder.id}, 产品ID=${tailOrder.productId}, 产品标题=${tailOrder.productTitle}")
                         } else {
                             Log.w(TAG, "在TailListViewModel中找不到ID为 $tailOrderId 的尾单，尝试回退到模拟数据")
                             // 如果在TailListViewModel中找不到，使用模拟数据作为备用
@@ -170,7 +172,9 @@ class TailOrderDetailViewModel(
             ),
             summary = "备用数据",
             isFavorite = false,
-            publisherJid = "system@localhost"
+            publisherJid = "system@localhost",
+            productId = null,  // 备用数据无产品ID
+            productTitle = null  // 备用数据无产品标题
         )
     }
     

@@ -38,6 +38,10 @@ import androidx.compose.ui.platform.LocalContext
 import android.widget.Toast
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
 @Composable
@@ -56,19 +60,46 @@ fun TailListScreen(
     viewModel: TailListViewModel = viewModel(factory = TailListViewModel.Factory())
 ) {
     val state by viewModel.state.collectAsState()
-    val refreshState = rememberPullRefreshState(state.isLoading, { viewModel.refreshTailLists() })
+    val refreshState = rememberPullRefreshState(
+        refreshing = state.isLoading, 
+        onRefresh = { 
+            // 明确调用刷新方法
+            viewModel.refreshTailLists() 
+        }
+    )
     val context = LocalContext.current
+    // 添加焦点管理器，用于关闭键盘
+    val focusManager = LocalFocusManager.current
+    
+    // 添加搜索关键词状态
+    var searchText by remember { mutableStateOf("") }
 
     // 添加状态跟踪当前选择的标签
     var selectedTab by remember { mutableStateOf(0) }
 
-    // 根据selectedTab筛选要显示的尾单
-    val displayedTailOrders = if (selectedTab == 0) {
-        // 显示所有尾单
-        state.tailOrders
+    // 根据selectedTab和搜索关键词筛选要显示的尾单
+    val displayedTailOrders = if (searchText.isEmpty()) {
+        // 无搜索关键词时，根据标签筛选
+        if (selectedTab == 0) {
+            // 显示所有尾单
+            state.tailOrders
+        } else {
+            // 只显示已收藏的尾单
+            state.tailOrders.filter { it.isFavorite }
+        }
     } else {
-        // 只显示已收藏的尾单
-        state.tailOrders.filter { it.isFavorite }
+        // 有搜索关键词时，先按搜索关键词筛选，再根据标签筛选
+        val searchFiltered = state.tailOrders.filter { 
+            it.title.contains(searchText, ignoreCase = true) 
+        }
+        
+        if (selectedTab == 0) {
+            // 显示所有匹配搜索关键词的尾单
+            searchFiltered
+        } else {
+            // 只显示已收藏且匹配搜索关键词的尾单
+            searchFiltered.filter { it.isFavorite }
+        }
     }
 
     Scaffold(
@@ -152,17 +183,37 @@ fun TailListScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(
-                        value = "",
-                        onValueChange = { },
+                        value = searchText,
+                        onValueChange = { searchText = it },
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(24.dp)),
                         placeholder = { Text("搜索尾单") },
                         leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "搜索") },
+                        trailingIcon = {
+                            if (searchText.isNotEmpty()) {
+                                IconButton(
+                                    onClick = { 
+                                        searchText = "" 
+                                    }
+                                ) {
+                                    Icon(Icons.Filled.Clear, contentDescription = "清除")
+                                }
+                            }
+                        },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             unfocusedBorderColor = Color.LightGray,
                             unfocusedContainerColor = Color.White
+                        ),
+                        keyboardOptions = KeyboardOptions(
+                            imeAction = ImeAction.Search
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onSearch = {
+                                // 关闭键盘
+                                focusManager.clearFocus()
+                            }
                         )
                     )
                 }
@@ -212,6 +263,21 @@ fun TailListScreen(
                         }
                     }
                 }
+                
+                // 显示搜索结果数量
+                if (searchText.isNotEmpty() && displayedTailOrders.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "找到 ${displayedTailOrders.size} 个结果",
+                            fontSize = 14.sp,
+                            color = Color.Gray
+                        )
+                    }
+                }
 
                 if (displayedTailOrders.isEmpty() && !state.isLoading) {
                     // 显示空状态
@@ -219,7 +285,29 @@ fun TailListScreen(
                         modifier = Modifier.fillMaxSize().weight(1f),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("没有可用的尾单", style = MaterialTheme.typography.bodyLarge)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            if (searchText.isNotEmpty()) {
+                                // 无搜索结果
+                                Icon(
+                                    imageVector = Icons.Filled.Search,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = Color.Gray
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    "没有找到匹配\"$searchText\"的尾单", 
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = Color.Gray
+                                )
+                            } else {
+                                // 无尾单数据
+                                Text("没有可用的尾单", style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
                     }
                 } else {
                     // 尾单列表 - 使用过滤后的列表
@@ -598,7 +686,7 @@ fun TailOrderItem(
                     )
 
                     Text(
-                        text = "有效期: ${tailOrder.remainingDays}天${tailOrder.remainingHours}",
+                        text = "有效期: ${tailOrder.remainingDays}天",
                         fontSize = 14.sp,
                         color = Color.Gray
                     )

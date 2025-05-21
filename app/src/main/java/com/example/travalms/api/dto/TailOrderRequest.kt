@@ -12,5 +12,7 @@ data class TailOrderRequest(
     @SerializedName("itinerary") val itinerary: String, // 对应 TailListItem.description
     @SerializedName("expiryDate") val expiryDate: String, // ISO 8601 格式的日期字符串, 对应 TailListItem.endDate
     @SerializedName("publishingNodes") val publishingNodes: List<String>,
-    @SerializedName("productDetails") val productDetails: String // 可以是 TailListItem 其他字段的 JSON 字符串
+    @SerializedName("productDetails") val productDetails: String, // 可以是 TailListItem 其他字段的 JSON 字符串
+    @SerializedName("productId") val productId: Long?,
+    @SerializedName("productTitle") val productTitle: String?
 ) 

@@ -126,28 +126,33 @@ fun HomeScreen(
                     border = BorderStroke(1.dp, Color.LightGray)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.Search,
                             contentDescription = "搜索",
-                            tint = Color.Gray,
-                            modifier = Modifier.size(20.dp)
+                            tint = Color.Gray
                         )
-                        
                         Spacer(modifier = Modifier.width(8.dp))
-                        
                         BasicTextField(
                             value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
+                            onValueChange = { newQuery ->
+                                searchQuery = newQuery
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(24.dp),
                             decorationBox = { innerTextField ->
-                                Box {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
                                     if (searchQuery.isEmpty()) {
                                         Text(
-                                            text = "搜索产品、公司、地区...",
+                                            text = "搜索产品",
                                             color = Color.Gray,
                                             fontSize = 14.sp
                                         )
@@ -156,6 +161,19 @@ fun HomeScreen(
                                 }
                             }
                         )
+                        if (searchQuery.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            IconButton(
+                                onClick = { searchQuery = "" },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "清除",
+                                    tint = Color.Gray
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -368,25 +386,22 @@ fun HomeScreen(
                     Text("加载失败: $error", color = Color.Red)
                 }
             } else {
+                // 显示产品列表
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(vertical = 8.dp)
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // 根据筛选条件和选项卡过滤项目
-                    val filteredItems = if (!showAllProducts) {
-                        // 只显示收藏的产品
-                        travelItems.filter { it.isFavorite }
-                    } else if (selectedFilters.isEmpty()) {
-                        // 显示所有产品
-                        travelItems
-                    } else {
-                        // 根据筛选条件过滤
-                        travelItems.filter { item ->
-                            selectedFilters.contains(item.agency) || 
-                            (item.isFavorite && selectedFilters.contains("关注")) ||
-                            false
+                    // 过滤产品列表
+                    val filteredItems = travelItems
+                        .filter { item ->
+                            // 首先根据搜索关键词过滤
+                            (searchQuery.isEmpty() || item.title.contains(searchQuery, ignoreCase = true)) &&
+                            // 然后根据是否显示全部产品过滤
+                            (showAllProducts || item.isFavorite) &&
+                            // 最后根据选中的标签过滤
+                            (selectedFilters.isEmpty() || selectedFilters.contains(item.agency))
                         }
-                    }
                     
                     items(filteredItems) { item ->
                         TravelItemCard(

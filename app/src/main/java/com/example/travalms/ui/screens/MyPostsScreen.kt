@@ -36,6 +36,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.travalms.ui.theme.PrimaryColor
 import com.example.travalms.ui.viewmodels.MyPublishedTailsViewModel
 import com.example.travalms.util.CityNameMapping
+import com.example.travalms.ui.model.PostItem
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,7 +48,7 @@ fun MyPostsScreen(
     onProfileClick: () -> Unit,
     onPublishNewClick: () -> Unit,
     onTailListClick: () -> Unit,
-    onEditPost: (PostItem) -> Unit = {},
+    onEditPost: (PostItem) -> Unit = { /* 编辑功能已移除 */ },
     onTailOrderClick: (PostItem) -> Unit,
     viewModel: MyPublishedTailsViewModel = viewModel()
 ) {
@@ -69,10 +70,10 @@ fun MyPostsScreen(
     }
     
     // 长按菜单回调函数
-    val handleRepost = { post: PostItem ->
-        // 导航到编辑界面
-        onEditPost(post)
-    }
+    // val handleRepost = { post: PostItem ->
+    //     // 导航到编辑界面 - 功能已移除
+    //     onEditPost(post)
+    // }
     
     val handleRefresh = {
         // 刷新数据
@@ -328,7 +329,6 @@ fun MyPostsScreen(
                                 PostItemCard(
                                     post = postItem,
                                     onItemClick = handleItemClick,
-                                    onRepost = handleRepost,
                                     onRefresh = { handleRefresh() },
                                     onDelete = {  /* 后续实现删除 */ }
                                 )
@@ -346,7 +346,6 @@ fun MyPostsScreen(
 fun PostItemCard(
     post: PostItem, 
     onItemClick: (PostItem) -> Unit = {},
-    onRepost: (PostItem) -> Unit = {},
     onRefresh: (PostItem) -> Unit = {},
     onDelete: (PostItem) -> Unit = {}
 ) {
@@ -384,36 +383,36 @@ fun PostItemCard(
                                 .fillMaxWidth()
                                 .padding(8.dp)
                         ) {
-                            TextButton(
-                                onClick = {
-                                    onRepost(post)
-                                    showMenu = false
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = Color.White
-                                )
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Send,
-                                        contentDescription = "重新发布",
-                                        tint = Color.White
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "重新发布",
-                                        color = Color.White,
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
+                            // TextButton(
+                            //    onClick = {
+                            //        onRepost(post)
+                            //        showMenu = false
+                            //    },
+                            //    modifier = Modifier.fillMaxWidth(),
+                            //    colors = ButtonDefaults.textButtonColors(
+                            //        contentColor = Color.White
+                            //    )
+                            // ) {
+                            //    Row(
+                            //        verticalAlignment = Alignment.CenterVertically,
+                            //        modifier = Modifier.fillMaxWidth()
+                            //    ) {
+                            //        Icon(
+                            //            imageVector = Icons.Filled.Send,
+                            //            contentDescription = "重新发布",
+                            //            tint = Color.White
+                            //        )
+                            //        Spacer(modifier = Modifier.width(8.dp))
+                            //        Text(
+                            //            text = "重新发布",
+                            //            color = Color.White,
+                            //            fontSize = 16.sp,
+                            //            fontWeight = FontWeight.Bold
+                            //        )
+                            //    }
+                            // }
                             
-                            Divider(color = Color(0xFF4E5359))
+                            // Divider(color = Color(0xFF4E5359))
                             
                             TextButton(
                                 onClick = {
@@ -526,7 +525,7 @@ fun PostItemCard(
                     )
                     
                     Text(
-                        text = "3天6:30",
+                        text = "${post.daysExpired}天",
                         fontSize = 14.sp,
                         color = Color(0xFFFF6E40),
                         fontWeight = FontWeight.Medium
@@ -573,17 +572,4 @@ fun PostItemCard(
             }
         }
     }
-}
-
-// 帖子数据模型
-data class PostItem(
-    val id: Int,
-    val title: String,
-    val dates: String,
-    val feature: String,
-    val remainingSlots: Int,
-    val price: Int,
-    val daysExpired: Int,
-    val publisher: String = "张伟", // 默认值
-    val publishLocations: List<String> = listOf("北京", "上海", "海淀") // 默认值
-) 
+} 

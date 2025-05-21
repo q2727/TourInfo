@@ -3,6 +3,7 @@ package com.example.travalms.ui.navigation
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -21,7 +22,6 @@ import com.example.travalms.ui.screens.ProfileScreen
 import com.example.travalms.ui.screens.ProfileEditScreen
 import com.example.travalms.ui.screens.VerificationScreen
 import com.example.travalms.ui.screens.PostDetailScreen
-import com.example.travalms.ui.screens.PostEditScreen
 import com.example.travalms.ui.screens.CompanyDetailScreen
 import com.example.travalms.ui.screens.PersonDetailScreen
 import com.example.travalms.ui.screens.ChatRoomScreen
@@ -37,43 +37,49 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxSize
 import com.example.travalms.ui.screens.GroupChatScreen
 import android.content.Context
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import com.example.travalms.data.remote.XMPPManager
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import com.example.travalms.ui.screens.EditProfileScreen
 import com.example.travalms.ui.screens.TailOrderDetailScreen
 import com.example.travalms.ui.screens.FriendDetailScreen
+import com.example.travalms.ui.screens.MyTailOrderDetailScreen
 
-// 定义应用中的路由路径
+/**
+ * 应用导航路由常量
+ */
 object AppRoutes {
+    const val SPLASH = "splash"
     const val LOGIN = "login"
     const val REGISTER = "register"
     const val HOME = "home"
-    const val MY_POSTS = "my_posts"
-    const val PUBLISH = "publish"
+    const val TAIL_LIST = "tailList"
+    const val TAIL_ORDER_DETAIL = "tailOrderDetail/{tailOrderId}"
+    const val MY_TAIL_ORDER_DETAIL = "myTailOrderDetail/{tailOrderId}"
+    const val POST_DETAIL = "postDetail/{postId}"
+    const val POST_EDIT = "postEdit/{postId}"
     const val MESSAGE = "message"
-    const val SUBSCRIBE_SETTING = "subscribe_setting"
-    const val PROFILE = "profile"
-    const val PROFILE_EDIT = "profile_edit"
-    const val COMPANY_BINDING = "company_binding"
-    const val VERIFICATION = "verification"
-    const val COMPANY_REGISTER = "company_register"
-    const val POST_DETAIL = "post_detail/{postId}"
-    const val POST_EDIT = "post_edit/{postId}"
-    const val COMPANY_DETAIL = "company_detail/{companyId}"
-    const val PERSON_DETAIL = "person_detail/{personId}"
+    const val GROUP_CHAT = "group_chat/{groupJid}"
     const val CHAT_ROOM = "chat_room/{sessionId}/{targetName}/{targetType}"
-    const val MESSAGE_LIST = "message_list"
-    const val MY_FAVORITES = "my_favorites"
-    const val TAIL_LIST = "tail_list"
-    const val PUBLISH_NODE_SELECTOR = "publish_node_selector"
-    const val GROUP_LIST = "group_list"
-    const val GROUP_CHAT = "group_chat/{roomJid}"
-    const val CREATE_GROUP = "create_group"
-    const val TAIL_ORDER_DETAIL = "tail_order_detail/{tailOrderId}"
-    const val FRIEND_DETAIL = "friend_detail/{username}"
+    const val PUBLISH = "publish"
+    const val PUBLISH_NODE_SELECTOR = "publishNodeSelector"
+    const val MY_POSTS = "myPosts"
+    const val MY_FAVORITES = "myFavorites"
+    const val PRODUCT_DETAIL = "productDetail/{productId}"
+    const val SEARCH = "search"
+    const val PROFILE = "profile"
+    const val PROFILE_EDIT = "profileEdit"
+    const val VERIFICATION = "verification"
+    const val COMPANY_BINDING = "companyBinding"
+    const val COMPANY_DETAIL = "companyDetail/{companyId}"
+    const val PERSON_DETAIL = "personDetail/{personId}"
+    const val CREATE_GROUP = "createGroup"
+    const val SUBSCRIBE_SETTING = "subscribeSetting"
+    const val FRIEND_DETAIL = "friendDetail/{username}"
 }
 
 /**
@@ -163,11 +169,9 @@ fun AppNavigation(
                 onPublishNewClick = {
                     navController.navigate(AppRoutes.PUBLISH)
                 },
-                onEditPost = { post ->
-                    navController.navigate(AppRoutes.POST_EDIT.replace("{postId}", post.id.toString()))
-                },
+                onEditPost = { /* 编辑功能已移除 */ },
                 onTailOrderClick = { post ->
-                    navController.navigate(AppRoutes.TAIL_ORDER_DETAIL.replace("{tailOrderId}", post.id.toString()))
+                    navController.navigate(AppRoutes.MY_TAIL_ORDER_DETAIL.replace("{tailOrderId}", post.id.toString()))
                 }
             )
         }
@@ -303,16 +307,8 @@ fun AppNavigation(
             arguments = listOf(navArgument("postId") { type = NavType.StringType })
         ) { backStackEntry ->
             val postId = backStackEntry.arguments?.getString("postId")
-            PostEditScreen(
-                postId = postId,
-                onBackClick = { navController.popBackStack() },
-                onSaveSuccess = {
-                    // 保存成功后返回到我的帖子页面
-                    navController.navigate(AppRoutes.MY_POSTS) {
-                        popUpTo(AppRoutes.POST_EDIT) { inclusive = true }
-                    }
-                }
-            )
+            // 已移除 PostEditScreen
+            Text("编辑页面已移除")
         }
 
         // 企业详情页面
@@ -442,25 +438,34 @@ fun AppNavigation(
         // 添加尾单详情页面
         composable(
             route = AppRoutes.TAIL_ORDER_DETAIL,
-            arguments = listOf(
-                navArgument("tailOrderId") { type = NavType.StringType }
-            )
+            arguments = listOf(navArgument("tailOrderId") { type = NavType.StringType })
         ) { backStackEntry ->
             val tailOrderId = backStackEntry.arguments?.getString("tailOrderId") ?: "0"
-            
             TailOrderDetailScreen(
                 tailOrderId = tailOrderId,
-                onBack = { navController.popBackStack() },
-                navigateToChatRoom = { targetId, targetName ->
-                    navController.navigate(
-                        AppRoutes.CHAT_ROOM
-                            .replace("{sessionId}", targetId)
-                            .replace("{targetName}", targetName)
-                            .replace("{targetType}", "chat")
-                    )
+                onBack = { navController.navigateUp() },
+                onChatRoomClick = { roomId ->
+                    navController.navigate("${AppRoutes.GROUP_CHAT.replaceBefore("/", "")}$roomId")
                 },
-                navigateToFriendDetail = { username ->
-                    navController.navigate(AppRoutes.FRIEND_DETAIL.replace("{username}", username))
+                onFriendDetailClick = { username ->
+                    navController.navigate("${AppRoutes.FRIEND_DETAIL.replaceBefore("/", "")}$username")
+                }
+            )
+        }
+
+        // 我的尾单详情 - 精简版尾单详情界面
+        composable(
+            route = AppRoutes.MY_TAIL_ORDER_DETAIL,
+            arguments = listOf(navArgument("tailOrderId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val tailOrderId = backStackEntry.arguments?.getString("tailOrderId") ?: "0"
+            MyTailOrderDetailScreen(
+                tailOrderId = tailOrderId,
+                onBack = { navController.navigateUp() },
+                onDeleted = {
+                    navController.navigateUp()
+                    // 显示删除成功提示
+                    showSnackbar("尾单已删除")
                 }
             )
         }
@@ -486,4 +491,14 @@ fun AppNavigation(
             )
         }
     }
+}
+
+/**
+ * 显示Snackbar消息
+ * 由于这是一个私有函数，只在AppNavigation内使用
+ */
+private fun showSnackbar(message: String) {
+    // 由于这个函数是直接在NavHost中调用的，无法访问SnackbarHostState
+    // 实际使用时，我们会改为在Composable中调用SnackbarHostState.showSnackbar
+    // 这里留空，在相应屏幕中实现实际的Snackbar逻辑
 } 

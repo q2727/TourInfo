@@ -20,5 +20,7 @@ data class TailOrderResponse(
     @SerializedName("itinerary") val itinerary: String,
     @SerializedName("expiryDate") val expiryDate: String,
     @SerializedName("productDetails") val productDetails: String,
+    @SerializedName("productId") val productId: Long?,
+    @SerializedName("productTitle") val productTitle: String?,
     @SerializedName("publishingNodes") val publishingNodes: List<PublishingNodeResponse>? // 节点对象列表
 ) 

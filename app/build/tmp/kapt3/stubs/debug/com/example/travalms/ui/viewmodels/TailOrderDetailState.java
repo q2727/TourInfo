@@ -8,7 +8,6 @@ import androidx.lifecycle.ViewModelProvider;
 import com.example.travalms.data.api.NetworkModule;
 import com.example.travalms.data.api.UserApiService;
 import com.example.travalms.ui.screens.TailOrder;
-import com.example.travalms.ui.screens.PostItem;
 import com.example.travalms.ui.viewmodels.MyPublishedTailsViewModel;
 import kotlinx.coroutines.flow.StateFlow;
 

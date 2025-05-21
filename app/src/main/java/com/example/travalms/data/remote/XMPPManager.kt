@@ -183,28 +183,26 @@ class XMPPManager private constructor() {
 
             // 在赋值后，更新状态并调用初始化方法
             _connectionState.value = ConnectionState.AUTHENTICATED
-
-            Log.d(TAG, "Authenticated callback: Directly calling initializers...")
-
-            // 初始化PubSub管理器，因为认证成功
-            initPubSubManager()
-            // 配置保活
-            setupPingMechanism()
-            // 设置消息监听器
-            setupMessageListeners()
-            // 设置Roster监听器
-            setupRosterListener()
-            // 请求所有联系人的在线状态
-            requestAllContactsPresence()
-            // 设置Presence直接监听器
-            setupPresenceListener()
-            // 发送可用状态
-            sendInitialPresence()
-
-            // 初始化群聊管理器
-            _groupChatManager.initMucManager()
-            // 设置群聊消息监听器
-            _groupChatManager.setupGroupChatMessageListener()
+            
+            initScope.launch {
+                try {
+                    // 初始化用于通信的各类管理器
+                    initPubSubManager()
+                    setupChatAndRosterListeners()
+                    setupPresenceListener()
+                    
+                    // 重新订阅之前的节点，确保接收消息
+                    resubscribeToNodes()
+                    
+                    // 发送在线状态
+                    sendInitialPresence()
+                    
+                    // 更新联系人状态
+                    requestContactStatuses()
+                } catch (e: Exception) {
+                    Log.e(TAG, "初始化过程中出错: ${e.message}", e)
+                }
+            }
         }
 
         override fun connectionClosed() {
@@ -654,7 +652,21 @@ class XMPPManager private constructor() {
                             null
                         }
                     }
+                    
+                    // 更新消息缓存
                     messageCache[nodeId] = itemsList
+                    
+                    // 通过Flow发送通知
+                    itemsList.forEach { notification ->
+                        scope.launch {
+                            try {
+                                Log.d(TAG, "发送尾单通知到Flow: nodeId=${notification.nodeId}, itemId=${notification.itemId}")
+                                _pubsubItemsFlow.emit(notification)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "发送通知到Flow失败: ${e.message}")
+                            }
+                        }
+                    }
                 }
             }
 
@@ -777,70 +789,57 @@ class XMPPManager private constructor() {
                     .replace(">", "&gt;")
                     .replace("\"", "&quot;")
                     .replace("'", "&apos;")
-
-                // 创建包含完整内容的 XML 负载，包括发布者信息
-                val xmlContent = """
-                    <taillist xmlns='urn:xmpp:taillist:0'>
-                        <id>${itemId}</id>
-                        <timestamp>${System.currentTimeMillis()}</timestamp>
-                        <publisher>${publisherJid}</publisher>
-                        <content type='application/json'>${escapedContent}</content>
-                    </taillist>
+                
+                // 构造 XML payload
+                val namespace = "http://taillist.example.com/protocol"
+                val elementName = "taillist"
+                
+                // 构建 SimplePayload - 必须符合 XML 格式
+                val payloadXml = """
+                    <$elementName xmlns='$namespace'>
+                    <publisher>${publisherJid}</publisher>
+                    <timestamp>${System.currentTimeMillis()}</timestamp>
+                    <content type="$contentType">$escapedContent</content>
+                    </$elementName>
                 """.trimIndent()
-
-                Log.d(TAG, "准备发布完整内容到节点: $nodeId")
-
-                // 创建 SimplePayload，使用自定义 XML
-                val payload = SimplePayload(
-                    "taillist",
-                    "urn:xmpp:taillist:0",
-                    xmlContent
-                )
-
+                
+                // 创建 SimplePayload
+                val payload = SimplePayload(elementName, namespace, payloadXml)
+                
+                // 构建PayloadItem
                 val item = PayloadItem<SimplePayload>(itemId, payload)
+                
+                Log.d(TAG, "将项目发布到节点 $nodeId, 项目ID: $itemId")
                 node.publish(item)
-
-                Log.d(TAG, "成功发布完整内容到节点: $nodeId, itemId=$itemId")
+                
+                // 现在直接手动通过 Flow 发出通知，确保自己发布的内容也能在尾单列表中立即显示
+                // 无需等待服务器推送/轮询
+                val notification = PubSubNotification(
+                    nodeId = nodeId,
+                    itemId = itemId,
+                    payload = payloadXml
+                )
+                
+                // 更新缓存
+                val currentNodeCache = messageCache[nodeId]?.toMutableList() ?: mutableListOf()
+                currentNodeCache.add(0, notification)  // 添加到列表开头
+                messageCache[nodeId] = currentNodeCache
+                
+                // 通过 Flow 发送
+                scope.launch {
+                    try {
+                        Log.d(TAG, "自动发送刚发布的尾单到Flow: nodeId=$nodeId, itemId=$itemId")
+                        _pubsubItemsFlow.emit(notification)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "发送刚发布的尾单到Flow失败: ${e.message}")
+                    }
+                }
+                
+                Log.d(TAG, "项目 $itemId 发布成功")
                 Result.success(itemId)
             } catch (e: Exception) {
-                Log.e(TAG, "发布完整内容失败: ${e.message}", e)
-
-                // 如果发布完整内容失败，尝试发布简化版本
-                try {
-                    Log.d(TAG, "尝试发布简化版本...")
-                    // 获取当前用户的JID用于简化版本
-                    val publisherJid = currentConnection?.user?.asBareJid()?.toString() ?: ""
-                    
-                    // 从 JSON 中提取基本信息
-                    val jsonObject = org.json.JSONObject(content)
-                    val title = jsonObject.optString("title", "未知标题")
-                    val price = jsonObject.optDouble("price", 0.0)
-
-                    // 创建简化的 XML 负载，只包含基本信息
-                    val simpleXmlContent = """
-                        <taillist xmlns='urn:xmpp:taillist:0'>
-                            <id>${itemId}</id>
-                            <timestamp>${System.currentTimeMillis()}</timestamp>
-                            <title>${title.replace("&", "&amp;").replace("<", "&lt;")}</title>
-                            <price>${price}</price>
-                        </taillist>
-                    """.trimIndent()
-
-                    val simplePayload = SimplePayload(
-                        "taillist",
-                        "urn:xmpp:taillist:0",
-                        simpleXmlContent
-                    )
-
-                    val simpleItem = PayloadItem<SimplePayload>(itemId, simplePayload)
-                    node.publish(simpleItem)
-
-                    Log.d(TAG, "成功发布简化版本到节点: $nodeId, itemId=$itemId")
-                    Result.success(itemId)
-                } catch (e2: Exception) {
-                    Log.e(TAG, "发布简化版本也失败了: ${e2.message}", e2)
-                    Result.failure(e2)
-                }
+                Log.e(TAG, "发布项目时出错", e)
+                Result.failure(e)
             }
         } catch (e: Exception) {
             Log.e(TAG, "发布过程中发生顶级异常: ${e.message}", e)
@@ -2805,6 +2804,83 @@ class XMPPManager private constructor() {
             Log.d(TAG, "自动重连设置完成")
         } catch (e: Exception) {
             Log.e(TAG, "设置自动重连失败: ${e.message}", e)
+        }
+    }
+
+    /**
+     * 重新连接和订阅
+     * 保留PubSubItem的缓存，确保断线重连后能继续接收消息
+     */
+    fun resubscribeToNodes() {
+        if (connectionState.value != ConnectionState.AUTHENTICATED) {
+            Log.e(TAG, "尝试重新订阅，但未认证")
+            return
+        }
+
+        val nodesToResubscribe = subscribedNodes.toSet() // 复制当前订阅列表
+        
+        // 清除当前订阅状态，但保留消息缓存
+        subscribedNodes.clear()
+        nodeListeners.forEach { (nodeId, listener) ->
+            try {
+                val node = pubSubManager?.getNode(nodeId)
+                node?.removeItemEventListener(listener)
+            } catch (e: Exception) {
+                Log.e(TAG, "移除节点 $nodeId 的监听器时出错", e)
+            }
+        }
+        nodeListeners.clear()
+        
+        // 重新订阅
+        scope.launch {
+            nodesToResubscribe.forEach { nodeId ->
+                try {
+                    Log.d(TAG, "尝试重新订阅节点: $nodeId")
+                    val result = subscribeToNode(nodeId)
+                    if (result.isSuccess) {
+                        Log.d(TAG, "成功重新订阅节点: $nodeId")
+                    } else {
+                        Log.e(TAG, "重新订阅节点 $nodeId 失败: ${result.exceptionOrNull()?.message}")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "重新订阅节点 $nodeId 时出错", e)
+                }
+            }
+        }
+    }
+
+    /**
+     * 设置聊天和花名册监听器
+     */
+    private fun setupChatAndRosterListeners() {
+        try {
+            // 配置保活
+            setupPingMechanism()
+            // 设置消息监听器
+            setupMessageListeners()
+            // 设置Roster监听器
+            setupRosterListener()
+            // 初始化群聊管理器
+            _groupChatManager.initMucManager()
+            // 设置群聊消息监听器
+            _groupChatManager.setupGroupChatMessageListener()
+            
+            Log.d(TAG, "聊天和花名册监听器设置完成")
+        } catch (e: Exception) {
+            Log.e(TAG, "设置聊天和花名册监听器出错: ${e.message}", e)
+        }
+    }
+    
+    /**
+     * 请求联系人状态
+     */
+    private fun requestContactStatuses() {
+        try {
+            // 请求所有联系人的在线状态
+            requestAllContactsPresence()
+            Log.d(TAG, "请求联系人状态完成")
+        } catch (e: Exception) {
+            Log.e(TAG, "请求联系人状态出错: ${e.message}", e)
         }
     }
 }

@@ -7,7 +7,7 @@ import com.example.travalms.api.dto.TailOrderResponse
 import com.example.travalms.data.api.NetworkModule
 import com.example.travalms.data.remote.ConnectionState
 import com.example.travalms.data.remote.XMPPManager
-import com.example.travalms.ui.screens.PostItem
+import com.example.travalms.ui.model.PostItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,6 +44,21 @@ class MyPublishedTailsViewModel : ViewModel() {
     // UI状态
     private val _uiState = MutableStateFlow(MyPublishedTailsState())
     val uiState: StateFlow<MyPublishedTailsState> = _uiState.asStateFlow()
+    
+    // 保存原始的后端响应数据，用于详情页面
+    private val _originalTailOrders = MutableStateFlow<Map<Long, TailOrderResponse>>(emptyMap())
+    val originalTailOrders: StateFlow<Map<Long, TailOrderResponse>> = _originalTailOrders.asStateFlow()
+    
+    // 获取特定ID的尾单原始数据
+    fun getOriginalTailOrderById(id: Long): TailOrderResponse? {
+        return _originalTailOrders.value[id]
+    }
+    
+    // 更新原始尾单数据
+    fun updateOriginalTailOrders(newData: Map<Long, TailOrderResponse>) {
+        _originalTailOrders.value = newData
+        Log.d(TAG, "更新原始尾单数据，当前数量: ${newData.size}")
+    }
     
     // 静态实例，用于其他ViewModel访问
     companion object {
@@ -87,6 +102,10 @@ class MyPublishedTailsViewModel : ViewModel() {
                     val tailOrders = response.body()!!
                     val postItems = convertToPostItems(tailOrders)
                     
+                    // 保存原始数据，供详情页面使用
+                    val originalDataMap = tailOrders.associateBy { it.id }
+                    _originalTailOrders.value = originalDataMap
+                    
                     _uiState.update { state -> 
                         state.copy(publishedTails = postItems, isLoading = false, errorMessage = null) 
                     }
@@ -129,7 +148,7 @@ class MyPublishedTailsViewModel : ViewModel() {
         
         Log.d(TAG, "当前用户名: $currentUsername, JID: $currentUserJid")
         
-        return tailOrders.mapIndexed { index, tailOrder ->
+        return tailOrders.map { tailOrder ->
             // 解析productDetails JSON字符串
             val productDetails = try {
                 JSONObject(tailOrder.productDetails)
@@ -151,17 +170,23 @@ class MyPublishedTailsViewModel : ViewModel() {
             // 提取节点信息
             val publishLocations = tailOrder.publishingNodes?.map { it.nodeName } ?: emptyList()
             
+            // 记录产品信息日志
+            Log.d(TAG, "尾单产品信息: ID=${tailOrder.id}, 产品ID=${tailOrder.productId}, 产品标题=${tailOrder.productTitle}")
+            
             // 创建UI对象
             PostItem(
                 id = tailOrder.id.toInt(),
                 title = tailOrder.title,
-                dates = startDateStr,
                 feature = tailOrder.itinerary,
-                remainingSlots = 10, // 假设值，后端没有提供
-                price = price,
-                daysExpired = daysExpired,
                 publisher = contactPerson,
-                publishLocations = publishLocations
+                publishTime = System.currentTimeMillis(),
+                dates = startDateStr,
+                remainingSlots = 10, // 假设值，后端没有提供
+                price = price.toString(),
+                daysExpired = daysExpired,
+                publishLocations = publishLocations,
+                productId = tailOrder.productId?.toInt(),
+                productTitle = tailOrder.productTitle
             )
         }
     }
