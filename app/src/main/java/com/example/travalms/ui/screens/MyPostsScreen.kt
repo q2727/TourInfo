@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.travalms.ui.theme.PrimaryColor
 import com.example.travalms.ui.viewmodels.MyPublishedTailsViewModel
@@ -330,7 +331,10 @@ fun MyPostsScreen(
                                     post = postItem,
                                     onItemClick = handleItemClick,
                                     onRefresh = { handleRefresh() },
-                                    onDelete = {  /* 后续实现删除 */ }
+                                    onDelete = { post -> 
+                                        // 执行删除操作
+                                        viewModel.deleteTailOrder(post.id.toLong())
+                                    }
                                 )
                             }
                         }
@@ -350,6 +354,8 @@ fun PostItemCard(
     onDelete: (PostItem) -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    // 添加删除确认对话框状态
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     
     Card(
         modifier = Modifier
@@ -383,37 +389,6 @@ fun PostItemCard(
                                 .fillMaxWidth()
                                 .padding(8.dp)
                         ) {
-                            // TextButton(
-                            //    onClick = {
-                            //        onRepost(post)
-                            //        showMenu = false
-                            //    },
-                            //    modifier = Modifier.fillMaxWidth(),
-                            //    colors = ButtonDefaults.textButtonColors(
-                            //        contentColor = Color.White
-                            //    )
-                            // ) {
-                            //    Row(
-                            //        verticalAlignment = Alignment.CenterVertically,
-                            //        modifier = Modifier.fillMaxWidth()
-                            //    ) {
-                            //        Icon(
-                            //            imageVector = Icons.Filled.Send,
-                            //            contentDescription = "重新发布",
-                            //            tint = Color.White
-                            //        )
-                            //        Spacer(modifier = Modifier.width(8.dp))
-                            //        Text(
-                            //            text = "重新发布",
-                            //            color = Color.White,
-                            //            fontSize = 16.sp,
-                            //            fontWeight = FontWeight.Bold
-                            //        )
-                            //    }
-                            // }
-                            
-                            // Divider(color = Color(0xFF4E5359))
-                            
                             TextButton(
                                 onClick = {
                                     onRefresh(post)
@@ -447,8 +422,8 @@ fun PostItemCard(
                             
                             TextButton(
                                 onClick = {
-                                    onDelete(post)
                                     showMenu = false
+                                    showDeleteConfirmDialog = true // 显示删除确认对话框
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = ButtonDefaults.textButtonColors(
@@ -572,4 +547,33 @@ fun PostItemCard(
             }
         }
     }
-} 
+    
+    // 删除确认对话框
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text("删除尾单") },
+            text = { 
+                Text("确定要删除这条尾单吗？此操作将从系统和各种发布渠道中彻底删除该信息，无法恢复。") 
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDelete(post)
+                        showDeleteConfirmDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("确认删除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+}

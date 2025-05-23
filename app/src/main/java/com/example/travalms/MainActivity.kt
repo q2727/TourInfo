@@ -19,6 +19,7 @@ import org.jivesoftware.smack.util.dns.minidns.MiniDnsResolver
 import com.example.travalms.data.remote.XMPPService
 import com.example.travalms.data.remote.XMPPManager
 import dagger.hilt.android.AndroidEntryPoint
+import android.content.res.Configuration
 
 /**
  * MainActivity是应用程序的主活动，负责初始化界面
@@ -88,5 +89,20 @@ class MainActivity : ComponentActivity() {
             Log.d(TAG, "用户未登录，停止XMPP服务")
             XMPPService.stopService(this)
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // 处理配置变化，但不重建Activity
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // 保存必要的状态
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        // 恢复必要的状态
     }
 }

@@ -1,10 +1,12 @@
 package com.example.travalms.ui.viewmodels;
 
+import android.content.Context;
 import android.util.Log;
 import androidx.lifecycle.ViewModel;
 import com.example.travalms.api.dto.TailOrderResponse;
 import com.example.travalms.data.api.NetworkModule;
 import com.example.travalms.data.remote.ConnectionState;
+import com.example.travalms.data.remote.PubSubNotification;
 import com.example.travalms.data.remote.XMPPManager;
 import com.example.travalms.ui.model.PostItem;
 import kotlinx.coroutines.flow.StateFlow;
@@ -13,6 +15,9 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import org.jsoup.Jsoup;
+import org.jsoup.parser.Parser;
+import android.app.Application;
 
 /**
  * 我的发布界面数据状态

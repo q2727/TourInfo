@@ -60,17 +60,26 @@ fun TailListScreen(
     viewModel: TailListViewModel = viewModel(factory = TailListViewModel.Factory())
 ) {
     val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
+    
+    // 在组件挂载时设置Application
+    LaunchedEffect(Unit) {
+        viewModel.setApplication(context.applicationContext as android.app.Application)
+    }
+    
     val refreshState = rememberPullRefreshState(
-        refreshing = state.isLoading, 
-        onRefresh = { 
-            // 明确调用刷新方法
-            viewModel.refreshTailLists() 
+        refreshing = state.isLoading,
+        onRefresh = {
+            // 直接调用刷新方法，不需要额外的协程作用域
+            viewModel.refreshTailLists()
+            
+            // 添加提示信息
+            Toast.makeText(context, "正在刷新数据...", Toast.LENGTH_SHORT).show()
         }
     )
-    val context = LocalContext.current
     // 添加焦点管理器，用于关闭键盘
     val focusManager = LocalFocusManager.current
-    
+
     // 添加搜索关键词状态
     var searchText by remember { mutableStateOf("") }
 
@@ -89,10 +98,10 @@ fun TailListScreen(
         }
     } else {
         // 有搜索关键词时，先按搜索关键词筛选，再根据标签筛选
-        val searchFiltered = state.tailOrders.filter { 
-            it.title.contains(searchText, ignoreCase = true) 
+        val searchFiltered = state.tailOrders.filter {
+            it.title.contains(searchText, ignoreCase = true)
         }
-        
+
         if (selectedTab == 0) {
             // 显示所有匹配搜索关键词的尾单
             searchFiltered
@@ -193,8 +202,8 @@ fun TailListScreen(
                         trailingIcon = {
                             if (searchText.isNotEmpty()) {
                                 IconButton(
-                                    onClick = { 
-                                        searchText = "" 
+                                    onClick = {
+                                        searchText = ""
                                     }
                                 ) {
                                     Icon(Icons.Filled.Clear, contentDescription = "清除")
@@ -263,7 +272,7 @@ fun TailListScreen(
                         }
                     }
                 }
-                
+
                 // 显示搜索结果数量
                 if (searchText.isNotEmpty() && displayedTailOrders.isNotEmpty()) {
                     Box(
@@ -299,7 +308,7 @@ fun TailListScreen(
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
-                                    "没有找到匹配\"$searchText\"的尾单", 
+                                    "没有找到匹配\"$searchText\"的尾单",
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = Color.Gray
                                 )

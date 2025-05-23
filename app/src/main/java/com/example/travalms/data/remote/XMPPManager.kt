@@ -1745,7 +1745,7 @@ class XMPPManager private constructor() {
                                 // 继续尝试其他解析方法
                             }
 
-                            // 方法4: 极简匹配，尝试最后的解析努力
+                            // 方法2: 极简匹配，尝试最后的解析努力
                             if (!parsed) {
                                 try {
                                     Log.d(TAG, "尝试极简解析方法4")
@@ -2870,7 +2870,42 @@ class XMPPManager private constructor() {
             Log.e(TAG, "设置聊天和花名册监听器出错: ${e.message}", e)
         }
     }
-    
+
+    /**
+     * 从节点中删除一个项目
+     * @param nodeId 节点ID
+     * @param itemId 要删除的项目ID
+     * @return 操作结果
+     */
+    suspend fun retractItemFromNode(nodeId: String, itemId: String): Result<Boolean> =
+        withContext(Dispatchers.IO) {
+            if (connectionState.value != ConnectionState.AUTHENTICATED) {
+                return@withContext Result.failure(IllegalStateException("用户未认证"))
+            }
+
+            val pubsub = pubSubManager ?: return@withContext Result.failure(
+                IllegalStateException("PubSub管理器未初始化")
+            )
+
+            try {
+                Log.d(TAG, "尝试从节点 $nodeId 删除项目 $itemId")
+                val node = pubsub.getNode(nodeId) as LeafNode
+                node.deleteItem(itemId)
+
+                // 从缓存中删除
+                val currentNodeCache = messageCache[nodeId]?.toMutableList() ?: mutableListOf()
+                currentNodeCache.removeAll { it.itemId == itemId }
+                messageCache[nodeId] = currentNodeCache
+
+                Log.d(TAG, "成功从节点 $nodeId 删除项目 $itemId")
+                Result.success(true)
+            } catch (e: Exception) {
+                Log.e(TAG, "从节点 $nodeId 删除项目 $itemId 时出错", e)
+                Result.failure(e)
+            }
+        }
+
+
     /**
      * 请求联系人状态
      */

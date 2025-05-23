@@ -1,11 +1,13 @@
 package com.example.travalms.ui.viewmodels
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.travalms.api.dto.TailOrderResponse
 import com.example.travalms.data.api.NetworkModule
 import com.example.travalms.data.remote.ConnectionState
+import com.example.travalms.data.remote.PubSubNotification
 import com.example.travalms.data.remote.XMPPManager
 import com.example.travalms.ui.model.PostItem
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +20,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import org.jsoup.Jsoup
+import org.jsoup.parser.Parser
+import kotlinx.coroutines.delay
+import android.app.Application
 
 private const val TAG = "MyPublishedTailsVM"
 
@@ -44,16 +50,24 @@ class MyPublishedTailsViewModel : ViewModel() {
     // UI状态
     private val _uiState = MutableStateFlow(MyPublishedTailsState())
     val uiState: StateFlow<MyPublishedTailsState> = _uiState.asStateFlow()
-    
+
     // 保存原始的后端响应数据，用于详情页面
     private val _originalTailOrders = MutableStateFlow<Map<Long, TailOrderResponse>>(emptyMap())
     val originalTailOrders: StateFlow<Map<Long, TailOrderResponse>> = _originalTailOrders.asStateFlow()
-    
+
+    // 添加 Application 引用
+    private var application: Application? = null
+
+    // 设置 Application 的方法
+    fun setApplication(app: Application) {
+        application = app
+    }
+
     // 获取特定ID的尾单原始数据
     fun getOriginalTailOrderById(id: Long): TailOrderResponse? {
         return _originalTailOrders.value[id]
     }
-    
+
     // 更新原始尾单数据
     fun updateOriginalTailOrders(newData: Map<Long, TailOrderResponse>) {
         _originalTailOrders.value = newData
@@ -68,11 +82,26 @@ class MyPublishedTailsViewModel : ViewModel() {
             if (instance == null) {
                 instance = MyPublishedTailsViewModel()
                 instance?.loadUserPublishedTails()
+
+            }
+            return instance!!
+        }
+
+        // 添加一个带Application参数的getInstance方法
+        fun getInstance(app: Application): MyPublishedTailsViewModel {
+            if (instance == null) {
+                instance = MyPublishedTailsViewModel()
+                instance?.setApplication(app)
+                instance?.loadUserPublishedTails()
+            } else {
+                // 确保Application已设置
+                instance?.setApplication(app)
+
             }
             return instance!!
         }
     }
-    
+
     // 加载用户发布的尾单
     fun loadUserPublishedTails() {
         // 检查登录状态
@@ -80,12 +109,13 @@ class MyPublishedTailsViewModel : ViewModel() {
             _uiState.update { state -> state.copy(errorMessage = "未登录到XMPP服务器") }
             return
         }
-        
+
         // 获取当前用户的JID
         val currentUserJid = xmppManager.currentConnection?.user?.asEntityBareJidString()
         if (currentUserJid == null) {
             _uiState.update { state -> state.copy(errorMessage = "无法获取当前用户JID") }
             Log.e(TAG, "无法获取JID，无法加载用户发布历史")
+
             return
         }
         
@@ -94,24 +124,24 @@ class MyPublishedTailsViewModel : ViewModel() {
         
         viewModelScope.launch {
             try {
+
+
                 // 调用API获取用户发布的尾单
                 val response = tailOrderApiService.getUserTailOrders(currentUserJid)
                 
                 if (response.isSuccessful && response.body() != null) {
-                    // 解析响应数据并转换为UI模型
                     val tailOrders = response.body()!!
                     val postItems = convertToPostItems(tailOrders)
-                    
-                    // 保存原始数据，供详情页面使用
+
+                    // 保存原始数据
                     val originalDataMap = tailOrders.associateBy { it.id }
                     _originalTailOrders.value = originalDataMap
                     
-                    _uiState.update { state -> 
-                        state.copy(publishedTails = postItems, isLoading = false, errorMessage = null) 
+                    _uiState.update { state ->
+                        state.copy(publishedTails = postItems, isLoading = false, errorMessage = null)
                     }
                     Log.d(TAG, "成功加载用户发布历史: ${tailOrders.size} 条记录")
                 } else {
-                    // 处理API错误
                     val errorBody = response.errorBody()?.string() ?: "未知错误"
                     _uiState.update { state ->
                         state.copy(
@@ -122,7 +152,6 @@ class MyPublishedTailsViewModel : ViewModel() {
                     Log.e(TAG, "获取用户发布历史失败: ${response.code()} - $errorBody")
                 }
             } catch (e: Exception) {
-                // 处理异常
                 _uiState.update { state ->
                     state.copy(
                         isLoading = false,
@@ -169,7 +198,7 @@ class MyPublishedTailsViewModel : ViewModel() {
             
             // 提取节点信息
             val publishLocations = tailOrder.publishingNodes?.map { it.nodeName } ?: emptyList()
-            
+
             // 记录产品信息日志
             Log.d(TAG, "尾单产品信息: ID=${tailOrder.id}, 产品ID=${tailOrder.productId}, 产品标题=${tailOrder.productTitle}")
             
@@ -211,8 +240,196 @@ class MyPublishedTailsViewModel : ViewModel() {
         }
     }
     
+    /**
+     * 删除尾单
+     * 从后端数据库删除尾单，并从所有发布节点中删除对应的XMPP消息
+     * @param tailOrderId 要删除的尾单ID
+     */
+    fun deleteTailOrder(tailOrderId: Long) {
+        // 检查登录状态
+        if (xmppManager.connectionState.value != ConnectionState.AUTHENTICATED) {
+            _uiState.update { state -> state.copy(errorMessage = "未登录到XMPP服务器，无法删除") }
+            return
+        }
+
+        // 开始删除操作
+        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "开始删除尾单: ID=$tailOrderId")
+
+                // 1. 获取尾单信息和发布节点
+                val originalTailOrder = _originalTailOrders.value[tailOrderId]
+                if (originalTailOrder == null) {
+                    Log.e(TAG, "找不到要删除的尾单: ID=$tailOrderId")
+                    _uiState.update { it.copy(isLoading = false, errorMessage = "找不到要删除的尾单") }
+                    return@launch
+                }
+
+                // 获取发布节点信息
+                val publishingNodes = originalTailOrder.publishingNodes?.map { it.nodeName } ?: emptyList()
+                Log.d(TAG, "尾单发布节点: ${publishingNodes.joinToString()}")
+
+                // 2. 从XMPP节点中删除消息
+                var xmppDeleteSuccess = false
+                for (nodeId in publishingNodes) {
+                    try {
+                        // 获取节点中的所有项目
+                        val nodeItemsResult = xmppManager.getNodeItems(nodeId)
+                        if (nodeItemsResult.isSuccess) {
+                            val notifications = nodeItemsResult.getOrThrow()
+                            Log.d(TAG, "节点 $nodeId 中找到 ${notifications.size} 个项目")
+
+                            // 查找匹配的项目
+                            for (notification in notifications) {
+                                // 检查是否是匹配的尾单
+                                if (isMatchingTailOrder(notification, tailOrderId, originalTailOrder.title)) {
+                                    // 删除找到的匹配项
+                                    val result = xmppManager.retractItemFromNode(nodeId, notification.itemId)
+                                    if (result.isSuccess) {
+                                        xmppDeleteSuccess = true
+                                        Log.d(TAG, "从节点 $nodeId 删除了项目: itemId=${notification.itemId}")
+                                        // 添加延迟，避免过快发送请求
+                                        delay(100)
+                                    } else {
+                                        Log.e(TAG, "从节点 $nodeId 删除项目失败: ${result.exceptionOrNull()?.message}")
+                                    }
+                                }
+                            }
+                        } else {
+                            Log.e(TAG, "获取节点 $nodeId 项目失败: ${nodeItemsResult.exceptionOrNull()?.message}")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "处理节点 $nodeId 时出错", e)
+                    }
+                }
+
+                // 3. 从后端API删除
+                val response = tailOrderApiService.deleteTailOrder(tailOrderId)
+
+                if (response.isSuccessful) {
+                    Log.d(TAG, "成功从后端API删除尾单: ID=$tailOrderId")
+
+                    // 4. 更新本地数据 - 使用单次更新避免多次触发UI更新
+                    val updatedOriginals = _originalTailOrders.value.toMutableMap()
+                    updatedOriginals.remove(tailOrderId)
+
+                    // 在状态更新后更新原始数据
+                    _originalTailOrders.value = updatedOriginals
+                    val updatedList = _uiState.value.publishedTails.filterNot { it.id == tailOrderId.toInt() }
+                    
+                    // 使用单次更新，避免多次触发UI更新
+                    _uiState.update { it.copy(
+                        publishedTails = updatedList,
+                        isLoading = false,
+                        errorMessage = null
+                    ) }
+
+
+                    // 记录XMPP删除结果
+                    if (!xmppDeleteSuccess) {
+                        Log.w(TAG, "尾单从后端删除成功，但XMPP消息删除失败")
+                    }
+                } else {
+                    // 处理API错误
+                    val errorMsg = "删除失败: ${response.code()} - ${response.message()}"
+                    Log.e(TAG, errorMsg)
+                    _uiState.update { it.copy(isLoading = false, errorMessage = errorMsg) }
+                }
+            } catch (e: Exception) {
+                // 处理异常
+                val errorMsg = "删除出错: ${e.message}"
+                Log.e(TAG, errorMsg, e)
+                _uiState.update { it.copy(isLoading = false, errorMessage = errorMsg) }
+            }
+        }
+    }
+
+    /**
+     * 重置XMPP连接
+     */
+    private suspend fun resetXmppConnectionAfterDelete() {
+        try {
+            Log.d(TAG, "开始重置XMPP连接...")
+            
+            // 断开当前连接
+            xmppManager.disconnect()
+            
+            // 等待1秒确保连接完全关闭
+            delay(1000)
+            
+            // 从SharedPreferences获取保存的凭据
+            val app = application
+            if (app != null) {
+                val prefs = app.getSharedPreferences("xmpp_prefs", Context.MODE_PRIVATE)
+                val username = prefs.getString("username", "") ?: ""
+                val password = prefs.getString("password", "") ?: ""
+                
+                if (username.isNotEmpty() && password.isNotEmpty()) {
+                    // 使用保存的凭据重新登录
+                    val result = xmppManager.login(username, password)
+                    if (result.isSuccess) {
+                        Log.d(TAG, "XMPP重新连接成功")
+                        
+
+                    } else {
+                        Log.e(TAG, "XMPP重新连接失败: ${result.exceptionOrNull()?.message}")
+                    }
+                } else {
+                    Log.e(TAG, "无法重新连接：未找到保存的凭据")
+                }
+            } else {
+                Log.e(TAG, "无法重新连接：Application context 未设置")
+            }
+            
+            Log.d(TAG, "XMPP连接重置完成")
+        } catch (e: Exception) {
+            Log.e(TAG, "重置XMPP连接时出错", e)
+        }
+    }
+
+    /**
+     * 检查通知是否匹配指定的尾单ID和标题
+     */
+    private fun isMatchingTailOrder(notification: PubSubNotification, tailOrderId: Long, title: String): Boolean {
+        try {
+            val payload = notification.payload
+            // 使用JSoup解析XML
+            val document = Jsoup.parse(payload, "", Parser.xmlParser())
+
+            // 尝试获取content元素
+            val contentElement = document.select("content").firstOrNull()
+             if (contentElement != null) {
+                val contentText = contentElement.text()
+                // 解析内容，检查是否包含指定的尾单ID或标题
+                try {
+                    val jsonObject = JSONObject(contentText)
+
+                    // 1. 检查productId字段
+                    if (jsonObject.has("productId") && jsonObject.optLong("productId", 0) == tailOrderId) {
+                        Log.d(TAG, "通过productId匹配到尾单: $tailOrderId")
+                        return true
+                    }
+
+                    // 2. 检查标题是否完全匹配
+                    if (jsonObject.has("title") && jsonObject.optString("title") == title) {
+                        Log.d(TAG, "通过title匹配到尾单: $title")
+                        return true
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "解析通知内容JSON失败", e)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "解析通知失败", e)
+        }
+        return false
+    }
+
     // 初始加载数据
     init {
         loadUserPublishedTails()
     }
+
 } 
