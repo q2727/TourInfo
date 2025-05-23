@@ -117,9 +117,11 @@ class XMPPManager private constructor() {
     val groupChatManager: XMPPGroupChatManager
         get() = _groupChatManager
 
-    // 项目通知流
-    private val _pubsubItemsFlow = MutableSharedFlow<PubSubNotification>(replay = 100)
-    val pubsubItemsFlow: SharedFlow<PubSubNotification> = _pubsubItemsFlow
+    // 项目通知流 - 确保它是 var 并且在认证后重新初始化
+    @Volatile
+    private var _pubsubItemsFlow: MutableSharedFlow<PubSubNotification> = MutableSharedFlow(replay = 10, extraBufferCapacity = 10) // Default initial
+    val pubsubItemsFlow: SharedFlow<PubSubNotification>
+        get() = _pubsubItemsFlow.asSharedFlow() // Getter ensures external access to the current instance
 
     // 添加消息流
     private val _messageFlow = MutableSharedFlow<ChatMessage>(replay = 10)
@@ -163,44 +165,33 @@ class XMPPManager private constructor() {
         override fun connected(connection: XMPPConnection?) {
             Log.d(TAG, "XMPP 已连接")
             _connectionState.value = ConnectionState.CONNECTED
+            // Optional: resetPubSubItemsFlow() // If connection itself should clear old notifications
         }
 
         override fun authenticated(connection: XMPPConnection?, resumed: Boolean) {
             Log.d(TAG, "XMPP 已认证 (resumed: $resumed)")
-
-            // 立即将回调提供的connection赋值给实例变量
-            if (connection is XMPPTCPConnection) { // 添加类型检查和null检查
-                // 使用限定的 this 访问外部类的属性
-                this@XMPPManager.currentConnection = connection
-                Log.d(TAG, "Assigned currentConnection in authenticated callback.")
-            } else {
+            // Assign currentConnection immediately
+            this@XMPPManager.currentConnection = connection as? XMPPTCPConnection
+            if (this@XMPPManager.currentConnection == null) {
                 Log.e(TAG, "Authenticated callback received null or non-TCP connection!")
-                // 如果 connection 为 null 或类型不对，则无法继续初始化
-                _connectionState.value = ConnectionState.ERROR // 设置错误状态
-                disconnect() // 尝试清理
-                return // 提前退出回调
+                _connectionState.value = ConnectionState.ERROR
+                cleanupConnectionResources() // Perform cleanup
+                return
             }
 
-            // 在赋值后，更新状态并调用初始化方法
             _connectionState.value = ConnectionState.AUTHENTICATED
             
-            initScope.launch {
+            initScope.launch { // Use initScope for these setup tasks
                 try {
-                    // 初始化用于通信的各类管理器
-                    initPubSubManager()
-                    setupChatAndRosterListeners()
-                    setupPresenceListener()
+                    // Critical: Initialize services after authentication
+                    initializePostAuthenticationServices()
                     
-                    // 重新订阅之前的节点，确保接收消息
-                    resubscribeToNodes()
-                    
-                    // 发送在线状态
+                    // Send initial presence and other post-login tasks
                     sendInitialPresence()
-                    
-                    // 更新联系人状态
-                    requestContactStatuses()
+                    requestContactStatuses() // If you have such a method
                 } catch (e: Exception) {
-                    Log.e(TAG, "初始化过程中出错: ${e.message}", e)
+                    Log.e(TAG, "认证后初始化过程中出错: ${e.message}", e)
+                    _connectionState.value = ConnectionState.ERROR
                 }
             }
         }
@@ -208,25 +199,55 @@ class XMPPManager private constructor() {
         override fun connectionClosed() {
             Log.d(TAG, "XMPP 连接已关闭")
             _connectionState.value = ConnectionState.CONNECTION_CLOSED
-            currentConnection = null
-            pubSubManager = null
+            cleanupConnectionResources()
         }
 
         override fun connectionClosedOnError(e: Exception?) {
             Log.e(TAG, "XMPP 连接因错误关闭", e)
+            // Set error state BEFORE cleanup, so cleanup knows the context
             _connectionState.value = ConnectionState.ERROR
-
-            // 尝试重新连接
-            if (e is java.net.SocketException) {
-                Log.d(TAG, "检测到网络连接问题，系统将尝试自动重连")
-                // 确保ReconnectionManager会处理重连
-                // 不要在这里手动断开连接，让重连机制处理
-            } else {
-                currentConnection = null
-                pubSubManager = null
-            }
+            cleanupConnectionResources()
+            // ReconnectionManager (if enabled) should handle reconnection attempts.
         }
     }
+
+    // New: Post-authentication service initialization
+    private fun initializePostAuthenticationServices() {
+        Log.d(TAG, "Initializing post-authentication services...")
+        // 1. Re-create _pubsubItemsFlow instance
+        _pubsubItemsFlow = MutableSharedFlow(replay = 10, extraBufferCapacity = 10)
+        Log.d(TAG, "_pubsubItemsFlow has been reset (new instance created).")
+
+        // 2. Initialize PubSubManager with the current, valid connection
+        initPubSubManager(currentConnection ?: return) // Early exit if connection became null
+
+        // 3. Setup other listeners (Chat, Roster, etc.)
+        setupChatAndRosterListeners()
+        setupPresenceListener()
+
+        // 4. Resubscribe to nodes if needed
+        // resubscribeToNodes() // Your existing logic
+    }
+
+    // Modified initPubSubManager to take a connection parameter
+    private fun initPubSubManager(connection: AbstractXMPPConnection) {
+        if (!connection.isAuthenticated) { // Should always be true if called from authenticated flow
+            Log.w(TAG, "Cannot initialize PubSubManager, connection is not authenticated.") // Removed .state reference
+            return
+        }
+        try {
+            pubSubManager = PubSubManager.getInstanceFor(connection)
+            Log.d(TAG, "PubSubManager instance obtained for the current connection.")
+            // Node subscription and listener attachment logic should happen here or be called from here
+            // e.g., resubscribeToNodesAndAttachListeners()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error initializing PubSubManager", e)
+        }
+    }
+
+    // ItemEventListener should emit to the current _pubsubItemsFlow
+    // Make sure your ItemEventListener's implementation of 'handlePublishedItems'
+    // uses this._pubsubItemsFlow.tryEmit(...)
 
     // 获取配置好的XMPP连接
     private fun getConnectionConfig(): XMPPTCPConnectionConfiguration {
@@ -461,42 +482,6 @@ class XMPPManager private constructor() {
             } catch (e: Exception) {
                 Log.e(TAG, "断开注册用连接时出错: ${e.message}", e)
             }
-        }
-    }
-
-    /**
-     * 初始化PubSub管理器
-     * 确保使用正确的服务JID并配置IQ过滤器
-     */
-    private fun initPubSubManager() {
-        Log.d(TAG, "确保 PubSubManager 初始化...")
-        val connection = currentConnection
-        if (connection == null) {
-            Log.e(TAG, "Initialization failed: Connection is null.")
-            pubSubManager = null
-            return
-        }
-
-        try {
-            // 1. 使用明确的pubsub服务JID
-            val pubsubServiceJid = JidCreate.domainBareFrom("pubsub.$SERVER_DOMAIN")
-            Log.d(TAG, "创建PubSubManager，使用服务JID: $pubsubServiceJid")
-
-            // 2. 获取PubSubManager实例
-            val manager = PubSubManager.getInstanceFor(connection, pubsubServiceJid)
-            Log.d(TAG, "PubSubManager实例已获取")
-
-            // 先清空旧的缓存和订阅
-            messageCache.clear()
-            subscribedNodes.clear()
-            nodeListeners.clear()
-
-            this.pubSubManager = manager
-
-            Log.d(TAG, "PubSubManager初始化完成")
-        } catch (e: Exception) {
-            Log.e(TAG, "初始化PubSubManager失败: ${e.message}", e)
-            this.pubSubManager = null
         }
     }
 
@@ -1103,160 +1088,129 @@ class XMPPManager private constructor() {
     /**
      * 断开与XMPP服务器的连接并清理资源
      */
-    fun disconnect() {
+    fun disconnect(logout: Boolean = true) {
         Log.d(TAG, "Disconnect requested. Current state: ${_connectionState.value}")
-        val conn = currentConnection // Capture current connection
-        if (conn == null && _connectionState.value == ConnectionState.DISCONNECTED) {
-            Log.d(TAG, "Already disconnected. No action needed.")
+        val conn = currentConnection // Local immutable reference
+
+        if (conn == null || !conn.isConnected) {
+            Log.d(TAG, "Already disconnected or connection is null.")
+            // Ensure cleanup even if not "connected" according to Smack
+            cleanupConnectionResources() 
+            if (_connectionState.value != ConnectionState.ERROR) { // Preserve error state
+                 _connectionState.value = ConnectionState.DISCONNECTED
+            }
             return
         }
 
-        // Use a separate scope for cleanup that won't be cancelled immediately
-        val cleanupScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-
-        cleanupScope.launch {
+        // Use a separate scope for disconnection to avoid being cancelled by initScope/scope itself
+        CoroutineScope(Dispatchers.IO).launch {
             try {
-                // 1. Cancel background tasks tied to the specific connection session
-                Log.d(TAG, "Cancelling Coroutine Scopes (scope, initScope)...")
-                this@XMPPManager.scope.coroutineContext.cancelChildren() // Cancel children jobs of the main scope
-                this@XMPPManager.initScope.coroutineContext.cancelChildren() // Cancel children jobs of the init scope
-                 // Recreate scopes for potential future connections
-                 // scope = CoroutineScope(Dispatchers.IO) // Consider recreating if needed elsewhere
-                 // initScope = CoroutineScope(Dispatchers.IO)
-
-                if (conn != null) {
-                     // 2. Send Unavailable Presence (best effort)
-                    if (conn.isAuthenticated) {
-                        try {
-                            val presence = Presence(Presence.Type.unavailable)
-                            conn.sendStanza(presence)
-                            Log.d(TAG, "Sent unavailable presence.")
-                        } catch (e: Exception) {
-                            // Ignore if not connected or other errors
-                            Log.w(TAG, "Failed to send unavailable presence (might already be disconnected)", e)
-                        }
-                    }
-
-                    // 3. Unregister Ping Listener
+                if (conn.isAuthenticated && logout) {
+                    Log.d(TAG, "Sending unavailable presence.")
                     try {
-                         val pingManager = PingManager.getInstanceFor(conn)
-                         pingFailedListener?.let {
-                             pingManager.unregisterPingFailedListener(it)
-                             Log.d(TAG, "Unregistered PingFailedListener.")
-                         }
-                     } catch (e: Exception) {
-                         Log.e(TAG, "Error unregistering PingFailedListener", e)
-                     }
-
-                    // 4. Remove Chat Message Listener (ChatManager)
-                    try {
-                        val chatManager = ChatManager.getInstanceFor(conn)
-                        incomingChatMessageListener?.let {
-                             chatManager.removeIncomingListener(it)
-                             Log.d(TAG, "Removed IncomingChatMessageListener.")
-                         }
+                        conn.sendStanza(Presence(Presence.Type.unavailable))
+                    } catch (e: SmackException.NotConnectedException) {
+                        Log.w(TAG, "Cannot send unavailable presence, not connected.", e)
                     } catch (e: Exception) {
-                        Log.e(TAG, "Error removing IncomingChatMessageListener", e)
+                        Log.w(TAG, "Error sending unavailable presence.", e)
                     }
-
-                    // 5. Remove Presence Listener (AsyncStanzaListener)
-                     try {
-                         presenceListener?.let {
-                            conn.removeAsyncStanzaListener(it)
-                            Log.d(TAG, "Removed Presence Listener.")
-                         }
-                     } catch (e: Exception) {
-                         Log.e(TAG, "Error removing Presence Listener", e)
-                     }
-
-                    // 6. Remove Roster Listener
-                    try {
-                        val roster = Roster.getInstanceFor(conn)
-                         rosterListener?.let {
-                             roster.removeRosterListener(it)
-                             Log.d(TAG, "Removed RosterListener.")
-                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error removing RosterListener", e)
-                    }
-
-                    // 7. Attempt to unsubscribe from PubSub nodes (best effort)
-                    val nodesToUnsubscribe = subscribedNodes.toSet() // Create copy
-                    if (nodesToUnsubscribe.isNotEmpty() && pubSubManager != null && conn.isAuthenticated) {
-                        Log.d(TAG, "Attempting to unsubscribe from PubSub nodes: ${nodesToUnsubscribe.joinToString()}")
-                        val currentUserJid = conn.user?.asBareJid()?.toString()
-                        if (currentUserJid != null) {
-                             nodesToUnsubscribe.forEach { nodeId ->
-                                try {
-                                    val node = pubSubManager?.getNode(nodeId)
-                                    node?.unsubscribe(currentUserJid)
-                                    // Log.d(TAG, "Unsubscribed from PubSub node: $nodeId") // Can be noisy
-                                } catch (e: Exception) {
-                                    Log.w(TAG, "Failed to unsubscribe from PubSub node $nodeId (best effort)", e)
-                                }
-                            }
-                        }
-                    }
-
-                    // 8. Remove PubSub Item Event Listeners
-                    nodeListeners.forEach { (nodeId, listener) ->
-                        try {
-                            val node = pubSubManager?.getNode(nodeId)
-                            node?.removeItemEventListener(listener)
-                            // Log.d(TAG, "Removed PubSub item listener for node: $nodeId")
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Failed to remove PubSub item listener for node $nodeId (best effort)", e)
-                        }
-                    }
-
-
-                    // 9. Cleanup Group Chat Manager
-                    Log.d(TAG, "Cleaning up Group Chat Manager...")
-                    _groupChatManager.cleanupOnLogout()
-
-                     // 10. Disconnect the actual connection
-                    if (conn.isConnected) {
-                        Log.d(TAG, "Disconnecting XMPP connection...")
-                        try {
-                            // Remove the main connection listener *before* disconnecting
-                             conn.removeConnectionListener(connectionListener)
-                             conn.disconnect() // Use synchronous disconnect
-                            Log.d(TAG, "XMPP connection disconnected.")
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error during XMPP disconnection", e)
-                        }
-                    } else {
-                         Log.d(TAG, "Connection was already not connected.")
-                         // Still remove listener if connection object exists but wasn't connected/authenticated
-                         try {
-                             conn.removeConnectionListener(connectionListener)
-                         } catch (e: Exception) {
-                            // Ignore if already removed or error occurs
-                         }
-                     }
                 }
-            } catch (e: Exception) {
-                // Catch any unexpected errors during the cleanup process
-                Log.e(TAG, "Unexpected error during disconnect cleanup", e)
-            } finally {
-                // 11. Final cleanup of state variables (always run)
-                Log.d(TAG, "Performing final state cleanup...")
-                currentConnection = null
-                pubSubManager = null
-                messageCache.clear()
-                presenceMap.clear()
-                // Ensure listeners refs are nullified even if removal failed
-                incomingChatMessageListener = null
-                presenceListener = null
-                rosterListener = null
-                pingFailedListener = null
-                nodeListeners.clear()
-                subscribedNodes.clear()
+                
+                // Cancel any ongoing initialization tasks
+                initScope.coroutineContext.cancelChildren()
+                Log.d(TAG, "Cancelled children of initScope.")
 
-                _connectionState.value = ConnectionState.DISCONNECTED
-                Log.d(TAG, "Disconnect process finished. State set to DISCONNECTED.")
+                // Explicitly remove listeners before disconnecting
+                removeCoreListeners(conn) // Pass the connection
+
+                // Cleanup other managers like group chat
+                _groupChatManager.cleanupOnLogout() // Changed from cleanup() to cleanupOnLogout()
+
+                Log.d(TAG, "Disconnecting XMPP connection object...")
+                conn.disconnect() // Perform actual Smack disconnection
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during disconnection process", e)
+            } finally {
+                // cleanupConnectionResources sets currentConnection to null and updates state
+                // It will be called by connectionClosed / connectionClosedOnError if Smack's listeners fire.
+                // Call it here to ensure cleanup if those listeners don't fire for some reason
+                // (e.g. if .disconnect() itself throws before listeners are invoked)
+                cleanupConnectionResources()
+                 // Final state check if not already set by listeners
+                if (_connectionState.value != ConnectionState.ERROR && _connectionState.value != ConnectionState.CONNECTION_CLOSED) {
+                    _connectionState.value = ConnectionState.DISCONNECTED
+                }
+                Log.d(TAG, "XMPPManager.disconnect() coroutine completed. State: ${_connectionState.value}")
             }
         }
+    }
+
+    // Modified removeCoreListeners to accept connection
+    private fun removeCoreListeners(connection: AbstractXMPPConnection?) {
+        val conn = connection ?: currentConnection ?: return // Use provided or current
+        Log.d(TAG, "Removing core XMPP listeners for connection: ${conn.hashCode()}")
+        try {
+            pingFailedListener?.let { PingManager.getInstanceFor(conn).unregisterPingFailedListener(it) }
+            incomingChatMessageListener?.let { ChatManager.getInstanceFor(conn).removeIncomingListener(it) }
+            presenceListener?.let { conn.removeAsyncStanzaListener(it) }
+            rosterListener?.let { Roster.getInstanceFor(conn).removeRosterListener(it) }
+            
+            // If PubSubManager instance exists, try to remove listeners from its nodes.
+            // This is tricky as Smack doesn't have a global "remove all item listeners from all nodes".
+            // You typically remove a specific listener from a specific node.
+            // Relying on new PubSubManager instance on reconnect is often cleaner.
+            // For example, you might iterate 'subscribedNodes' and call 'pubSubManager.getNode(nodeId).removeItemEventListener(itemListener)'
+            // but this requires 'itemListener' to be the exact instance previously added.
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception while removing core listeners", e)
+        } finally {
+            pingFailedListener = null
+            incomingChatMessageListener = null
+            presenceListener = null
+            rosterListener = null
+            Log.d(TAG, "Core XMPP listener references nulled.")
+        }
+    }
+
+    // Unified resource cleanup
+    private fun cleanupConnectionResources() {
+        Log.d(TAG, "Cleaning up connection resources...")
+        
+        // Pass currentConnection if it exists, otherwise null (won't do much if null)
+        removeCoreListeners(currentConnection) 
+
+        initScope.coroutineContext.cancelChildren() // Ensure initScope tasks are stopped
+        Log.d(TAG, "Ensured initScope children are cancelled during cleanup.")
+        
+        pubSubManager = null // Nullify PubSubManager
+        currentConnection = null // Nullify the connection last
+        
+        // _pubsubItemsFlow is recreated on new authentication, not cleared here to prevent issues
+        // if accessed by a lingering collector just before a new one is set up.
+
+        Log.d(TAG, "Connection resources cleaned up. currentConnection and pubSubManager are null.")
+        // ConnectionState is set by callers or listeners (connectionClosed, connectionClosedOnError)
+    }
+
+    // Placeholder for credential retrieval - IMPLEMENT THESE
+    fun getLastAttemptedUsername(): String? {
+        // TODO: Implement secure credential retrieval (e.g., from SharedPreferences)
+        // val app = getApplication<Application>() // If XMPPManager has access to application context
+        // val prefs = app.getSharedPreferences("xmpp_prefs", Context.MODE_PRIVATE)
+        // return prefs.getString("username", null)
+        Log.w(TAG, "getLastAttemptedUsername() is a placeholder, returning hardcoded value or null.")
+        return "qcta" // Replace with actual implementation
+    }
+
+    fun getLastAttemptedPassword(): String? {
+        // TODO: Implement secure credential retrieval
+        // val app = getApplication<Application>()
+        // val prefs = app.getSharedPreferences("xmpp_prefs", Context.MODE_PRIVATE)
+        // return prefs.getString("password", null)
+        Log.w(TAG, "getLastAttemptedPassword() is a placeholder, returning hardcoded value or null.")
+        return "123456" // Replace with actual implementation
     }
 
     /**
@@ -2609,8 +2563,8 @@ class XMPPManager private constructor() {
      * @return 如果连接有效且已认证则返回true
      */
     private fun isConnected(): Boolean {
-        return currentConnection != null && 
-               currentConnection?.isConnected == true && 
+        return currentConnection != null &&
+               currentConnection?.isConnected == true &&
                currentConnection?.isAuthenticated == true
     }
 
@@ -2622,7 +2576,7 @@ class XMPPManager private constructor() {
         Log.d(TAG, "Logout requested.")
         // 1. 清除保存的凭据
         clearCredentials(context)
-        
+
         // 2. 调用 disconnect 进行连接断开和资源清理
         disconnect()
         Log.i(TAG, "Logout process complete.")
@@ -2635,7 +2589,7 @@ class XMPPManager private constructor() {
     fun isAuthenticated(): Boolean {
         return currentConnection?.isAuthenticated == true
     }
-    
+
     /**
      * 获取当前XMPP连接
      * @return XMPP连接对象，如果未连接则返回null
@@ -2643,7 +2597,7 @@ class XMPPManager private constructor() {
     fun getConnection(): XMPPTCPConnection? {
         return currentConnection
     }
-    
+
     /**
      * 获取当前用户昵称
      * @return 用户昵称，如果未能获取则返回null
@@ -2651,7 +2605,7 @@ class XMPPManager private constructor() {
     fun getUserNickname(): String? {
         val connection = currentConnection ?: return null
         if (!connection.isAuthenticated) return null
-        
+
         // 尝试从VCard获取昵称
         return try {
             val vCardManager = VCardManager.getInstanceFor(connection)
@@ -2675,11 +2629,11 @@ class XMPPManager private constructor() {
         try {
             val connection = currentConnection ?: return
             if (!connection.isAuthenticated) return
-            
+
             // 创建一个最小化的presence包
             val presence = Presence(Presence.Type.available)
             // 不添加任何额外信息，保持包体积最小
-            
+
             // 异步发送
             connection.sendStanza(presence)
         } catch (e: Exception) {
@@ -2698,46 +2652,46 @@ class XMPPManager private constructor() {
             try {
                 // 1. 清理所有群聊资源
                 _groupChatManager.cleanupOnLogout()
-                
+
                 // 2. 移除所有监听器
                 try {
-                    rosterListener?.let { 
-                        try { 
-                            Roster.getInstanceFor(conn).removeRosterListener(it) 
-                        } catch (e: Exception) { 
-                            /* 忽略错误 */ 
+                    rosterListener?.let {
+                        try {
+                            Roster.getInstanceFor(conn).removeRosterListener(it)
+                        } catch (e: Exception) {
+                            /* 忽略错误 */
                         }
                     }
-                    
+
                     presenceListener?.let {
-                        try { 
-                            conn.removeAsyncStanzaListener(it) 
-                        } catch (e: Exception) { 
-                            /* 忽略错误 */ 
+                        try {
+                            conn.removeAsyncStanzaListener(it)
+                        } catch (e: Exception) {
+                            /* 忽略错误 */
                         }
                     }
-                    
+
                     incomingChatMessageListener?.let {
-                        try { 
-                            ChatManager.getInstanceFor(conn).removeIncomingListener(it) 
-                        } catch (e: Exception) { 
-                            /* 忽略错误 */ 
+                        try {
+                            ChatManager.getInstanceFor(conn).removeIncomingListener(it)
+                        } catch (e: Exception) {
+                            /* 忽略错误 */
                         }
                     }
-                    
+
                     pingFailedListener?.let {
-                        try { 
-                            PingManager.getInstanceFor(conn).unregisterPingFailedListener(it) 
-                        } catch (e: Exception) { 
-                            /* 忽略错误 */ 
+                        try {
+                            PingManager.getInstanceFor(conn).unregisterPingFailedListener(it)
+                        } catch (e: Exception) {
+                            /* 忽略错误 */
                         }
                     }
-                    
+
                     conn.removeConnectionListener(connectionListener)
                 } catch (e: Exception) {
                     Log.w(TAG, "移除连接监听器时出错: ${e.message}")
                 }
-                
+
                 // 3. 停用自动重连
                 try {
                     val reconnectionManager = ReconnectionManager.getInstanceFor(conn)
@@ -2745,14 +2699,14 @@ class XMPPManager private constructor() {
                 } catch (e: Exception) {
                     Log.w(TAG, "禁用自动重连时出错: ${e.message}")
                 }
-                
+
                 // 4. 断开连接
                 if (conn.isConnected) {
                     try {
                         // 发送离线状态
                         val presence = Presence(Presence.Type.unavailable)
                         conn.sendStanza(presence)
-                        
+
                         // 同步断开连接
                         conn.disconnect()
                         Log.d(TAG, "已同步断开XMPP连接")
@@ -2768,7 +2722,7 @@ class XMPPManager private constructor() {
                 pubSubManager = null
                 messageCache.clear()
                 presenceMap.clear()
-                
+
                 // 清空监听器引用
                 rosterListener = null
                 presenceListener = null
@@ -2776,7 +2730,7 @@ class XMPPManager private constructor() {
                 pingFailedListener = null
                 nodeListeners.clear()
                 subscribedNodes.clear()
-                
+
                 // 更新连接状态
                 _connectionState.value = ConnectionState.DISCONNECTED
                 Log.d(TAG, "强制断开连接完成，状态已设为DISCONNECTED")
@@ -2793,7 +2747,7 @@ class XMPPManager private constructor() {
             Log.e(TAG, "setupReconnectionManager: 无可用连接")
             return
         }
-        
+
         try {
             val reconnectionManager = ReconnectionManager.getInstanceFor(conn)
             reconnectionManager.apply {
@@ -2818,7 +2772,7 @@ class XMPPManager private constructor() {
         }
 
         val nodesToResubscribe = subscribedNodes.toSet() // 复制当前订阅列表
-        
+
         // 清除当前订阅状态，但保留消息缓存
         subscribedNodes.clear()
         nodeListeners.forEach { (nodeId, listener) ->
@@ -2830,7 +2784,7 @@ class XMPPManager private constructor() {
             }
         }
         nodeListeners.clear()
-        
+
         // 重新订阅
         scope.launch {
             nodesToResubscribe.forEach { nodeId ->
@@ -2864,7 +2818,7 @@ class XMPPManager private constructor() {
             _groupChatManager.initMucManager()
             // 设置群聊消息监听器
             _groupChatManager.setupGroupChatMessageListener()
-            
+
             Log.d(TAG, "聊天和花名册监听器设置完成")
         } catch (e: Exception) {
             Log.e(TAG, "设置聊天和花名册监听器出错: ${e.message}", e)

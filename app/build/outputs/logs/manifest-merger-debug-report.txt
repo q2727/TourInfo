@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:2:1-50:12
-INJECTED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:2:1-50:12
-INJECTED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:2:1-50:12
-INJECTED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:2:1-50:12
+ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:2:1-49:12
+INJECTED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:2:1-49:12
+INJECTED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:2:1-49:12
+INJECTED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:2:1-49:12
 MERGED from [androidx.databinding:viewbinding:8.2.2] C:\Users\28443\.gradle\caches\transforms-3\aa7ac9c383cb7b898c2437647e4d0df4\transformed\jetified-viewbinding-8.2.2\AndroidManifest.xml:2:1-7:12
 MERGED from [io.coil-kt:coil-compose:2.5.0] C:\Users\28443\.gradle\caches\transforms-3\dd03942dd3d5f1444343fa12ec0093a0\transformed\jetified-coil-compose-2.5.0\AndroidManifest.xml:2:1-7:12
 MERGED from [io.coil-kt:coil-compose-base:2.5.0] C:\Users\28443\.gradle\caches\transforms-3\91dd7fee432416060af1bb5aa187f6dc\transformed\jetified-coil-compose-base-2.5.0\AndroidManifest.xml:2:1-7:12
@@ -117,8 +117,8 @@ ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:10:5-81
 	android:name
 		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:10:22-78
 application
-ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:12:5-48:19
-INJECTED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:12:5-48:19
+ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:12:5-47:19
+INJECTED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:12:5-47:19
 MERGED from [androidx.room:room-runtime:2.6.1] C:\Users\28443\.gradle\caches\transforms-3\39b9c4bf138f1ebf9f86b45fbfc8c5fd\transformed\room-runtime-2.6.1\AndroidManifest.xml:23:5-29:19
 MERGED from [androidx.room:room-runtime:2.6.1] C:\Users\28443\.gradle\caches\transforms-3\39b9c4bf138f1ebf9f86b45fbfc8c5fd\transformed\room-runtime-2.6.1\AndroidManifest.xml:23:5-29:19
 MERGED from [androidx.compose.ui:ui-test-manifest:1.5.4] C:\Users\28443\.gradle\caches\transforms-3\188844a2fa242d67c61f28a43c0154dc\transformed\jetified-ui-test-manifest-1.5.4\AndroidManifest.xml:22:5-26:19
@@ -158,49 +158,47 @@ MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\28443\.gradle\cach
 	android:name
 		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:13:9-42
 activity#com.example.travalms.MainActivity
-ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:21:9-30:20
-	android:windowSoftInputMode
-		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:25:13-55
+ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:21:9-29:20
 	android:exported
 		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:23:13-36
-	android:configChanges
-		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:24:13-113
+	android:theme
+		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:24:13-50
 	android:name
 		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:22:13-41
 intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:26:13-29:29
+ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:25:13-28:29
 action#android.intent.action.MAIN
-ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:27:17-69
+ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:26:17-69
 	android:name
-		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:27:25-66
+		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:26:25-66
 category#android.intent.category.LAUNCHER
-ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:28:17-77
+ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:27:17-77
 	android:name
-		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:28:27-74
+		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:27:27-74
 service#com.example.travalms.data.remote.XMPPService
-ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:33:9-37:56
+ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:32:9-36:56
 	android:enabled
-		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:35:13-35
+		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:34:13-35
 	android:exported
-		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:36:13-37
+		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:35:13-37
 	android:foregroundServiceType
-		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:37:13-53
+		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:36:13-53
 	android:name
-		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:34:13-52
+		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:33:13-52
 receiver#com.example.travalms.data.receiver.BootCompletedReceiver
-ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:40:9-47:20
+ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:39:9-46:20
 	android:enabled
-		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:42:13-35
+		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:41:13-35
 	android:exported
-		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:43:13-36
+		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:42:13-36
 	android:name
-		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:41:13-64
+		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:40:13-64
 intent-filter#action:name:android.intent.action.BOOT_COMPLETED
-ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:44:13-46:29
+ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:43:13-45:29
 action#android.intent.action.BOOT_COMPLETED
-ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:45:17-79
+ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:44:17-79
 	android:name
-		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:45:25-76
+		ADDED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml:44:25-76
 uses-sdk
 INJECTED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from D:\Final_Design\TravalMS\app\src\main\AndroidManifest.xml

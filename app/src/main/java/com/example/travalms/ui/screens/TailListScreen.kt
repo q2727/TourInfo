@@ -720,7 +720,7 @@ fun TailOrderItem(
                         modifier = Modifier.clickable {
                             // 提取用户名并导航到用户详情页
                             val username = tailOrder.publisherJid.substringBefore("@")
-                            navController.navigate("friend_detail/$username")
+                            navController.navigate(AppRoutes.FRIEND_DETAIL.replace("{username}", username))
                         }
                     ) {
                         Icon(

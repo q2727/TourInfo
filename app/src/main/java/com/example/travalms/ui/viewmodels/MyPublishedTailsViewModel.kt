@@ -1,7 +1,9 @@
 package com.example.travalms.ui.viewmodels
 
+import android.app.Application
 import android.content.Context
 import android.util.Log
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.travalms.api.dto.TailOrderResponse
@@ -23,7 +25,6 @@ import java.util.concurrent.TimeUnit
 import org.jsoup.Jsoup
 import org.jsoup.parser.Parser
 import kotlinx.coroutines.delay
-import android.app.Application
 
 private const val TAG = "MyPublishedTailsVM"
 
@@ -39,7 +40,7 @@ data class MyPublishedTailsState(
 /**
  * 管理"我的发布"界面数据的ViewModel
  */
-class MyPublishedTailsViewModel : ViewModel() {
+class MyPublishedTailsViewModel(application: Application) : AndroidViewModel(application) {
     
     // XMPP管理器
     private val xmppManager = XMPPManager.getInstance()
@@ -55,14 +56,6 @@ class MyPublishedTailsViewModel : ViewModel() {
     private val _originalTailOrders = MutableStateFlow<Map<Long, TailOrderResponse>>(emptyMap())
     val originalTailOrders: StateFlow<Map<Long, TailOrderResponse>> = _originalTailOrders.asStateFlow()
 
-    // 添加 Application 引用
-    private var application: Application? = null
-
-    // 设置 Application 的方法
-    fun setApplication(app: Application) {
-        application = app
-    }
-
     // 获取特定ID的尾单原始数据
     fun getOriginalTailOrderById(id: Long): TailOrderResponse? {
         return _originalTailOrders.value[id]
@@ -73,30 +66,14 @@ class MyPublishedTailsViewModel : ViewModel() {
         _originalTailOrders.value = newData
         Log.d(TAG, "更新原始尾单数据，当前数量: ${newData.size}")
     }
-    
+
     // 静态实例，用于其他ViewModel访问
     companion object {
         private var instance: MyPublishedTailsViewModel? = null
         
-        fun getInstance(): MyPublishedTailsViewModel {
-            if (instance == null) {
-                instance = MyPublishedTailsViewModel()
-                instance?.loadUserPublishedTails()
-
-            }
-            return instance!!
-        }
-
-        // 添加一个带Application参数的getInstance方法
         fun getInstance(app: Application): MyPublishedTailsViewModel {
             if (instance == null) {
-                instance = MyPublishedTailsViewModel()
-                instance?.setApplication(app)
-                instance?.loadUserPublishedTails()
-            } else {
-                // 确保Application已设置
-                instance?.setApplication(app)
-
+                instance = MyPublishedTailsViewModel(app)
             }
             return instance!!
         }
@@ -239,7 +216,7 @@ class MyPublishedTailsViewModel : ViewModel() {
             0 // 默认值
         }
     }
-    
+
     /**
      * 删除尾单
      * 从后端数据库删除尾单，并从所有发布节点中删除对应的XMPP消息
@@ -318,7 +295,7 @@ class MyPublishedTailsViewModel : ViewModel() {
                     // 在状态更新后更新原始数据
                     _originalTailOrders.value = updatedOriginals
                     val updatedList = _uiState.value.publishedTails.filterNot { it.id == tailOrderId.toInt() }
-                    
+
                     // 使用单次更新，避免多次触发UI更新
                     _uiState.update { it.copy(
                         publishedTails = updatedList,
@@ -326,11 +303,14 @@ class MyPublishedTailsViewModel : ViewModel() {
                         errorMessage = null
                     ) }
 
-
                     // 记录XMPP删除结果
                     if (!xmppDeleteSuccess) {
                         Log.w(TAG, "尾单从后端删除成功，但XMPP消息删除失败")
                     }
+
+                    // 在成功删除所有内容并更新UI后，重置XMPP连接
+                    resetXmppConnectionAfterDelete()
+
                 } else {
                     // 处理API错误
                     val errorMsg = "删除失败: ${response.code()} - ${response.message()}"
@@ -352,26 +332,26 @@ class MyPublishedTailsViewModel : ViewModel() {
     private suspend fun resetXmppConnectionAfterDelete() {
         try {
             Log.d(TAG, "开始重置XMPP连接...")
-            
+
             // 断开当前连接
             xmppManager.disconnect()
-            
+
             // 等待1秒确保连接完全关闭
             delay(1000)
-            
+
             // 从SharedPreferences获取保存的凭据
-            val app = application
+            val app = getApplication<Application>()
             if (app != null) {
                 val prefs = app.getSharedPreferences("xmpp_prefs", Context.MODE_PRIVATE)
                 val username = prefs.getString("username", "") ?: ""
                 val password = prefs.getString("password", "") ?: ""
-                
+
                 if (username.isNotEmpty() && password.isNotEmpty()) {
                     // 使用保存的凭据重新登录
                     val result = xmppManager.login(username, password)
                     if (result.isSuccess) {
                         Log.d(TAG, "XMPP重新连接成功")
-                        
+
 
                     } else {
                         Log.e(TAG, "XMPP重新连接失败: ${result.exceptionOrNull()?.message}")
@@ -382,7 +362,7 @@ class MyPublishedTailsViewModel : ViewModel() {
             } else {
                 Log.e(TAG, "无法重新连接：Application context 未设置")
             }
-            
+
             Log.d(TAG, "XMPP连接重置完成")
         } catch (e: Exception) {
             Log.e(TAG, "重置XMPP连接时出错", e)

@@ -14,8 +14,6 @@ import androidx.compose.ui.Modifier
 import com.example.travalms.ui.navigation.AppNavigation
 import com.example.travalms.ui.theme.TravalMSTheme
 import org.jivesoftware.smack.SmackConfiguration
-import org.jivesoftware.smack.util.dns.DNSResolver
-import org.jivesoftware.smack.util.dns.minidns.MiniDnsResolver
 import com.example.travalms.data.remote.XMPPService
 import com.example.travalms.data.remote.XMPPManager
 import dagger.hilt.android.AndroidEntryPoint

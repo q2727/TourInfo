@@ -29,6 +29,9 @@ import kotlin.math.abs
 import kotlin.random.Random
 import android.app.Application
 import android.content.Context
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.CancellationException
 
 /**
  * 尾单列表视图模型状态
@@ -62,6 +65,9 @@ class TailListViewModel(
     // 添加Application引用
     private var application: Application? = null
     
+    // Job to control the PubSub monitoring coroutine
+    private var pubSubMonitoringJob: Job? = null
+
     // 设置Application的方法
     fun setApplication(app: Application) {
         application = app
@@ -69,13 +75,36 @@ class TailListViewModel(
     }
 
     init {
-        fetchTailOrders()
-
-        // 监听新的尾单通知
-        monitorNewTailLists()
-
-        // 将实例存储到伴生对象
-        instance = this
+        // Observe XMPP connection state to manage PubSub monitoring
+        viewModelScope.launch {
+            xmppManager.connectionState
+                // Only react to actual state changes
+                .collect { connState ->
+                    when (connState) {
+                        ConnectionState.AUTHENTICATED -> {
+                            Log.d(TAG, "XMPP Authenticated. Ensuring PubSub monitoring is active and refreshing data.")
+                            // Cancel previous monitoring job if it's active
+                            pubSubMonitoringJob?.cancel() // Simple cancel
+                            // Start new monitoring
+                            pubSubMonitoringJob = monitorNewTailLists()
+                            // Refresh tail orders as connection is now authenticated
+                            fetchTailOrders()
+                        }
+                        ConnectionState.DISCONNECTED, ConnectionState.ERROR, ConnectionState.CONNECTION_CLOSED -> {
+                            Log.d(TAG, "XMPP Disconnected or Error. Cancelling PubSub items monitoring.")
+                            pubSubMonitoringJob?.cancel()
+                            // Update UI to reflect disconnected state, avoid clearing orders immediately
+                            // unless that's the desired behavior on any disconnection.
+                            // Consider if loading should also be false here.
+                            _state.update { it.copy(isLoading = false, error = "消息服务器连接已断开") }
+                        }
+                        else -> {
+                            Log.d(TAG, "XMPP Connection State: $connState")
+                        }
+                    }
+                }
+        }
+        // Initial fetch and monitor are now driven by the connection state collector.
     }
     
     /**
@@ -158,6 +187,13 @@ class TailListViewModel(
      */
     fun fetchTailOrders() {
         viewModelScope.launch {
+            // Check connection state before proceeding
+            if (xmppManager.connectionState.value != ConnectionState.AUTHENTICATED) {
+                Log.w(TAG, "fetchTailOrders called but XMPP not authenticated. Current state: ${xmppManager.connectionState.value}")
+                _state.update { it.copy(isLoading = false, error = "消息服务器未连接，请稍后再试") }
+                return@launch
+            }
+
             _state.update { it.copy(isLoading = true, error = null) }
 
             Log.d(TAG, "开始获取尾单列表数据...")
@@ -250,34 +286,46 @@ class TailListViewModel(
     /**
      * 监听新的尾单通知
      */
-    private fun monitorNewTailLists() {
-        viewModelScope.launch {
-            xmppManager.pubsubItemsFlow.collect { notification ->
-                try {
-                    Log.d(TAG, "收到新的尾单通知: ${notification.itemId}")
+    private fun monitorNewTailLists(): Job {
+        return viewModelScope.launch {
+            Log.d(TAG, "Starting to monitor new tail lists from PubSub.")
+            try {
+                xmppManager.pubsubItemsFlow.collect { notification ->
+                    try {
+                        Log.d(TAG, "收到新的尾单通知: ${notification.itemId}")
 
-                    // 强制从通知中解析尾单，而不是从缓存中获取
-                    tailOrderCache.remove(notification.itemId) // 移除缓存以确保重新解析
+                        // 强制从通知中解析尾单，而不是从缓存中获取
+                        tailOrderCache.remove(notification.itemId) // 移除缓存以确保重新解析
 
-                    val tailOrder = parseTailListNotification(notification)
-                    if (tailOrder != null) {
-                        // 添加新的尾单到列表首位
-                        _state.update { state ->
-                            val updatedList = state.tailOrders.toMutableList()
-                            // 检查是否已存在，避免重复
-                            val existingIndex = updatedList.indexOfFirst { it.id == tailOrder.id }
-                            if (existingIndex >= 0) {
-                                updatedList[existingIndex] = tailOrder
-                            } else {
-                                updatedList.add(0, tailOrder)
+                        val tailOrder = parseTailListNotification(notification)
+                        if (tailOrder != null) {
+                            // 添加新的尾单到列表首位
+                            _state.update { currentState ->
+                                val updatedList = currentState.tailOrders.toMutableList()
+                                // 检查是否已存在，避免重复
+                                val existingIndex = updatedList.indexOfFirst { it.id == tailOrder.id }
+                                if (existingIndex >= 0) {
+                                    updatedList[existingIndex] = tailOrder
+                                } else {
+                                    updatedList.add(0, tailOrder)
+                                }
+                                // Sort by ID descending to keep newest on top, assuming ID reflects newness
+                                currentState.copy(tailOrders = updatedList.sortedByDescending { it.id })
                             }
-                            state.copy(tailOrders = updatedList)
+                            Log.d(TAG, "成功添加/更新尾单: ${tailOrder.title}")
                         }
-                        Log.d(TAG, "成功添加/更新尾单: ${tailOrder.title}")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "处理尾单通知时出错 (within collect)", e)
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "处理尾单通知时出错", e)
                 }
+            } catch (e: CancellationException) {
+                Log.d(TAG, "PubSub monitoring Job was cancelled.")
+                // Cancellation is normal when the job is explicitly cancelled.
+                // Rethrow to ensure the coroutine respects cancellation.
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in pubsubItemsFlow collection loop", e)
+                // Potentially update UI or log more specifically
             }
         }
     }

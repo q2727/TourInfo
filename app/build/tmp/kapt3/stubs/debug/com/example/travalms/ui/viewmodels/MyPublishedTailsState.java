@@ -1,7 +1,9 @@
 package com.example.travalms.ui.viewmodels;
 
+import android.app.Application;
 import android.content.Context;
 import android.util.Log;
+import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.ViewModel;
 import com.example.travalms.api.dto.TailOrderResponse;
 import com.example.travalms.data.api.NetworkModule;
@@ -17,7 +19,6 @@ import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import org.jsoup.Jsoup;
 import org.jsoup.parser.Parser;
-import android.app.Application;
 
 /**
  * 我的发布界面数据状态

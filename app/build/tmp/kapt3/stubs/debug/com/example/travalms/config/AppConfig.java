@@ -11,11 +11,11 @@ public final class AppConfig {
     @org.jetbrains.annotations.NotNull
     public static final com.example.travalms.config.AppConfig INSTANCE = null;
     @org.jetbrains.annotations.NotNull
-    public static final java.lang.String API_SERVER_ADDRESS = "10.63.152.125";
+    public static final java.lang.String API_SERVER_ADDRESS = "120.46.26.49";
     @org.jetbrains.annotations.NotNull
     public static final java.lang.String API_SERVER_PORT = "8080";
     @org.jetbrains.annotations.NotNull
-    public static final java.lang.String API_BASE_URL = "http://10.63.152.125:8080/";
+    public static final java.lang.String API_BASE_URL = "http://120.46.26.49:8080/";
     @org.jetbrains.annotations.NotNull
     public static final java.lang.String PROD_API_BASE_URL = "http://42.193.112.197/";
     @org.jetbrains.annotations.NotNull
@@ -23,7 +23,7 @@ public final class AppConfig {
     @org.jetbrains.annotations.NotNull
     public static final java.lang.String XMPP_SERVER_HOST = "120.46.26.49";
     @org.jetbrains.annotations.NotNull
-    public static final java.lang.String AVATAR_SERVER_ADDRESS = "10.63.152.125";
+    public static final java.lang.String AVATAR_SERVER_ADDRESS = "120.46.26.49";
     
     private AppConfig() {
         super();

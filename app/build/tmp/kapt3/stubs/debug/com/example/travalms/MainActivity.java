@@ -7,8 +7,6 @@ import androidx.activity.ComponentActivity;
 import androidx.annotation.RequiresApi;
 import androidx.compose.ui.Modifier;
 import org.jivesoftware.smack.SmackConfiguration;
-import org.jivesoftware.smack.util.dns.DNSResolver;
-import org.jivesoftware.smack.util.dns.minidns.MiniDnsResolver;
 import com.example.travalms.data.remote.XMPPService;
 import com.example.travalms.data.remote.XMPPManager;
 import dagger.hilt.android.AndroidEntryPoint;

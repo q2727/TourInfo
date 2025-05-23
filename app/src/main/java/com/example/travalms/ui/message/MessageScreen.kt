@@ -1355,7 +1355,7 @@ fun MessageScreen(
                                                     } else {
                                                         contact.originalId?.substringBefore("@") ?: contact.name
                                                     }
-                                                    navController.navigate("friend_detail/${username}")
+                                                    navController.navigate(AppRoutes.FRIEND_DETAIL.replace("{username}", username))
                                                 }
                                                 2 -> {
                                                     // 群聊标签：直接跳转到群聊界面
@@ -1422,7 +1422,7 @@ fun MessageScreen(
                                                     } else {
                                                         contact.originalId?.substringBefore("@") ?: contact.name
                                                     }
-                                                    navController.navigate("friend_detail/${username}")
+                                                    navController.navigate(AppRoutes.FRIEND_DETAIL.replace("{username}", username))
                                                 }
                                                 2 -> {
                                                     // 群聊标签：直接跳转到群聊界面

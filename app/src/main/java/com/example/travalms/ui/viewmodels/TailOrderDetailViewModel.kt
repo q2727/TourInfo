@@ -60,7 +60,7 @@ class TailOrderDetailViewModel(
                 // 首先尝试从MyPublishedTailsViewModel获取尾单详情
                 var tailOrder: TailOrder? = null
                 try {
-                    val myPublishedTailsViewModel = MyPublishedTailsViewModel.getInstance()
+                    val myPublishedTailsViewModel = MyPublishedTailsViewModel.getInstance(application)
                     val publishedTails = myPublishedTailsViewModel.uiState.value.publishedTails
                     
                     Log.d(TAG, "尝试从MyPublishedTailsViewModel获取尾单，ID: $tailOrderId, 可用尾单数量: ${publishedTails.size}")

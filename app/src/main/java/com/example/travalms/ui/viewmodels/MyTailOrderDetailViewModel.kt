@@ -63,7 +63,7 @@ class MyTailOrderDetailViewModel(
                 _state.update { it.copy(isLoading = true) }
                 
                 // 从MyPublishedTailsViewModel获取原始尾单数据
-                val myPublishedTailsViewModel = MyPublishedTailsViewModel.getInstance()
+                val myPublishedTailsViewModel = MyPublishedTailsViewModel.getInstance(application)
                 val origTailOrderId = tailOrderId.toLong()
                 var origTailOrder = myPublishedTailsViewModel.getOriginalTailOrderById(origTailOrderId)
                 
@@ -353,7 +353,7 @@ class MyTailOrderDetailViewModel(
      */
     private fun refreshMyPublishedTails() {
         try {
-            val myPublishedTailsViewModel = MyPublishedTailsViewModel.getInstance()
+            val myPublishedTailsViewModel = MyPublishedTailsViewModel.getInstance(application)
             myPublishedTailsViewModel.loadUserPublishedTails()
         } catch (e: Exception) {
             Log.e(TAG, "刷新我的发布列表失败", e)

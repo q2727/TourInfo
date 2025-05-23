@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
 public final class NetworkModule {
     @org.jetbrains.annotations.NotNull
     public static final com.example.travalms.data.api.NetworkModule INSTANCE = null;
-    private static final java.lang.String BASE_URL = "http://10.63.152.125:8080/";
+    private static final java.lang.String BASE_URL = "http://120.46.26.49:8080/";
     private static final long TIMEOUT = 60L;
     private static final java.lang.String TAG = "NetworkAPI";
     @org.jetbrains.annotations.NotNull
