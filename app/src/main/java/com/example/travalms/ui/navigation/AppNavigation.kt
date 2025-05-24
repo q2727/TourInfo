@@ -57,17 +57,17 @@ object AppRoutes {
     const val LOGIN = "login"
     const val REGISTER = "register"
     const val HOME = "home"
-    const val TAIL_LIST = "tailList"
-    const val TAIL_ORDER_DETAIL = "tailOrderDetail/{tailOrderId}"
+    const val TAIL_LIST = "tail_list"
+    const val TAIL_ORDER_DETAIL = "tail_order_detail/{tailOrderId}"
     const val MY_TAIL_ORDER_DETAIL = "myTailOrderDetail/{tailOrderId}"
     const val POST_DETAIL = "postDetail/{postId}"
     const val POST_EDIT = "postEdit/{postId}"
     const val MESSAGE = "message"
-    const val GROUP_CHAT = "group_chat/{groupJid}"
+    const val GROUP_CHAT = "group_chat/{roomJid}"
     const val CHAT_ROOM = "chat_room/{sessionId}/{targetName}/{targetType}"
     const val PUBLISH = "publish"
     const val PUBLISH_NODE_SELECTOR = "publishNodeSelector"
-    const val MY_POSTS = "myPosts"
+    const val MY_POSTS = "my_posts"
     const val MY_FAVORITES = "myFavorites"
     const val PRODUCT_DETAIL = "productDetail/{productId}"
     const val SEARCH = "search"
@@ -75,11 +75,29 @@ object AppRoutes {
     const val PROFILE_EDIT = "profileEdit"
     const val VERIFICATION = "verification"
     const val COMPANY_BINDING = "companyBinding"
-    const val COMPANY_DETAIL = "companyDetail/{companyId}"
-    const val PERSON_DETAIL = "personDetail/{personId}"
+    const val COMPANY_DETAIL = "company_detail/{companyId}"
+    const val PERSON_DETAIL = "person_detail/{personId}"
     const val CREATE_GROUP = "createGroup"
     const val SUBSCRIBE_SETTING = "subscribeSetting"
-    const val FRIEND_DETAIL = "friendDetail/{username}"
+    const val FRIEND_DETAIL = "friend_detail/{username}"
+    const val PUBLISH_OPTIONS = "publish_options"
+    const val PUBLISH_TAIL_ORDER = "publish_tail_order"
+    const val PUBLISH_TRAVEL_REQUEST = "publish_travel_request"
+    const val MESSAGE_LIST = "message_list"
+    const val EDIT_POST = "edit_post/{postId}"
+    const val USER_PROFILE = "user_profile/{userId}"
+    const val SETTINGS = "settings"
+    const val ABOUT = "about"
+
+    // Helper function to create route with argument
+    fun tailOrderDetail(tailOrderId: String) = "tail_order_detail/$tailOrderId"
+    fun friendDetail(username: String) = "friend_detail/$username"
+    fun chatRoom(sessionId: String, targetName: String, targetType: String) = "chat_room/$sessionId/$targetName/$targetType"
+    fun editPost(postId: String) = "edit_post/$postId"
+    fun userProfile(userId: String) = "user_profile/$userId"
+    fun companyDetail(companyId: String) = "company_detail/$companyId"
+    fun personDetail(personId: String) = "person_detail/$personId"
+    fun groupChat(roomJid: String) = "group_chat/$roomJid"
 }
 
 /**
@@ -445,10 +463,10 @@ fun AppNavigation(
                 tailOrderId = tailOrderId,
                 onBack = { navController.navigateUp() },
                 onChatRoomClick = { roomId ->
-                    navController.navigate("${AppRoutes.GROUP_CHAT.replaceBefore("/", "")}$roomId")
+                    navController.navigate(AppRoutes.groupChat(roomJid = roomId))
                 },
                 onFriendDetailClick = { username ->
-                    navController.navigate("${AppRoutes.FRIEND_DETAIL.replaceBefore("/", "")}$username")
+                    navController.navigate(AppRoutes.friendDetail(username = username))
                 }
             )
         }

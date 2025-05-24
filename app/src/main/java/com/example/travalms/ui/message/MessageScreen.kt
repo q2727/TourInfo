@@ -704,18 +704,21 @@ fun MessageScreen(
     fun onContactSelected(contact: ContactItem) {
         when (selectedTab) {
             0 -> {
-                // 全部消息选项卡 - 检查是否是群聊
-                val sessionId = contact.originalId ?: contact.id.toString()
-                if (sessionId.contains("@conference.")) {
-                    // 如果是群聊，直接导航到群聊界面
-                    navController.navigate(AppRoutes.GROUP_CHAT.replace("{roomJid}", sessionId))
+                // 全部消息标签：直接跳转到聊天室
+                val isGroupChat = contact.originalId?.contains("@conference.") == true || 
+                                contact.jid?.toString()?.contains("@conference.") == true
+                
+                if (isGroupChat) {
+                    val roomJid = contact.originalId ?: contact.jid?.toString() ?: contact.id.toString()
+                    navController.navigate(AppRoutes.groupChat(roomJid = roomJid))
                 } else {
-                    // 如果是普通消息，导航到聊天室
+                    val sessionId = contact.originalId ?: contact.jid?.toString() ?: contact.id.toString()
                     navController.navigate(
-                        AppRoutes.CHAT_ROOM
-                            .replace("{sessionId}", sessionId)
-                            .replace("{targetName}", contact.name)
-                            .replace("{targetType}", "message")
+                        AppRoutes.chatRoom(
+                            sessionId = sessionId,
+                            targetName = contact.name,
+                            targetType = "message"
+                        )
                     )
                 }
             }
@@ -723,17 +726,18 @@ fun MessageScreen(
                 // 如果有JID，导航到聊天界面
                 if (contact.jid != null) {
                     navController.navigate(
-                        AppRoutes.CHAT_ROOM
-                            .replace("{sessionId}", contact.jid.toString())
-                            .replace("{targetName}", contact.name)
-                            .replace("{targetType}", "message")
+                        AppRoutes.chatRoom(
+                            sessionId = contact.jid.toString(),
+                            targetName = contact.name,
+                            targetType = "message"
+                        )
                     )
                 }
             }
             2 -> {
-                // 群聊选项卡 - 直接导航到群聊界面
+                // 群聊标签：直接跳转到群聊界面
                 val roomJid = contact.originalId ?: contact.jid?.toString() ?: contact.id.toString()
-                navController.navigate(AppRoutes.GROUP_CHAT.replace("{roomJid}", roomJid))
+                navController.navigate(AppRoutes.groupChat(roomJid = roomJid))
             }
             3 -> {
                 // 公司黄页选项卡
@@ -749,10 +753,11 @@ fun MessageScreen(
                 Log.d("MessageScreen", "从公司黄页导航: 使用sessionId=$sessionId, targetName=${contact.name}")
 
                 navController.navigate(
-                    AppRoutes.CHAT_ROOM
-                        .replace("{sessionId}", sessionId)
-                        .replace("{targetName}", contact.name)
-                        .replace("{targetType}", targetType)
+                    AppRoutes.chatRoom(
+                        sessionId = sessionId,
+                        targetName = contact.name,
+                        targetType = targetType
+                    )
                 )
             }
         }
@@ -933,7 +938,7 @@ fun MessageScreen(
                                 onClick = {
                                     showAddMenu = false
                                     // TODO: Navigate to Create Group Screen
-                                    navController.navigate("create_group") // Navigate to the new route
+                                    navController.navigate(AppRoutes.CREATE_GROUP) // Navigate to the new route
                                     Log.d("MessageScreen", "创建群聊 clicked")
                                 }
                             )
@@ -1337,14 +1342,15 @@ fun MessageScreen(
                                                     
                                                     if (isGroupChat) {
                                                         val roomJid = contact.originalId ?: contact.jid?.toString() ?: contact.id.toString()
-                                                        navController.navigate(AppRoutes.GROUP_CHAT.replace("{roomJid}", roomJid))
+                                                        navController.navigate(AppRoutes.groupChat(roomJid = roomJid))
                                                     } else {
                                                         val sessionId = contact.originalId ?: contact.jid?.toString() ?: contact.id.toString()
                                                         navController.navigate(
-                                                            AppRoutes.CHAT_ROOM
-                                                                .replace("{sessionId}", sessionId)
-                                                                .replace("{targetName}", contact.name)
-                                                                .replace("{targetType}", "message")
+                                                            AppRoutes.chatRoom(
+                                                                sessionId = sessionId,
+                                                                targetName = contact.name,
+                                                                targetType = "message"
+                                                            )
                                                         )
                                                     }
                                                 }
@@ -1355,12 +1361,12 @@ fun MessageScreen(
                                                     } else {
                                                         contact.originalId?.substringBefore("@") ?: contact.name
                                                     }
-                                                    navController.navigate(AppRoutes.FRIEND_DETAIL.replace("{username}", username))
+                                                    navController.navigate(AppRoutes.friendDetail(username = username))
                                                 }
                                                 2 -> {
                                                     // 群聊标签：直接跳转到群聊界面
                                                     val roomJid = contact.originalId ?: contact.jid?.toString() ?: contact.id.toString()
-                                                    navController.navigate(AppRoutes.GROUP_CHAT.replace("{roomJid}", roomJid))
+                                                    navController.navigate(AppRoutes.groupChat(roomJid = roomJid))
                                                 }
                                             }
                                         }
@@ -1404,14 +1410,15 @@ fun MessageScreen(
                                                     
                                                     if (isGroupChat) {
                                                         val roomJid = contact.originalId ?: contact.jid?.toString() ?: contact.id.toString()
-                                                        navController.navigate(AppRoutes.GROUP_CHAT.replace("{roomJid}", roomJid))
+                                                        navController.navigate(AppRoutes.groupChat(roomJid = roomJid))
                                                     } else {
                                                         val sessionId = contact.originalId ?: contact.jid?.toString() ?: contact.id.toString()
                                                         navController.navigate(
-                                                            AppRoutes.CHAT_ROOM
-                                                                .replace("{sessionId}", sessionId)
-                                                                .replace("{targetName}", contact.name)
-                                                                .replace("{targetType}", "message")
+                                                            AppRoutes.chatRoom(
+                                                                sessionId = sessionId,
+                                                                targetName = contact.name,
+                                                                targetType = "message"
+                                                            )
                                                         )
                                                     }
                                                 }
@@ -1422,12 +1429,12 @@ fun MessageScreen(
                                                     } else {
                                                         contact.originalId?.substringBefore("@") ?: contact.name
                                                     }
-                                                    navController.navigate(AppRoutes.FRIEND_DETAIL.replace("{username}", username))
+                                                    navController.navigate(AppRoutes.friendDetail(username = username))
                                                 }
                                                 2 -> {
                                                     // 群聊标签：直接跳转到群聊界面
                                                     val roomJid = contact.originalId ?: contact.jid?.toString() ?: contact.id.toString()
-                                                    navController.navigate(AppRoutes.GROUP_CHAT.replace("{roomJid}", roomJid))
+                                                    navController.navigate(AppRoutes.groupChat(roomJid = roomJid))
                                                 }
                                             }
                                         }

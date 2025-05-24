@@ -35,6 +35,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.viewinterop.AndroidView
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import com.example.travalms.ui.navigation.AppRoutes
 
 /**
  * 尾单详情屏幕
@@ -57,9 +58,9 @@ fun TailOrderDetailScreen(
         val tailOrders = tailListViewModel.state.value.tailOrders
         Log.d(TAG, "TailListViewModel中的尾单数量: ${tailOrders.size}")
         
-        val tailOrder = tailOrders.find { it.id == tailOrderId.toInt() }
-        if (tailOrder != null) {
-            Log.d(TAG, "直接从TailListViewModel找到尾单: ${tailOrder.title}, 发布者JID: ${tailOrder.publisherJid}")
+        val tailOrderFromList = tailOrders.find { it.id.toString() == tailOrderId }
+        if (tailOrderFromList != null) {
+            Log.d(TAG, "直接从TailListViewModel找到尾单: ${tailOrderFromList.title}, 发布者JID: ${tailOrderFromList.publisherJid}")
         } else {
             Log.d(TAG, "在TailListViewModel中找不到ID为 $tailOrderId 的尾单")
             // 尝试打印所有尾单ID进行对比
@@ -119,8 +120,8 @@ fun TailOrderDetailScreen(
             // 显示产品WebView
             val url = "http://42.193.112.197/#/pages/user/singleProductPage?productId=${productIdToShow}"
             AndroidView(
-                factory = { context ->
-                    WebView(context).apply {
+                factory = { ctx ->
+                    WebView(ctx).apply {
                         webViewClient = WebViewClient()
                         settings.javaScriptEnabled = true
                         loadUrl(url)
@@ -192,8 +193,22 @@ fun TailOrderDetailScreen(
                                     .padding(16.dp)
                                     .clickable {
                                         // 提取用户名并导航到用户详情页
-                                        val username = state.tailOrder?.publisherJid?.substringBefore("@") ?: return@clickable
-                                        onFriendDetailClick(username)
+                                        val publisherJidFromTailOrder = state.tailOrder?.publisherJid
+                                        val usernameFromTailOrderJid = if (publisherJidFromTailOrder?.contains("@") == true) {
+                                            publisherJidFromTailOrder.substringBefore("@")
+                                        } else {
+                                            publisherJidFromTailOrder
+                                        }
+
+                                        val userToNavigate = state.publisherInfo?.get("username")?.toString()
+                                                             ?: usernameFromTailOrderJid
+                                                             ?: "unknown_user"
+                                        if (userToNavigate != "unknown_user" && userToNavigate.isNotBlank()) {
+                                            onFriendDetailClick(userToNavigate)
+                                        } else {
+                                            Log.w(TAG, "无法获取有效的用户名进行导航。 publisherInfo: ${state.publisherInfo}, tailOrder.publisherJid: ${state.tailOrder?.publisherJid}")
+                                            coroutineScope.launch { snackbarHostState.showSnackbar("无法获取用户信息") }
+                                        }
                                     },
                                 shape = RoundedCornerShape(12.dp),
                                 colors = CardDefaults.cardColors(

@@ -47,7 +47,8 @@ data class TailListState(
  * 尾单列表视图模型，负责获取和管理用户订阅的节点中发布的尾单
  */
 class TailListViewModel(
-    private val repository: TailOrderRepository
+    private val repository: TailOrderRepository,
+    private val application: Application
 ) : ViewModel() {
     private val xmppManager = XMPPManager.getInstance()
 
@@ -62,19 +63,13 @@ class TailListViewModel(
     // 默认的节点列表
     private val defaultNodes = listOf("tails", "tailOrders")
     
-    // 添加Application引用
-    private var application: Application? = null
-    
     // Job to control the PubSub monitoring coroutine
     private var pubSubMonitoringJob: Job? = null
 
-    // 设置Application的方法
-    fun setApplication(app: Application) {
-        application = app
-        Log.d(TAG, "已设置Application上下文")
-    }
-
     init {
+        Log.d(TAG, "TailListViewModel instance created: $this. Setting Companion.instance.")
+        Companion.setInstance(this) // Register instance with Companion
+
         // Observe XMPP connection state to manage PubSub monitoring
         viewModelScope.launch {
             xmppManager.connectionState
@@ -114,39 +109,26 @@ class TailListViewModel(
         viewModelScope.launch {
             // 检查XMPP连接状态
             if (xmppManager.connectionState.value != ConnectionState.AUTHENTICATED) {
-                Log.d(TAG, "XMPP未连接，等待连接后再继续...")
+                Log.d(TAG, "XMPP未连接，尝试使用已保存凭据重新登录...")
                 _state.update { it.copy(isLoading = true, error = "正在连接到消息服务器...") }
                 
-                // 尝试使用保存的凭据重新登录
-                val app = application
-                if (app != null) {
-                    val prefs = app.getSharedPreferences("xmpp_prefs", Context.MODE_PRIVATE)
-                    val username = prefs.getString("username", "") ?: ""
-                    val password = prefs.getString("password", "") ?: ""
-                    
-                    if (username.isNotEmpty() && password.isNotEmpty()) {
-                        // 使用保存的凭据重新登录
-                        val result = xmppManager.login(username, password)
-                        if (result.isSuccess) {
-                            Log.d(TAG, "XMPP重新连接成功")
-                        } else {
-                            Log.e(TAG, "XMPP重新连接失败: ${result.exceptionOrNull()?.message}")
-                        }
+                // Access SharedPreferences via application context passed in constructor
+                val prefs = application.getSharedPreferences("xmpp_prefs", Context.MODE_PRIVATE)
+                val username = prefs.getString("username", "") ?: ""
+                val password = prefs.getString("password", "") ?: ""
+                
+                if (username.isNotEmpty() && password.isNotEmpty()) {
+                    val result = xmppManager.login(username, password)
+                    if (result.isSuccess) {
+                        Log.d(TAG, "XMPP自动重新连接成功")
+                        // ConnectionState collector in init should handle next steps
                     } else {
-                        Log.e(TAG, "无法重新连接：未找到保存的凭据")
+                        Log.e(TAG, "XMPP自动重新连接失败: ${result.exceptionOrNull()?.message}")
+                        _state.update { it.copy(isLoading = false, error = "自动重连消息服务器失败") }
                     }
                 } else {
-                    Log.e(TAG, "无法重新连接：Application context 未设置")
-                }
-                
-                // 等待10秒，看是否能自动连接上
-                for (i in 1..10) {
-                    if (xmppManager.connectionState.value == ConnectionState.AUTHENTICATED) {
-                        Log.d(TAG, "XMPP已连接，继续操作")
-                        break
-                    }
-                    delay(1000) // 等待1秒
-                    Log.d(TAG, "等待XMPP连接... ${i}秒")
+                    Log.e(TAG, "无法自动重新连接：未找到保存的凭据")
+                    _state.update { it.copy(isLoading = false, error = "无法自动重连，凭据缺失") }
                 }
             }
             
@@ -724,13 +706,14 @@ class TailListViewModel(
     /**
      * ViewModel工厂类，用于创建ViewModel的实例
      */
-    class Factory : ViewModelProvider.Factory {
+    class TailListViewModelFactory(
+        private val application: Application,
+        private val repository: TailOrderRepository
+    ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(TailListViewModel::class.java)) {
-                return TailListViewModel(
-                    repository = TailOrderRepositoryImpl.getInstance()
-                ) as T
+                return TailListViewModel(repository, application) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
@@ -740,9 +723,21 @@ class TailListViewModel(
         @Volatile
         private var instance: TailListViewModel? = null
         
-        fun getInstance(): TailListViewModel {
-            return instance ?: throw IllegalStateException("TailListViewModel尚未初始化")
+        fun setInstance(viewModelInstance: TailListViewModel) {
+            Log.d("TailListViewModelCompanion", "Setting instance: $viewModelInstance, Current: $instance")
+            instance = viewModelInstance
         }
 
+        fun getInstance(): TailListViewModel {
+            Log.d("TailListViewModelCompanion", "getInstance called. Current instance: $instance")
+            return instance ?: throw IllegalStateException(
+                "TailListViewModel尚未初始化或已被清除。请确保它在被访问前已通过其主屏幕ViewModelProvider正确创建和注册。"
+            )
+        }
+        
+        fun clearInstance() {
+            Log.d("TailListViewModelCompanion", "Clearing instance. Was: $instance")
+            instance = null
+        }
     }
 } 
